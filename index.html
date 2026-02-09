@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>赚钱软件管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-title">赚钱软件管理系统</div>
+    </nav>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+        <!-- 仪表盘页面 -->
+        <div class="page active" id="page-dashboard">
+            <div class="date-container">
+                <span class="current-date" id="current-date"></span>
+            </div>
+
+            <!-- 统计卡片 -->
+            <div class="stats-container">
+                <div class="stats-row">
+                    <div class="stat-card border-primary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总手机数</span>
+                        <span class="stat-value" id="total-phones">0</span>
+                    </div>
+                    <div class="stat-card border-secondary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总软件数</span>
+                        <span class="stat-value" id="total-apps">0</span>
+                    </div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card border-tertiary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总余额</span>
+                        <span class="stat-value" id="total-balance">¥0.00</span>
+                    </div>
+                    <div class="stat-card border-accent animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">待提现软件</span>
+                        <span class="stat-value" id="ready-apps">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 全年目标 -->
+            <div class="goal-card animate-border">
+                <i></i><i></i>
+                <div class="section-title">全年目标达成情况</div>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span>总目标</span>
+                        <span class="font-semibold" id="yearly-progress">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="yearly-progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 今日需要关注的软件 -->
+            <div class="section-title">今日需要关注的软件</div>
+            <div class="app-list" id="today-apps-list">
+                <div class="empty-state">今天没有需要关注的软件</div>
+            </div>
+        </div>
+
+        <!-- 手机管理页面 -->
+        <div class="page" id="page-phones">
+            <div class="date-container">
+                <span class="current-date" id="phones-current-date"></span>
+            </div>
+
+            <div class="flex gap-4 w-full">
+                <button class="btn btn-primary flex-1" onclick="openAddPhoneModal()">添加手机</button>
+                <button class="btn btn-secondary flex-1" onclick="showPage('withdraw-records')">提现记录</button>
+            </div>
+
+            <div class="phone-grid" id="phone-grid">
+                <div class="empty-state">暂无手机，请添加手机</div>
+            </div>
+        </div>
+
+        <!-- 统计分析页面 -->
+        <div class="page" id="page-stats">
+            <div class="date-container">
+                <span class="current-date" id="stats-current-date"></span>
+            </div>
+
+            <div class="section-header">
+                <div class="section-title">提现与收入统计</div>
+                <div class="section-divider"></div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stats-row">
+                    <div class="stat-card primary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总已赚金额</span>
+                        <span class="stat-value large" id="stats-total-earned">¥0.00</span>
+                    </div>
+                    <div class="stat-card secondary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总提现金额</span>
+                        <span class="stat-value" id="stats-total-withdrawn">¥0.00</span>
+                    </div>
+                    <div class="stat-card tertiary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总支出金额</span>
+                        <span class="stat-value" id="stats-total-expenses">¥0.00</span>
+                    </div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card primary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">总剩余余额</span>
+                        <span class="stat-value large" id="stats-total-balance">¥0.00</span>
+                    </div>
+                    <div class="stat-card secondary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">提现率</span>
+                        <span class="stat-value" id="stats-withdraw-rate">0%</span>
+                    </div>
+                    <div class="stat-card tertiary animate-border">
+                        <i></i><i></i>
+                        <span class="stat-label">支出率</span>
+                        <span class="stat-value" id="stats-expense-rate">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title">各软件提现与收入情况</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="app-withdraw-list" id="app-withdraw-list">
+                    <div class="empty-state">暂无软件数据</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提前计算页面 -->
+        <div class="page" id="page-forecast">
+            <div class="date-container">
+                <span class="current-date" id="forecast-current-date"></span>
+            </div>
+
+            <div class="card">
+                <div class="setting-item">
+                    <label class="form-label">目标日期</label>
+                    <div class="date-input-container flex gap-4 items-center">
+                        <input type="date" id="target-date" class="form-input flex-1" min="2026-01-01">
+                        <button class="btn btn-primary" onclick="calculateForecast()">计算</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="forecast-result mt-6" id="forecast-result" style="display: none;">
+                <div class="card">
+                    <div class="result-header">
+                        <div class="result-title text-xl font-semibold mb-4">计算结果</div>
+                        <div class="block mb-1" id="forecast-days-info"></div>
+                        <div class="block mb-4 font-medium" id="forecast-total-needed"></div>
+                    </div>
+                    <div class="app-list" id="forecast-app-list"></div>
+                </div>
+            </div>
+            <div class="empty-state" id="forecast-empty">
+                请选择目标日期并点击计算按钮
+            </div>
+        </div>
+
+        <!-- 设置页面 -->
+        <div class="page" id="page-settings">
+            <div class="date-container">
+                <span class="current-date" id="settings-current-date"></span>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title">全年目标金额</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="setting-item">
+                    <div class="goal-input-container">
+                        <input type="number" id="yearly-goal" class="form-input" placeholder="自动计算" disabled>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">数据备份</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-hint mb-4">通过文本码快速备份和恢复数据</div>
+                <div class="data-management-buttons">
+                    <div class="flex gap-4 mb-4">
+                        <button class="btn btn-primary flex-1" onclick="generateBackupCode()">生成备份码</button>
+                        <button class="btn btn-secondary flex-1" onclick="restoreFromCode()">恢复数据</button>
+                    </div>
+                    <div class="flex gap-4">
+                        <button class="btn btn-accent flex-1" onclick="exportData()">导出文件</button>
+                        <button class="btn btn-warning flex-1" onclick="importData()">导入文件</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">数据管理</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="data-management-buttons">
+                    <button class="btn btn-error w-full" onclick="clearAllData()">清空所有数据</button>
+                </div>
+            </div>
+
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">添加支出</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-hint mb-4">从总提现金额中扣减支出</div>
+                <div class="form-group">
+                    <label class="form-label">剩余提现金额 (元)</label>
+                    <input type="text" id="total-withdrawn" class="form-input" disabled>
+                </div>
+                <div class="expense-form">
+                    <div class="form-group">
+                        <label class="form-label">支出金额</label>
+                        <input type="number" id="expense-amount" class="form-input" placeholder="输入支出金额（元）" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">支出用途</label>
+                        <input type="text" id="expense-purpose" class="form-input" placeholder="输入支出用途">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">支出日期</label>
+                        <input type="date" id="expense-date" class="form-input">
+                    </div>
+                    <div class="flex gap-4 mt-6">
+                        <button class="btn btn-primary flex-1" onclick="addExpense()">保存支出</button>
+                        <button class="btn btn-secondary flex-1" onclick="showPage('expense-records')">支出记录</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提现记录页面 -->
+        <div class="page" id="page-withdraw-records">
+            <div class="page-header">
+                <button class="btn btn-secondary" onclick="showPage('phones')">返回</button>
+                <div class="section-title">提现记录</div>
+            </div>
+            <div class="withdraw-records" id="withdraw-records-list">
+                <div class="empty-state">暂无提现记录</div>
+            </div>
+        </div>
+
+        <!-- 支出记录页面 -->
+        <div class="page" id="page-expense-records">
+            <div class="page-header">
+                <button class="btn btn-secondary" onclick="showPage('settings')">返回</button>
+                <div class="section-title">支出记录</div>
+            </div>
+            <div class="expense-records" id="expense-records-list">
+                <div class="empty-state">暂无支出记录</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部导航 -->
+    <nav class="tab-bar">
+        <div class="tab-item active" data-page="dashboard" onclick="showPage('dashboard')">
+            <span class="tab-icon">📊</span>
+            <span class="tab-text">仪表盘</span>
+        </div>
+        <div class="tab-item" data-page="phones" onclick="showPage('phones')">
+            <span class="tab-icon">📱</span>
+            <span class="tab-text">手机管理</span>
+        </div>
+        <div class="tab-item" data-page="stats" onclick="showPage('stats')">
+            <span class="tab-icon">📈</span>
+            <span class="tab-text">统计分析</span>
+        </div>
+        <div class="tab-item" data-page="forecast" onclick="showPage('forecast')">
+            <span class="tab-icon">🎯</span>
+            <span class="tab-text">提前计算</span>
+        </div>
+        <div class="tab-item" data-page="settings" onclick="showPage('settings')">
+            <span class="tab-icon">⚙️</span>
+            <span class="tab-text">设置</span>
+        </div>
+    </nav>
+
+    <!-- 模态框 -->
+    <div class="modal" id="modal" style="display: none;">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-title" id="modal-title">标题</div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-buttons" id="modal-buttons"></div>
+        </div>
+    </div>
+
+    <!-- 提示消息 -->
+    <div class="toast" id="toast" style="display: none;"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
