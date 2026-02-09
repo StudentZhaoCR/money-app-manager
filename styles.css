@@ -1298,6 +1298,36 @@ body {
     .date-input-container .btn {
         width: 100%;
     }
+    
+    /* 移动设备表单适配 */
+    .form-input {
+        font-size: 14px;
+        padding: 12px 16px;
+    }
+    
+    /* 确保日期输入框在移动设备上正常显示 */
+    input[type="date"] {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    /* 支出表单适配 */
+    .expense-form .form-group {
+        margin-bottom: 16px;
+    }
+    
+    .expense-form .form-label {
+        font-size: 13px;
+    }
+    
+    .expense-form .flex {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .expense-form .flex .btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 480px) {
