@@ -1,4 +1,6 @@
 /* 卡通风格设计系统 */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Bubblegum+Sans&family=Comic+Neue:wght@400;700&display=swap');
+
 :root {
     /* 主色调 - 柔和的紫色 */
     --primary-color: #7c6bcf;
@@ -51,6 +53,11 @@
     --transition-fast: 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     --transition-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     --transition-slow: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    
+    /* 字体 */
+    --font-primary: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
+    --font-display: 'Fredoka One', 'Bubblegum Sans', cursive;
+    --font-secondary: 'Bubblegum Sans', 'Comic Sans MS', cursive;
 }
 
 /* 全局样式 */
@@ -61,7 +68,7 @@
 }
 
 body {
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    font-family: var(--font-primary);
     background: linear-gradient(135deg, #fef9f3 0%, #fff8e7 50%, #fef9f3 100%);
     min-height: 100vh;
     color: var(--text-primary);
@@ -114,7 +121,7 @@ body {
     font-weight: 900;
     text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.2);
     letter-spacing: 2px;
-    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-family: var(--font-display);
     position: relative;
     z-index: 1;
     display: inline-block;
@@ -266,6 +273,7 @@ body {
     color: var(--text-secondary);
     margin-bottom: 8px;
     font-weight: 600;
+    font-family: var(--font-secondary);
 }
 
 .stat-value {
@@ -273,6 +281,7 @@ body {
     font-size: 24px;
     font-weight: 800;
     color: var(--primary-dark);
+    font-family: var(--font-display);
 }
 
 .stat-value.large {
@@ -339,6 +348,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    font-family: var(--font-display);
 }
 
 .section-title::before {
@@ -439,6 +449,7 @@ body {
     font-weight: 700;
     color: var(--text-primary);
     flex: 1;
+    font-family: var(--font-secondary);
 }
 
 .app-info {
@@ -464,6 +475,7 @@ body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-family: var(--font-secondary);
 }
 
 .status-tag.ready {
@@ -493,6 +505,7 @@ body {
     border-radius: var(--radius-lg);
     border: 3px dashed var(--border-color);
     font-size: 14px;
+    font-family: var(--font-secondary);
 }
 
 /* 按钮 - 卡通风格 */
@@ -510,6 +523,7 @@ body {
     box-shadow: 0 4px 0 rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.15);
     position: relative;
     overflow: hidden;
+    font-family: var(--font-secondary);
 }
 
 .btn:active {
@@ -633,6 +647,7 @@ body {
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 8px;
+    font-family: var(--font-secondary);
 }
 
 .form-input {
@@ -663,6 +678,58 @@ body {
     font-size: 13px;
     color: var(--text-muted);
     margin-bottom: 12px;
+}
+
+/* 智能预测样式 */
+.prediction-container {
+    margin-top: 8px;
+    position: relative;
+}
+
+.prediction-list {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-soft);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.prediction-item {
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.prediction-item:last-child {
+    border-bottom: none;
+}
+
+.prediction-item:hover {
+    background: rgba(124, 107, 207, 0.1);
+    transform: translateX(5px);
+}
+
+.prediction-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    font-family: var(--font-secondary);
+}
+
+.prediction-details {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.prediction-details span {
+    background: rgba(124, 107, 207, 0.08);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
 }
 
 /* 手机网格 */
@@ -731,6 +798,7 @@ body {
     transition: opacity var(--transition-fast);
     display: block;
     margin-bottom: 8px;
+    font-family: var(--font-display);
 }
 
 .phone-name:hover {
@@ -794,12 +862,14 @@ body {
     font-size: 14px;
     color: var(--text-secondary);
     font-weight: 600;
+    font-family: var(--font-secondary);
 }
 
 .core-value {
     font-size: 28px;
     font-weight: 800;
     color: var(--primary-color);
+    font-family: var(--font-display);
 }
 
 .app-info-row {
@@ -939,7 +1009,7 @@ body {
 .tab-text {
     font-size: 12px;
     font-weight: 700;
-    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-family: var(--font-secondary);
     text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
 }
 
@@ -993,6 +1063,7 @@ body {
     color: var(--text-primary);
     margin-bottom: 20px;
     text-align: center;
+    font-family: var(--font-display);
 }
 
 .modal-body {
@@ -1023,6 +1094,7 @@ body {
     box-shadow: var(--shadow-hover);
     z-index: 2000;
     animation: toastSlide 0.3s var(--transition-normal);
+    font-family: var(--font-secondary);
 }
 
 @keyframes toastSlide {
@@ -1073,6 +1145,7 @@ body {
 .withdraw-date {
     font-size: 16px;
     font-weight: 700;
+    font-family: var(--font-display);
 }
 
 .withdraw-date-total {
@@ -1084,6 +1157,7 @@ body {
 .total-label {
     font-size: 13px;
     opacity: 0.9;
+    font-family: var(--font-secondary);
 }
 
 .total-amount {
@@ -1091,6 +1165,7 @@ body {
     font-weight: 900;
     color: var(--accent-color);
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    font-family: var(--font-display);
 }
 
 .withdraw-record-item {
@@ -1150,6 +1225,137 @@ body {
     overflow: hidden;
 }
 
+/* 分期还款样式 */
+.installment-list {
+    margin-top: 20px;
+}
+
+.installment-item {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-card);
+    border: 3px solid var(--primary-light);
+    transition: all var(--transition-normal);
+    position: relative;
+    overflow: hidden;
+}
+
+.installment-item:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-3px) scale(1.01);
+    box-shadow: var(--shadow-hover);
+}
+
+.installment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px dashed rgba(124, 107, 207, 0.3);
+}
+
+.installment-platform {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--primary-dark);
+    font-family: var(--font-display);
+}
+
+.installment-date {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-family: var(--font-secondary);
+}
+
+.installment-amount {
+    font-size: 24px;
+    font-weight: 900;
+    color: var(--primary-color);
+    text-shadow: 2px 2px 4px rgba(124, 107, 207, 0.2);
+    margin: 12px 0;
+    font-family: var(--font-display);
+}
+
+.installment-details {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-family: var(--font-secondary);
+}
+
+.installment-progress {
+    margin-top: 16px;
+}
+
+.installment-app-goals {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px dashed rgba(124, 107, 207, 0.2);
+}
+
+.installment-app-goal-item {
+    background: rgba(124, 107, 207, 0.05);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 2px solid rgba(124, 107, 207, 0.1);
+}
+
+.installment-app-goal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.installment-app-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-secondary);
+}
+
+.installment-app-target {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: var(--font-secondary);
+}
+
+.installment-action-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+
+.installment-action-buttons .btn {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    font-size: 13px;
+}
+
+/* 紧急程度样式 */
+.installment-item.urgent {
+    border-color: var(--error-color);
+    background: linear-gradient(135deg, #fff0f0 0%, #ffe8e8 100%);
+}
+
+.installment-item.warning {
+    border-color: var(--warning-color);
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.installment-item.normal {
+    border-color: var(--primary-light);
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+}
+
 .expense-record-item::before {
     content: '';
     position: absolute;
@@ -1191,12 +1397,14 @@ body {
     font-weight: 700;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
     box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+    font-family: var(--font-secondary);
 }
 
 .expense-date {
     font-size: 13px;
     color: var(--text-muted);
     font-weight: 600;
+    font-family: var(--font-secondary);
 }
 
 .expense-record-body {
@@ -1215,12 +1423,14 @@ body {
     color: var(--text-primary);
     margin-bottom: 8px;
     line-height: 1.4;
+    font-family: var(--font-display);
 }
 
 .expense-source {
     font-size: 14px;
     color: var(--text-secondary);
     font-weight: 600;
+    font-family: var(--font-secondary);
 }
 
 .expense-amount {
@@ -1229,6 +1439,7 @@ body {
     color: var(--error-color);
     text-shadow: 2px 2px 4px rgba(255, 107, 107, 0.2);
     transition: transform var(--transition-fast);
+    font-family: var(--font-display);
 }
 
 .expense-record-item:hover .expense-amount {

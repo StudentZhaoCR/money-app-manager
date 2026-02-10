@@ -1,15 +1,276 @@
 // 赚钱软件管理系统 - 主应用逻辑
 const DATA_KEY = 'moneyAppData';
 
+// 全局变量和辅助函数定义
+let modalIsShowing = false;
+
+// 显示模态框
+function showModal(title, body, buttons) {
+    // 防止重复触发
+    if (modalIsShowing) return;
+    
+    const modal = document.getElementById('modal');
+    
+    // 先确保模态框是隐藏状态
+    modal.style.display = 'none';
+    modal.classList.remove('show');
+    
+    // 清空按钮容器，移除事件监听器
+    const buttonsContainer = document.getElementById('modal-buttons');
+    buttonsContainer.innerHTML = '';
+    
+    // 更新内容
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-body').innerHTML = body;
+    
+    // 创建按钮，使用事件监听器
+    buttons.forEach(btn => {
+        const button = document.createElement('button');
+        button.className = `btn ${btn.class}`;
+        button.textContent = btn.text;
+        button.addEventListener('click', btn.action);
+        buttonsContainer.appendChild(button);
+    });
+    
+    // 设置模态框显示状态
+    modalIsShowing = true;
+    
+    // 先设置为flex，然后添加show类触发动画
+    modal.style.display = 'flex';
+    // 使用setTimeout确保DOM更新后再添加类
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+}
+
+// 关闭模态框
+function closeModal() {
+    const modal = document.getElementById('modal');
+    
+    // 移除show类触发淡出动画
+    modal.classList.remove('show');
+    
+    // 动画结束后完全隐藏
+    setTimeout(() => {
+        modal.style.display = 'none';
+        
+        // 清空按钮容器，移除事件监听器
+        document.getElementById('modal-buttons').innerHTML = '';
+        
+        // 重置模态框状态
+        modalIsShowing = false;
+    }, 300); // 与CSS过渡时间匹配
+}
+
+// 显示提示消息
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.style.display = 'block';
+    
+    setTimeout(() => {
+        toast.style.display = 'none';
+    }, 2000);
+}
+
+// 全局函数定义（提前定义以避免函数未定义错误）
+function openAddInstallmentModal() {
+    showModal('添加分期还款', `
+        <div class="form-group">
+            <label class="form-label">平台名称</label>
+            <input type="text" id="installment-platform" class="form-input" placeholder="输入平台名称">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款日期</label>
+            <input type="date" id="installment-due-date" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款金额 (元)</label>
+            <input type="number" id="installment-amount" class="form-input" placeholder="输入还款金额" step="0.01">
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { 
+            text: '添加', 
+            class: 'btn-primary', 
+            action: () => {
+                const platform = document.getElementById('installment-platform').value.trim();
+                const dueDate = document.getElementById('installment-due-date').value;
+                const amount = document.getElementById('installment-amount').value;
+                
+                if (platform && dueDate && amount) {
+                    DataManager.addInstallment({ platform, dueDate, amount });
+                    renderInstallments();
+                    showToast('分期添加成功！');
+                }
+                closeModal();
+            }
+        }
+    ]);
+}
+
+function openEditInstallmentModal(installmentId) {
+    const data = DataManager.loadData();
+    const installment = data.installments.find(i => i.id === installmentId);
+    
+    if (!installment) return;
+    
+    showModal('编辑分期还款', `
+        <div class="form-group">
+            <label class="form-label">平台名称</label>
+            <input type="text" id="edit-installment-platform" class="form-input" value="${installment.platform}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款日期</label>
+            <input type="date" id="edit-installment-due-date" class="form-input" value="${installment.dueDate}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款金额 (元)</label>
+            <input type="number" id="edit-installment-amount" class="form-input" value="${installment.amount}" step="0.01">
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { 
+            text: '保存', 
+            class: 'btn-primary', 
+            action: () => {
+                const platform = document.getElementById('edit-installment-platform').value.trim();
+                const dueDate = document.getElementById('edit-installment-due-date').value;
+                const amount = document.getElementById('edit-installment-amount').value;
+                
+                if (platform && dueDate && amount) {
+                    DataManager.editInstallment(installmentId, { platform, dueDate, amount });
+                    renderInstallments();
+                    showToast('分期已更新！');
+                }
+                closeModal();
+            }
+        }
+    ]);
+}
+
+function deleteInstallment(installmentId) {
+    if (confirm('确定要删除这个分期吗？')) {
+        DataManager.deleteInstallment(installmentId);
+        renderInstallments();
+        showToast('分期已删除！');
+    }
+}
+
+function calculateInstallmentGoalsGlobal() {
+    renderInstallments();
+    showToast('计算完成！');
+}
+
+function renderInstallments() {
+    const summary = DataManager.getInstallmentSummary();
+    const installmentGoals = DataManager.calculateInstallmentGoals();
+    
+    // 更新总览数据
+    document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
+    document.getElementById('installment-earned').textContent = `¥${summary.totalEarned.toFixed(2)}`;
+    document.getElementById('installment-needed').textContent = `¥${summary.totalNeeded.toFixed(2)}`;
+    document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
+    document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
+    
+    // 更新最近还款日期
+    if (installmentGoals.length > 0) {
+        const nearestInstallment = installmentGoals[0];
+        document.getElementById('nearest-due-date').textContent = `${nearestInstallment.dueDate} (${nearestInstallment.daysRemaining}天)`;
+    } else {
+        document.getElementById('nearest-due-date').textContent = '暂无';
+    }
+    
+    // 渲染分期列表
+    const container = document.getElementById('installment-list');
+    if (installmentGoals.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无分期记录</div>';
+        return;
+    }
+    
+    container.innerHTML = installmentGoals.map(installment => {
+        // 确定紧急程度
+        let urgencyClass = 'normal';
+        if (installment.daysRemaining <= 3) {
+            urgencyClass = 'urgent';
+        } else if (installment.daysRemaining <= 7) {
+            urgencyClass = 'warning';
+        }
+        
+        return `
+            <div class="installment-item ${urgencyClass}">
+                <div class="installment-header">
+                    <div>
+                        <h3 class="installment-platform">${installment.platform}</h3>
+                        <p class="installment-date">还款日期: ${installment.dueDate}</p>
+                    </div>
+                    <span class="status-tag ${installment.status === 'active' ? 'ready' : 'pending'}">
+                        ${installment.status === 'active' ? '进行中' : '已完成'}
+                    </span>
+                </div>
+                <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
+                <div class="installment-details">
+                    <span>剩余天数: ${installment.daysRemaining}天</span>
+                    <span>每日需要: ¥${(installment.amount / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                </div>
+                <div class="installment-progress">
+                    <div class="progress-header">
+                        <span>完成进度</span>
+                        <span class="font-semibold">${installment.totalProgress.toFixed(0)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${installment.totalProgress}%"></div>
+                    </div>
+                </div>
+                <div class="installment-app-goals">
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标</div>
+                    ${installment.appGoals.map(goal => `
+                        <div class="installment-app-goal-item">
+                            <div class="installment-app-goal-header">
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName}</span>
+                                <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
+                            </div>
+                            <div class="progress-item">
+                                <div class="progress-header">
+                                    <span>当前: ¥${goal.currentBalance.toFixed(2)}</span>
+                                    <span>${goal.progress.toFixed(0)}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${goal.progress}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="installment-action-buttons">
+                    <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
+                    <button class="btn btn-error" onclick="deleteInstallment('${installment.id}')">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 原始代码开始
+
 // 数据管理类
 class DataManager {
     static loadData() {
         const savedData = localStorage.getItem(DATA_KEY);
         if (savedData) {
-            return JSON.parse(savedData);
+            const parsedData = JSON.parse(savedData);
+            // 确保返回的数据对象包含必要的属性
+            return {
+                phones: parsedData.phones || [],
+                installments: parsedData.installments || [],
+                settings: {
+                    yearlyGoal: parsedData.settings?.yearlyGoal || 10000
+                }
+            };
         }
         return {
             phones: [],
+            installments: [],
             settings: {
                 yearlyGoal: 10000
             }
@@ -78,14 +339,15 @@ class DataManager {
                 
                 const oldBalance = app.balance;
                 const newBalance = parseFloat(appData.balance) || 0;
+                const formattedBalance = parseFloat(newBalance.toFixed(2));
                 
-                if (newBalance > oldBalance) {
-                    app.earned = (app.earned || 0) + (newBalance - oldBalance);
-                } else if (newBalance === 0 && oldBalance > 0) {
+                if (formattedBalance > oldBalance) {
+                    app.earned = (app.earned || 0) + (formattedBalance - oldBalance);
+                } else if (formattedBalance === 0 && oldBalance > 0) {
                     app.earned = Math.max(0, (app.earned || 0) - oldBalance);
                 }
                 
-                app.balance = newBalance;
+                app.balance = formattedBalance;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
                 
@@ -169,6 +431,115 @@ class DataManager {
         localStorage.removeItem(DATA_KEY);
         localStorage.removeItem('expandedPhones');
     }
+
+    // 分期还款相关方法
+    static addInstallment(installmentData) {
+        const data = this.loadData();
+        const installment = {
+            id: Date.now().toString(),
+            platform: installmentData.platform,
+            dueDate: installmentData.dueDate,
+            amount: parseFloat(installmentData.amount),
+            status: 'active',
+            createdAt: new Date().toISOString()
+        };
+        data.installments.push(installment);
+        this.saveData(data);
+        return data;
+    }
+
+    static editInstallment(installmentId, installmentData) {
+        const data = this.loadData();
+        const installment = data.installments.find(i => i.id === installmentId);
+        if (installment) {
+            installment.platform = installmentData.platform;
+            installment.dueDate = installmentData.dueDate;
+            installment.amount = parseFloat(installmentData.amount);
+            this.saveData(data);
+        }
+        return data;
+    }
+
+    static deleteInstallment(installmentId) {
+        const data = this.loadData();
+        data.installments = data.installments.filter(i => i.id !== installmentId);
+        this.saveData(data);
+        return data;
+    }
+
+    static calculateInstallmentGoals() {
+        const data = this.loadData();
+        const now = new Date();
+        
+        // 过滤出活跃的分期
+        const activeInstallments = data.installments.filter(i => i.status === 'active');
+        
+        // 按还款日期排序
+        activeInstallments.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+        
+        // 计算所有软件的总权重
+        const allApps = data.phones.flatMap(phone => phone.apps);
+        const totalWeight = allApps.reduce((sum, app) => {
+            // 权重基于最小提现金额
+            return sum + (app.minWithdraw || 0);
+        }, 0);
+        
+        // 计算每个分期的目标
+        const installmentGoals = activeInstallments.map(installment => {
+            const dueDate = new Date(installment.dueDate);
+            const daysRemaining = Math.max(0, Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)));
+            
+            // 计算每个软件的目标金额
+            const appGoals = allApps.map(app => {
+                const weight = (app.minWithdraw || 0) / totalWeight || 0;
+                const dailyTarget = (installment.amount * weight) / (daysRemaining || 1);
+                const totalTarget = installment.amount * weight;
+                
+                return {
+                    appId: app.id,
+                    appName: app.name,
+                    phoneName: data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '',
+                    weight,
+                    dailyTarget,
+                    totalTarget,
+                    currentBalance: app.balance || 0,
+                    progress: Math.min(100, ((app.balance || 0) / totalTarget) * 100) || 0
+                };
+            });
+            
+            return {
+                ...installment,
+                daysRemaining,
+                appGoals,
+                totalProgress: appGoals.reduce((sum, goal) => sum + goal.progress, 0) / appGoals.length || 0
+            };
+        });
+        
+        return installmentGoals;
+    }
+
+    static getInstallmentSummary() {
+        const data = this.loadData();
+        const installmentGoals = this.calculateInstallmentGoals();
+        
+        // 计算总体情况
+        const totalInstallmentAmount = installmentGoals.reduce((sum, goal) => sum + goal.amount, 0);
+        const totalDaysRemaining = installmentGoals.length > 0 ? 
+            Math.min(...installmentGoals.map(goal => goal.daysRemaining)) : 0;
+        
+        // 计算已赚取和待赚取金额
+        const allApps = data.phones.flatMap(phone => phone.apps);
+        const totalEarned = allApps.reduce((sum, app) => sum + (app.balance || 0), 0);
+        const totalNeeded = Math.max(0, totalInstallmentAmount - totalEarned);
+        
+        return {
+            totalInstallmentAmount,
+            totalDaysRemaining,
+            totalEarned,
+            totalNeeded,
+            overallProgress: Math.min(100, (totalEarned / totalInstallmentAmount) * 100) || 0
+        };
+    }
 }
 
 // 全局状态
@@ -213,6 +584,7 @@ function updateAllDates() {
     document.getElementById('stats-current-date').textContent = dateStr;
     document.getElementById('forecast-current-date').textContent = dateStr;
     document.getElementById('settings-current-date').textContent = dateStr;
+    document.getElementById('installments-current-date').textContent = dateStr;
 }
 
 // 页面切换
@@ -224,6 +596,7 @@ function showPage(pageName) {
     if (pageName === 'settings') renderSettings();
     if (pageName === 'withdraw-records') renderWithdrawRecords();
     if (pageName === 'expense-records') renderExpenseRecords();
+    if (pageName === 'installments') renderInstallments();
     
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(page => {
@@ -535,6 +908,7 @@ function openAddAppModal(phoneId) {
         <div class="form-group">
             <label class="form-label">软件名称</label>
             <input type="text" id="app-name" class="form-input" placeholder="输入软件名称">
+            <div class="prediction-container" id="app-prediction"></div>
         </div>
         <div class="form-group">
             <label class="form-label">最小提现额度 (元)</label>
@@ -563,6 +937,55 @@ function openAddAppModal(phoneId) {
             }
         }
     ]);
+    
+    // 添加智能预测功能
+    const appNameInput = document.getElementById('app-name');
+    const predictionContainer = document.getElementById('app-prediction');
+    
+    appNameInput.addEventListener('input', function() {
+        const inputText = this.value.trim();
+        if (inputText.length >= 1) {
+            showPredictions(inputText);
+        } else {
+            predictionContainer.innerHTML = '';
+        }
+    });
+    
+    function showPredictions(inputText) {
+        const data = DataManager.loadData();
+        const allApps = data.phones.flatMap(phone => phone.apps);
+        
+        // 查找匹配的软件
+        const predictions = allApps.filter(app => {
+            return app.name.toLowerCase().includes(inputText.toLowerCase());
+        }).slice(0, 5); // 最多显示5个预测结果
+        
+        if (predictions.length > 0) {
+            predictionContainer.innerHTML = `
+                <div class="prediction-list">
+                    ${predictions.map(app => `
+                        <div class="prediction-item" onclick="selectPrediction('${app.name}', ${app.minWithdraw}, ${app.balance || 0})")>
+                            <div class="prediction-name">${app.name}</div>
+                            <div class="prediction-details">
+                                <span>最小提现: ¥${app.minWithdraw.toFixed(2)}</span>
+                                <span>余额: ¥${(app.balance || 0).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            predictionContainer.innerHTML = '';
+        }
+    }
+}
+
+// 选择预测结果
+function selectPrediction(name, minWithdraw, balance) {
+    document.getElementById('app-name').value = name;
+    document.getElementById('app-min-withdraw').value = minWithdraw;
+    document.getElementById('app-balance').value = balance;
+    document.getElementById('app-prediction').innerHTML = '';
 }
 
 // 打开编辑软件模态框
@@ -587,7 +1010,7 @@ function openEditAppModal(phoneId, appId) {
         </div>
         <div class="form-group">
             <label class="form-label">当前余额 (元)</label>
-            <input type="number" id="edit-app-balance" class="form-input" value="${app.balance}" step="0.01">
+            <input type="number" id="edit-app-balance" class="form-input" value="${app.balance.toFixed(2)}" step="0.01">
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -1037,6 +1460,188 @@ function renderExpenseRecords() {
     `).join('');
 }
 
+// 渲染分期还款页面
+function renderInstallments() {
+    const summary = DataManager.getInstallmentSummary();
+    const installmentGoals = DataManager.calculateInstallmentGoals();
+    
+    // 更新总览数据
+    document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
+    document.getElementById('installment-earned').textContent = `¥${summary.totalEarned.toFixed(2)}`;
+    document.getElementById('installment-needed').textContent = `¥${summary.totalNeeded.toFixed(2)}`;
+    document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
+    document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
+    
+    // 更新最近还款日期
+    if (installmentGoals.length > 0) {
+        const nearestInstallment = installmentGoals[0];
+        document.getElementById('nearest-due-date').textContent = `${nearestInstallment.dueDate} (${nearestInstallment.daysRemaining}天)`;
+    } else {
+        document.getElementById('nearest-due-date').textContent = '暂无';
+    }
+    
+    // 渲染分期列表
+    const container = document.getElementById('installment-list');
+    if (installmentGoals.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无分期记录</div>';
+        return;
+    }
+    
+    container.innerHTML = installmentGoals.map(installment => {
+        // 确定紧急程度
+        let urgencyClass = 'normal';
+        if (installment.daysRemaining <= 3) {
+            urgencyClass = 'urgent';
+        } else if (installment.daysRemaining <= 7) {
+            urgencyClass = 'warning';
+        }
+        
+        return `
+            <div class="installment-item ${urgencyClass}">
+                <div class="installment-header">
+                    <div>
+                        <h3 class="installment-platform">${installment.platform}</h3>
+                        <p class="installment-date">还款日期: ${installment.dueDate}</p>
+                    </div>
+                    <span class="status-tag ${installment.status === 'active' ? 'ready' : 'pending'}">
+                        ${installment.status === 'active' ? '进行中' : '已完成'}
+                    </span>
+                </div>
+                <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
+                <div class="installment-details">
+                    <span>剩余天数: ${installment.daysRemaining}天</span>
+                    <span>每日需要: ¥${(installment.amount / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                </div>
+                <div class="installment-progress">
+                    <div class="progress-header">
+                        <span>完成进度</span>
+                        <span class="font-semibold">${installment.totalProgress.toFixed(0)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${installment.totalProgress}%"></div>
+                    </div>
+                </div>
+                <div class="installment-app-goals">
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标</div>
+                    ${installment.appGoals.map(goal => `
+                        <div class="installment-app-goal-item">
+                            <div class="installment-app-goal-header">
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName}</span>
+                                <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
+                            </div>
+                            <div class="progress-item">
+                                <div class="progress-header">
+                                    <span>当前: ¥${goal.currentBalance.toFixed(2)}</span>
+                                    <span>${goal.progress.toFixed(0)}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${goal.progress}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="installment-action-buttons">
+                    <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
+                    <button class="btn btn-error" onclick="deleteInstallment('${installment.id}')">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 打开添加分期模态框
+function openAddInstallmentModal() {
+    showModal('添加分期还款', `
+        <div class="form-group">
+            <label class="form-label">平台名称</label>
+            <input type="text" id="installment-platform" class="form-input" placeholder="输入平台名称">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款日期</label>
+            <input type="date" id="installment-due-date" class="form-input">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款金额 (元)</label>
+            <input type="number" id="installment-amount" class="form-input" placeholder="输入还款金额" step="0.01">
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { 
+            text: '添加', 
+            class: 'btn-primary', 
+            action: () => {
+                const platform = document.getElementById('installment-platform').value.trim();
+                const dueDate = document.getElementById('installment-due-date').value;
+                const amount = document.getElementById('installment-amount').value;
+                
+                if (platform && dueDate && amount) {
+                    DataManager.addInstallment({ platform, dueDate, amount });
+                    renderInstallments();
+                    showToast('分期添加成功！');
+                }
+                closeModal();
+            }
+        }
+    ]);
+}
+
+// 打开编辑分期模态框
+function openEditInstallmentModal(installmentId) {
+    const data = DataManager.loadData();
+    const installment = data.installments.find(i => i.id === installmentId);
+    
+    if (!installment) return;
+    
+    showModal('编辑分期还款', `
+        <div class="form-group">
+            <label class="form-label">平台名称</label>
+            <input type="text" id="edit-installment-platform" class="form-input" value="${installment.platform}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款日期</label>
+            <input type="date" id="edit-installment-due-date" class="form-input" value="${installment.dueDate}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款金额 (元)</label>
+            <input type="number" id="edit-installment-amount" class="form-input" value="${installment.amount}" step="0.01">
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { 
+            text: '保存', 
+            class: 'btn-primary', 
+            action: () => {
+                const platform = document.getElementById('edit-installment-platform').value.trim();
+                const dueDate = document.getElementById('edit-installment-due-date').value;
+                const amount = document.getElementById('edit-installment-amount').value;
+                
+                if (platform && dueDate && amount) {
+                    DataManager.editInstallment(installmentId, { platform, dueDate, amount });
+                    renderInstallments();
+                    showToast('分期已更新！');
+                }
+                closeModal();
+            }
+        }
+    ]);
+}
+
+// 删除分期
+function deleteInstallment(installmentId) {
+    if (confirm('确定要删除这个分期吗？')) {
+        DataManager.deleteInstallment(installmentId);
+        renderInstallments();
+        showToast('分期已删除！');
+    }
+}
+
+// 计算分期目标（全局函数）
+function calculateInstallmentGoalsGlobal() {
+    renderInstallments();
+    showToast('计算完成！');
+}
+
 // 生成备份码
 function generateBackupCode() {
     const data = DataManager.loadData();
@@ -1144,22 +1749,59 @@ function restoreFromCode() {
     ]);
 }
 
-// 导出数据
+// 导出数据为Excel兼容格式（CSV）
 function exportData() {
     const data = DataManager.loadData();
-    const jsonStr = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
+    
+    // 创建CSV内容
+    let csvContent = "数据类型,手机名称,软件名称,最小提现,当前余额,已赚金额,已提现金额\n";
+    
+    // 添加手机和软件数据
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            const row = [
+                "软件数据",
+                `"${phone.name}"`,
+                `"${app.name}"`,
+                app.minWithdraw.toFixed(2),
+                (app.balance || 0).toFixed(2),
+                (app.earned || 0).toFixed(2),
+                (app.withdrawn || 0).toFixed(2)
+            ];
+            csvContent += row.join(',') + '\n';
+        });
+    });
+    
+    // 添加统计信息
+    const totalPhones = data.phones.length;
+    const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+    const totalBalance = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => appSum + (app.balance || 0), 0);
+    }, 0);
+    const totalEarned = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => appSum + (app.earned || 0), 0);
+    }, 0);
+    
+    csvContent += "\n";
+    csvContent += "统计信息,,,,,,\n";
+    csvContent += `总手机数,${totalPhones},,,\n`;
+    csvContent += `总软件数,${totalApps},,,\n`;
+    csvContent += `总余额,${totalBalance.toFixed(2)},,,\n`;
+    csvContent += `总已赚,${totalEarned.toFixed(2)},,,\n`;
+    
+    // 创建Blob并下载
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     
     const a = document.createElement('a');
     a.href = url;
-    a.download = `moneyApp_backup_${Date.now()}.json`;
+    a.download = `moneyApp_export_${Date.now()}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    showToast('数据已导出！');
+    showToast('数据已导出为Excel格式！');
 }
 
 // 导入数据
@@ -1211,78 +1853,6 @@ function clearAllData() {
         renderSettings();
         showToast('数据已清空！');
     }
-}
-
-// 模态框状态管理
-let modalIsShowing = false;
-
-// 显示模态框
-function showModal(title, body, buttons) {
-    // 防止重复触发
-    if (modalIsShowing) return;
-    
-    const modal = document.getElementById('modal');
-    
-    // 先确保模态框是隐藏状态
-    modal.style.display = 'none';
-    modal.classList.remove('show');
-    
-    // 清空按钮容器，移除事件监听器
-    const buttonsContainer = document.getElementById('modal-buttons');
-    buttonsContainer.innerHTML = '';
-    
-    // 更新内容
-    document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-body').innerHTML = body;
-    
-    // 创建按钮，使用事件监听器
-    buttons.forEach(btn => {
-        const button = document.createElement('button');
-        button.className = `btn ${btn.class}`;
-        button.textContent = btn.text;
-        button.addEventListener('click', btn.action);
-        buttonsContainer.appendChild(button);
-    });
-    
-    // 设置模态框显示状态
-    modalIsShowing = true;
-    
-    // 先设置为flex，然后添加show类触发动画
-    modal.style.display = 'flex';
-    // 使用setTimeout确保DOM更新后再添加类
-    setTimeout(() => {
-        modal.classList.add('show');
-    }, 10);
-}
-
-// 关闭模态框
-function closeModal() {
-    const modal = document.getElementById('modal');
-    
-    // 移除show类触发淡出动画
-    modal.classList.remove('show');
-    
-    // 动画结束后完全隐藏
-    setTimeout(() => {
-        modal.style.display = 'none';
-        
-        // 清空按钮容器，移除事件监听器
-        document.getElementById('modal-buttons').innerHTML = '';
-        
-        // 重置模态框状态
-        modalIsShowing = false;
-    }, 300); // 与CSS过渡时间匹配
-}
-
-// 显示提示消息
-function showToast(message) {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.style.display = 'block';
-    
-    setTimeout(() => {
-        toast.style.display = 'none';
-    }, 2000);
 }
 
 // 点击模态框背景关闭

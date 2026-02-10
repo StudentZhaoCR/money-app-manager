@@ -199,16 +199,9 @@
                     <div class="section-title">数据备份</div>
                     <div class="section-divider"></div>
                 </div>
-                <div class="form-hint mb-4">通过文本码快速备份和恢复数据</div>
+                <div class="form-hint mb-4">导出为Excel格式，支持在手机端查看和分享</div>
                 <div class="data-management-buttons">
-                    <div class="flex gap-4 mb-4">
-                        <button class="btn btn-primary flex-1" onclick="generateBackupCode()">生成备份码</button>
-                        <button class="btn btn-secondary flex-1" onclick="restoreFromCode()">恢复数据</button>
-                    </div>
-                    <div class="flex gap-4">
-                        <button class="btn btn-accent flex-1" onclick="exportData()">导出文件</button>
-                        <button class="btn btn-warning flex-1" onclick="importData()">导入文件</button>
-                    </div>
+                    <button class="btn btn-primary w-full" onclick="exportData()">导出为Excel</button>
                 </div>
             </div>
 
@@ -274,6 +267,63 @@
                 <div class="empty-state">暂无支出记录</div>
             </div>
         </div>
+
+        <!-- 分期还款管理页面 -->
+        <div class="page" id="page-installments">
+            <div class="date-container">
+                <span class="current-date" id="installments-current-date"></span>
+            </div>
+
+            <div class="flex gap-4 w-full">
+                <button class="btn btn-primary flex-1" onclick="openAddInstallmentModal()">添加分期</button>
+                <button class="btn btn-secondary flex-1" onclick="calculateInstallmentGoalsGlobal()">刷新计算</button>
+            </div>
+
+            <!-- 分期总览 -->
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">分期还款总览</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="stats-container">
+                    <div class="stats-row">
+                        <div class="stat-card border-primary">
+                            <span class="stat-label">总还款金额</span>
+                            <span class="stat-value" id="total-installment-amount">¥0.00</span>
+                        </div>
+                        <div class="stat-card border-secondary">
+                            <span class="stat-label">最近还款日期</span>
+                            <span class="stat-value" id="nearest-due-date">暂无</span>
+                        </div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-card border-tertiary">
+                            <span class="stat-label">已赚金额</span>
+                            <span class="stat-value" id="installment-earned">¥0.00</span>
+                        </div>
+                        <div class="stat-card border-accent">
+                            <span class="stat-label">待赚金额</span>
+                            <span class="stat-value" id="installment-needed">¥0.00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span>总体进度</span>
+                        <span class="font-semibold" id="installment-overall-progress">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="installment-progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分期列表 -->
+            <div class="section-title mt-6">分期还款计划</div>
+            <div class="installment-list" id="installment-list">
+                <div class="empty-state">暂无分期记录</div>
+            </div>
+        </div>
     </main>
 
     <!-- 底部导航 -->
@@ -286,9 +336,9 @@
             <span class="tab-icon">📱</span>
             <span class="tab-text">手机管理</span>
         </div>
-        <div class="tab-item" data-page="stats" onclick="showPage('stats')">
-            <span class="tab-icon">📈</span>
-            <span class="tab-text">统计分析</span>
+        <div class="tab-item" data-page="installments" onclick="showPage('installments')">
+            <span class="tab-icon">💳</span>
+            <span class="tab-text">分期还款</span>
         </div>
         <div class="tab-item" data-page="forecast" onclick="showPage('forecast')">
             <span class="tab-icon">🎯</span>
