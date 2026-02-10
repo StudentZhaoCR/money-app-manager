@@ -515,7 +515,7 @@ class DataManager {
                 totalTarget,
                 currentBalance: app.balance || 0,
                 currentWithdrawn: app.withdrawn || 0,
-                progress: Math.min(100, ((app.withdrawn || 0) / (totalTarget + (app.withdrawn || 0))) * 100) || 0
+                progress: totalTarget > 0 ? Math.min(100, ((app.withdrawn || 0) / (totalTarget + (app.withdrawn || 0))) * 100) : 100
             };
         });
             
@@ -1541,14 +1541,20 @@ function renderInstallments() {
                                 <span class="installment-app-name">${goal.phoneName} - ${goal.appName}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
+                            <div class="installment-app-goal-details">
+                                <span>每日要赚: ¥${goal.dailyTarget.toFixed(2)}</span>
+                            </div>
                             <div class="progress-item">
                                 <div class="progress-header">
-                                    <span>当前: ¥${goal.currentBalance.toFixed(2)}</span>
+                                    <span>已提现: ¥${goal.currentWithdrawn.toFixed(2)}</span>
                                     <span>${goal.progress.toFixed(0)}%</span>
                                 </div>
                                 <div class="progress-bar">
                                     <div class="progress-fill" style="width: ${goal.progress}%"></div>
                                 </div>
+                            </div>
+                            <div class="installment-app-goal-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
                     `).join('')}
