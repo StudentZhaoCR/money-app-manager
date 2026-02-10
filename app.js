@@ -171,7 +171,7 @@ function renderInstallments() {
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
-    document.getElementById('installment-earned').textContent = `¥${summary.totalEarned.toFixed(2)}`;
+    document.getElementById('installment-earned').textContent = `¥${summary.totalWithdrawn.toFixed(2)}`;
     document.getElementById('installment-needed').textContent = `¥${summary.totalNeeded.toFixed(2)}`;
     document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
     document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
@@ -238,7 +238,7 @@ function renderInstallments() {
                             </div>
                             <div class="progress-item">
                                 <div class="progress-header">
-                                    <span>当前: ¥${goal.currentBalance.toFixed(2)}</span>
+                                    <span>已提现: ¥${goal.currentWithdrawn.toFixed(2)}</span>
                                     <span>${goal.progress.toFixed(0)}%</span>
                                 </div>
                                 <div class="progress-bar">
@@ -498,9 +498,12 @@ class DataManager {
             const dueDate = new Date(installment.dueDate);
             const daysRemaining = Math.max(0, Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)));
             
-            // 计算每个软件的目标金额（平均分配）
+            // 计算已提现金额
+        const totalWithdrawn = allApps.reduce((sum, app) => sum + (app.withdrawn || 0), 0);
+        
+        // 计算每个软件的目标金额（平均分配待提现金额）
         const appGoals = allApps.map(app => {
-            const totalTarget = installment.amount / allApps.length;
+            const totalTarget = (installment.amount - totalWithdrawn) / allApps.length;
             const dailyTarget = totalTarget / (daysRemaining || 1);
             
             return {
@@ -511,7 +514,8 @@ class DataManager {
                 dailyTarget,
                 totalTarget,
                 currentBalance: app.balance || 0,
-                progress: Math.min(100, ((app.balance || 0) / totalTarget) * 100) || 0
+                currentWithdrawn: app.withdrawn || 0,
+                progress: Math.min(100, ((app.withdrawn || 0) / (totalTarget + (app.withdrawn || 0))) * 100) || 0
             };
         });
             
@@ -535,17 +539,17 @@ class DataManager {
         const totalDaysRemaining = installmentGoals.length > 0 ? 
             Math.min(...installmentGoals.map(goal => goal.daysRemaining)) : 0;
         
-        // 计算已赚取和待赚取金额
+        // 计算已提现和待提现金额
         const allApps = data.phones.flatMap(phone => phone.apps);
-        const totalEarned = allApps.reduce((sum, app) => sum + (app.balance || 0), 0);
-        const totalNeeded = Math.max(0, totalInstallmentAmount - totalEarned);
+        const totalWithdrawn = allApps.reduce((sum, app) => sum + (app.withdrawn || 0), 0);
+        const totalNeeded = Math.max(0, totalInstallmentAmount - totalWithdrawn);
         
         return {
             totalInstallmentAmount,
             totalDaysRemaining,
-            totalEarned,
+            totalWithdrawn,
             totalNeeded,
-            overallProgress: Math.min(100, (totalEarned / totalInstallmentAmount) * 100) || 0
+            overallProgress: Math.min(100, (totalWithdrawn / totalInstallmentAmount) * 100) || 0
         };
     }
 }
@@ -1475,7 +1479,7 @@ function renderInstallments() {
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
-    document.getElementById('installment-earned').textContent = `¥${summary.totalEarned.toFixed(2)}`;
+    document.getElementById('installment-earned').textContent = `¥${summary.totalWithdrawn.toFixed(2)}`;
     document.getElementById('installment-needed').textContent = `¥${summary.totalNeeded.toFixed(2)}`;
     document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
     document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
