@@ -74,6 +74,9 @@ function showToast(message) {
 }
 
 // 全局函数定义（提前定义以避免函数未定义错误）
+
+
+
 function openAddInstallmentModal() {
     showModal('添加分期还款', `
         <div class="form-group">
@@ -230,6 +233,9 @@ function renderInstallments() {
                                 <span class="installment-app-name">${goal.phoneName} - ${goal.appName}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
+                            <div class="installment-app-goal-details">
+                                <span>每日要赚: ¥${goal.dailyTarget.toFixed(2)}</span>
+                            </div>
                             <div class="progress-item">
                                 <div class="progress-header">
                                     <span>当前: ¥${goal.currentBalance.toFixed(2)}</span>
@@ -238,6 +244,9 @@ function renderInstallments() {
                                 <div class="progress-bar">
                                     <div class="progress-fill" style="width: ${goal.progress}%"></div>
                                 </div>
+                            </div>
+                            <div class="installment-app-goal-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
                     `).join('')}
@@ -489,23 +498,22 @@ class DataManager {
             const dueDate = new Date(installment.dueDate);
             const daysRemaining = Math.max(0, Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)));
             
-            // 计算每个软件的目标金额
-            const appGoals = allApps.map(app => {
-                const weight = (app.minWithdraw || 0) / totalWeight || 0;
-                const dailyTarget = (installment.amount * weight) / (daysRemaining || 1);
-                const totalTarget = installment.amount * weight;
-                
-                return {
-                    appId: app.id,
-                    appName: app.name,
-                    phoneName: data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '',
-                    weight,
-                    dailyTarget,
-                    totalTarget,
-                    currentBalance: app.balance || 0,
-                    progress: Math.min(100, ((app.balance || 0) / totalTarget) * 100) || 0
-                };
-            });
+            // 计算每个软件的目标金额（平均分配）
+        const appGoals = allApps.map(app => {
+            const totalTarget = installment.amount / allApps.length;
+            const dailyTarget = totalTarget / (daysRemaining || 1);
+            
+            return {
+                appId: app.id,
+                appName: app.name,
+                phoneName: data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '',
+                weight: 1 / allApps.length,
+                dailyTarget,
+                totalTarget,
+                currentBalance: app.balance || 0,
+                progress: Math.min(100, ((app.balance || 0) / totalTarget) * 100) || 0
+            };
+        });
             
             return {
                 ...installment,
@@ -1634,6 +1642,71 @@ function deleteInstallment(installmentId) {
         renderInstallments();
         showToast('分期已删除！');
     }
+}
+
+// 修改软件目标金额
+function editAppGoalAmount(installmentId) {
+    const data = DataManager.loadData();
+    const installment = data.installments.find(i => i.id === installmentId);
+    if (!installment) return;
+    
+    const allApps = data.phones.flatMap(phone => phone.apps);
+    const totalAmount = installment.amount;
+    const averageAmount = totalAmount / allApps.length;
+    
+    // 生成软件目标列表HTML
+    let appsHtml = '';
+    allApps.forEach((app, index) => {
+        const phoneName = data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '';
+        appsHtml += `
+            <div class="form-group">
+                <label class="form-label">${phoneName} - ${app.name}</label>
+                <input type="number" id="app-goal-${index}" class="form-input" value="${averageAmount.toFixed(2)}" step="0.01">
+            </div>
+        `;
+    });
+    
+    showModal('修改软件目标金额', `
+        <div class="form-group">
+            <label class="form-label">总还款金额</label>
+            <input type="number" id="total-goal-amount" class="form-input" value="${totalAmount.toFixed(2)}" step="0.01">
+        </div>
+        <div class="form-hint mb-4">修改总金额后点击"平均分配"按钮重新计算</div>
+        ${appsHtml}
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { 
+            text: '平均分配', 
+            class: 'btn-accent', 
+            action: () => {
+                const newTotal = parseFloat(document.getElementById('total-goal-amount').value) || 0;
+                const newAverage = newTotal / allApps.length;
+                
+                allApps.forEach((app, index) => {
+                    const input = document.getElementById(`app-goal-${index}`);
+                    if (input) {
+                        input.value = newAverage.toFixed(2);
+                    }
+                });
+            }
+        },
+        { 
+            text: '保存', 
+            class: 'btn-primary', 
+            action: () => {
+                const newTotal = parseFloat(document.getElementById('total-goal-amount').value) || 0;
+                
+                // 这里可以添加保存逻辑，但由于我们只是修改展示的目标金额，而不是实际的分期金额
+                // 所以我们只需要更新分期的总金额，然后重新渲染
+                installment.amount = newTotal;
+                DataManager.saveData(data);
+                
+                renderInstallments();
+                showToast('软件目标金额已更新！');
+                closeModal();
+            }
+        }
+    ]);
 }
 
 // 计算分期目标（全局函数）

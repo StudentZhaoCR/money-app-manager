@@ -1314,6 +1314,32 @@ body {
     margin-bottom: 8px;
 }
 
+.installment-app-goal-details {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: var(--font-secondary);
+}
+
+.installment-app-goal-details span {
+    background: rgba(124, 107, 207, 0.08);
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+}
+
+.installment-app-goal-actions {
+    margin-top: 12px;
+    text-align: right;
+}
+
+.btn-sm {
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+}
+
 .installment-app-name {
     font-size: 14px;
     font-weight: 700;
