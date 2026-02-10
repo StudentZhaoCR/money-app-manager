@@ -357,11 +357,28 @@ function renderPhones() {
     
     container.innerHTML = data.phones.map((phone, index) => {
         const isExpanded = expandedPhones[phone.id];
+        
+        // 计算该手机的总赚取金额
+        const totalEarned = phone.apps.reduce((sum, app) => {
+            return sum + (app.earned || app.balance || 0);
+        }, 0);
+        
+        // 计算该手机的总余额
+        const totalBalance = phone.apps.reduce((sum, app) => {
+            return sum + (app.balance || 0);
+        }, 0);
+        
         return `
             <div class="phone-card" data-phone-id="${phone.id}" data-index="${index}">
                 <div class="phone-header">
                     <div class="phone-header-left">
-                        <span class="phone-name" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+                        <div class="phone-name-container">
+                            <span class="phone-name" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+                            <div class="phone-stats">
+                                <span class="phone-stat-item">💰 总赚取: ¥${totalEarned.toFixed(2)}</span>
+                                <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
+                            </div>
+                        </div>
                         <button class="btn btn-secondary" onclick="openAddAppModal('${phone.id}')">添加软件</button>
                     </div>
                     <div class="phone-header-right">
@@ -924,20 +941,55 @@ function renderWithdrawRecords() {
         return;
     }
     
-    container.innerHTML = allWithdrawals.map(w => `
-        <div class="withdraw-record-item">
-            <div class="withdraw-record-content">
-                <div class="withdraw-record-left">
-                    <div class="withdraw-record-source">${w.phoneName} - ${w.appName}</div>
-                    <span class="status-tag ready">提现成功</span>
+    // 按日期分组
+    const groupedWithdrawals = allWithdrawals.reduce((groups, withdrawal) => {
+        const date = withdrawal.date;
+        if (!groups[date]) {
+            groups[date] = [];
+        }
+        groups[date].push(withdrawal);
+        return groups;
+    }, {});
+    
+    // 生成按日期分组的HTML
+    let html = '';
+    Object.entries(groupedWithdrawals).forEach(([date, withdrawals]) => {
+        // 计算当日总提现金额
+        const dailyTotal = withdrawals.reduce((sum, w) => sum + w.amount, 0);
+        
+        // 添加日期分组标题
+        html += `
+            <div class="withdraw-date-group">
+                <div class="withdraw-date-header">
+                    <div class="withdraw-date">${date}</div>
+                    <div class="withdraw-date-total">
+                        <span class="total-label">当日总计:</span>
+                        <span class="total-amount">+¥${dailyTotal.toFixed(2)}</span>
+                    </div>
                 </div>
-                <div class="withdraw-record-right">
-                    <div class="withdraw-record-amount">+¥${w.amount.toFixed(2)}</div>
-                    <div class="withdraw-record-date">${w.date}</div>
+        `;
+        
+        // 添加当日的提现记录
+        withdrawals.forEach(w => {
+            html += `
+                <div class="withdraw-record-item">
+                    <div class="withdraw-record-content">
+                        <div class="withdraw-record-left">
+                            <div class="withdraw-record-source">${w.phoneName} - ${w.appName}</div>
+                            <span class="status-tag ready">提现成功</span>
+                        </div>
+                        <div class="withdraw-record-right">
+                            <div class="withdraw-record-amount">+¥${w.amount.toFixed(2)}</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-    `).join('');
+            `;
+        });
+        
+        html += `</div>`;
+    });
+    
+    container.innerHTML = html;
 }
 
 // 渲染支出记录
