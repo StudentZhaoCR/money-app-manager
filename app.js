@@ -214,7 +214,7 @@ function renderInstallments() {
                 <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
                 <div class="installment-details">
                     <span>剩余天数: ${installment.daysRemaining}天</span>
-                    <span>每日需要: ¥${(installment.amount / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                    <span>每日需要: ¥${((installment.amount - installment.totalWithdrawn) / (installment.daysRemaining || 1)).toFixed(2)}</span>
                 </div>
                 <div class="installment-progress">
                     <div class="progress-header">
@@ -522,6 +522,7 @@ class DataManager {
             return {
                 ...installment,
                 daysRemaining,
+                totalWithdrawn,
                 appGoals,
                 totalProgress: appGoals.reduce((sum, goal) => sum + goal.progress, 0) / appGoals.length || 0
             };
@@ -1522,7 +1523,7 @@ function renderInstallments() {
                 <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
                 <div class="installment-details">
                     <span>剩余天数: ${installment.daysRemaining}天</span>
-                    <span>每日需要: ¥${(installment.amount / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                    <span>每日需要: ¥${((installment.amount - installment.totalWithdrawn) / (installment.daysRemaining || 1)).toFixed(2)}</span>
                 </div>
                 <div class="installment-progress">
                     <div class="progress-header">
