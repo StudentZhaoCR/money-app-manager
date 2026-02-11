@@ -272,6 +272,7 @@ class DataManager {
             return {
                 phones: parsedData.phones || [],
                 installments: parsedData.installments || [],
+                expenses: parsedData.expenses || [],
                 settings: {
                     yearlyGoal: parsedData.settings?.yearlyGoal || 10000
                 }
@@ -280,6 +281,7 @@ class DataManager {
         return {
             phones: [],
             installments: [],
+            expenses: [],
             settings: {
                 yearlyGoal: 10000
             }
@@ -422,6 +424,52 @@ class DataManager {
                 this.saveData(data);
             }
         }
+        return data;
+    }
+
+    static addTotalExpense(expenseData) {
+        const data = this.loadData();
+        const expense = {
+            id: Date.now().toString(),
+            amount: parseFloat(expenseData.amount),
+            purpose: expenseData.purpose,
+            date: expenseData.date,
+            created: new Date().toISOString()
+        };
+        
+        data.expenses.push(expense);
+        
+        // 按比例分配支出到各个软件
+        const totalWithdrawn = data.phones.flatMap(phone => phone.apps)
+            .reduce((sum, app) => sum + (app.withdrawn || 0), 0);
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                const appWithdrawn = app.withdrawn || 0;
+                if (appWithdrawn > 0 && totalWithdrawn > 0) {
+                    const ratio = appWithdrawn / totalWithdrawn;
+                    const appExpense = parseFloat((ratio * expenseData.amount).toFixed(2));
+                    
+                    if (!app.expenses) {
+                        app.expenses = [];
+                    }
+                    
+                    const appExpenseObj = {
+                        id: Date.now().toString() + Math.random(),
+                        amount: appExpense,
+                        purpose: expenseData.purpose,
+                        date: expenseData.date,
+                        created: new Date().toISOString()
+                    };
+                    
+                    app.expenses.push(appExpenseObj);
+                    app.remainingWithdrawn = parseFloat((app.remainingWithdrawn - appExpense).toFixed(2));
+                    app.lastUpdated = new Date().toISOString();
+                }
+            });
+        });
+        
+        this.saveData(data);
         return data;
     }
 
@@ -1322,24 +1370,8 @@ function addExpense() {
         return;
     }
     
-    const data = DataManager.loadData();
-    
-    // 按比例分配支出到各个软件
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            const appWithdrawn = app.withdrawn || 0;
-            if (appWithdrawn > 0 && totalWithdrawn > 0) {
-                const ratio = appWithdrawn / totalWithdrawn;
-                const appExpense = parseFloat((ratio * amount).toFixed(2));
-                
-                DataManager.addExpense(phone.id, app.id, {
-                    amount: appExpense,
-                    purpose,
-                    date
-                });
-            }
-        });
-    });
+    // 添加总支出记录
+    DataManager.addTotalExpense({ amount, purpose, date });
     
     // 重置表单
     document.getElementById('expense-amount').value = '';
@@ -1433,18 +1465,7 @@ function renderExpenseRecords() {
     const data = DataManager.loadData();
     const container = document.getElementById('expense-records-list');
     
-    const allExpenses = [];
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            if (app.expenses && app.expenses.length > 0) {
-                app.expenses.forEach(e => {
-                    allExpenses.push({
-                        ...e
-                    });
-                });
-            }
-        });
-    });
+    const allExpenses = data.expenses || [];
     
     // 按日期排序
     allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
