@@ -1433,6 +1433,14 @@ body {
     font-family: var(--font-secondary);
 }
 
+.expense-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+    margin: 12px 0;
+    background-size: 20px 1px;
+    background-repeat: repeat-x;
+}
+
 .expense-record-body {
     display: flex;
     justify-content: space-between;

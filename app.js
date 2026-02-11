@@ -1439,9 +1439,7 @@ function renderExpenseRecords() {
             if (app.expenses && app.expenses.length > 0) {
                 app.expenses.forEach(e => {
                     allExpenses.push({
-                        ...e,
-                        phoneName: phone.name,
-                        appName: app.name
+                        ...e
                     });
                 });
             }
@@ -1462,10 +1460,10 @@ function renderExpenseRecords() {
                 <span class="expense-tag">💰 支出</span>
                 <span class="expense-date">${e.date}</span>
             </div>
+            <div class="expense-divider"></div>
             <div class="expense-record-body">
                 <div class="expense-info">
                     <h4 class="expense-purpose">${e.purpose}</h4>
-                    <p class="expense-source">${e.phoneName} · ${e.appName}</p>
                 </div>
                 <div class="expense-amount">-¥${e.amount.toFixed(2)}</div>
             </div>
