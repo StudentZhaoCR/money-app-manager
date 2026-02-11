@@ -40,6 +40,20 @@ function showModal(title, body, buttons) {
     // 使用setTimeout确保DOM更新后再添加类
     setTimeout(() => {
         modal.classList.add('show');
+        
+        // 检查是否包含日期输入字段，如果包含，初始化日历
+        const dateInputs = modal.querySelectorAll('input[type="date"]');
+        dateInputs.forEach(input => {
+            // 隐藏原生日期输入
+            input.type = 'text';
+            input.readOnly = true;
+            input.classList.add('calendar-input');
+            
+            // 为每个日期输入创建日历实例
+            new Calendar({
+                input: input.id
+            });
+        });
     }, 10);
 }
 
@@ -1958,6 +1972,254 @@ function clearAllData() {
     }
 }
 
+// 卡通风格日历组件
+class Calendar {
+    constructor(options) {
+        this.options = {
+            input: null,
+            minDate: null,
+            maxDate: null,
+            onSelect: null,
+            ...options
+        };
+        
+        this.currentDate = new Date();
+        this.selectedDate = null;
+        this.popup = null;
+        
+        if (this.options.input) {
+            this.init();
+        }
+    }
+    
+    init() {
+        const input = document.getElementById(this.options.input);
+        if (!input) return;
+        
+        // 隐藏原生日期输入
+        input.type = 'text';
+        input.readOnly = true;
+        input.classList.add('calendar-input');
+        
+        // 创建容器
+        const container = document.createElement('div');
+        container.className = 'calendar-container';
+        
+        // 将输入框移到容器中
+        input.parentNode.insertBefore(container, input);
+        container.appendChild(input);
+        
+        // 添加点击事件
+        input.addEventListener('click', () => this.toggleCalendar());
+        
+        // 点击其他地方关闭日历
+        document.addEventListener('click', (e) => {
+            if (!container.contains(e.target)) {
+                this.hideCalendar();
+            }
+        });
+    }
+    
+    toggleCalendar() {
+        if (this.popup) {
+            this.hideCalendar();
+        } else {
+            this.showCalendar();
+        }
+    }
+    
+    showCalendar() {
+        const input = document.getElementById(this.options.input);
+        if (!input) return;
+        
+        // 创建日历弹窗
+        this.popup = document.createElement('div');
+        this.popup.className = 'calendar-popup';
+        
+        // 渲染日历
+        this.renderCalendar();
+        
+        // 添加到容器
+        const container = input.parentNode;
+        container.appendChild(this.popup);
+    }
+    
+    hideCalendar() {
+        if (this.popup) {
+            this.popup.remove();
+            this.popup = null;
+        }
+    }
+    
+    renderCalendar() {
+        if (!this.popup) return;
+        
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth();
+        
+        // 渲染头部
+        this.popup.innerHTML = `
+            <div class="calendar-header">
+                <button class="calendar-nav-btn prev-month">&lt;</button>
+                <h3 class="calendar-title">${year}年${month + 1}月</h3>
+                <button class="calendar-nav-btn next-month">&gt;</button>
+            </div>
+            <div class="calendar-weekdays">
+                <div class="calendar-weekday">日</div>
+                <div class="calendar-weekday">一</div>
+                <div class="calendar-weekday">二</div>
+                <div class="calendar-weekday">三</div>
+                <div class="calendar-weekday">四</div>
+                <div class="calendar-weekday">五</div>
+                <div class="calendar-weekday">六</div>
+            </div>
+            <div class="calendar-days">
+                ${this.renderDays()}
+            </div>
+            <div class="calendar-footer">
+                <button class="calendar-footer-btn btn-secondary today-btn">今天</button>
+                <button class="calendar-footer-btn btn-primary confirm-btn">确认</button>
+            </div>
+        `;
+        
+        // 添加事件监听器
+        this.popup.querySelector('.prev-month').addEventListener('click', () => this.prevMonth());
+        this.popup.querySelector('.next-month').addEventListener('click', () => this.nextMonth());
+        this.popup.querySelector('.today-btn').addEventListener('click', () => this.today());
+        this.popup.querySelector('.confirm-btn').addEventListener('click', () => this.confirm());
+        
+        // 添加日期点击事件
+        const dayElements = this.popup.querySelectorAll('.calendar-day');
+        dayElements.forEach((dayElement, index) => {
+            const currentDay = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), 1);
+            currentDay.setDate(currentDay.getDate() - currentDay.getDay() + index);
+            
+            if (!dayElement.classList.contains('disabled')) {
+                dayElement.addEventListener('click', () => {
+                    this.selectDate(currentDay.getFullYear(), currentDay.getMonth(), currentDay.getDate());
+                });
+            }
+        });
+    }
+    
+    renderDays() {
+        const year = this.currentDate.getFullYear();
+        const month = this.currentDate.getMonth();
+        
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startDate = new Date(firstDay);
+        startDate.setDate(startDate.getDate() - firstDay.getDay());
+        
+        const days = [];
+        
+        for (let i = 0; i < 42; i++) {
+            const currentDay = new Date(startDate);
+            currentDay.setDate(startDate.getDate() + i);
+            
+            const isToday = this.isSameDay(currentDay, new Date());
+            const isSelected = this.selectedDate && this.isSameDay(currentDay, this.selectedDate);
+            const isOtherMonth = currentDay.getMonth() !== month;
+            const isDisabled = this.isDisabled(currentDay);
+            
+            let classes = 'calendar-day';
+            if (isToday) classes += ' today';
+            if (isSelected) classes += ' selected';
+            if (isOtherMonth) classes += ' other-month';
+            if (isDisabled) classes += ' disabled';
+            
+            days.push(`
+                <div class="${classes}">
+                    ${currentDay.getDate()}
+                </div>
+            `);
+        }
+        
+        return days.join('');
+    }
+    
+    isSameDay(date1, date2) {
+        return date1.getFullYear() === date2.getFullYear() &&
+               date1.getMonth() === date2.getMonth() &&
+               date1.getDate() === date2.getDate();
+    }
+    
+    isDisabled(date) {
+        if (this.options.minDate) {
+            const minDate = new Date(this.options.minDate);
+            if (date < minDate) return true;
+        }
+        
+        if (this.options.maxDate) {
+            const maxDate = new Date(this.options.maxDate);
+            if (date > maxDate) return true;
+        }
+        
+        return false;
+    }
+    
+    selectDate(year, month, day) {
+        const date = new Date(year, month, day);
+        if (this.isDisabled(date)) return;
+        
+        this.selectedDate = date;
+        this.renderCalendar();
+        
+        // 更新输入框
+        const input = document.getElementById(this.options.input);
+        if (input) {
+            const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            input.value = formattedDate;
+        }
+    }
+    
+    prevMonth() {
+        this.currentDate.setMonth(this.currentDate.getMonth() - 1);
+        this.renderCalendar();
+    }
+    
+    nextMonth() {
+        this.currentDate.setMonth(this.currentDate.getMonth() + 1);
+        this.renderCalendar();
+    }
+    
+    today() {
+        this.currentDate = new Date();
+        this.selectDate(this.currentDate.getFullYear(), this.currentDate.getMonth(), this.currentDate.getDate());
+        this.renderCalendar();
+    }
+    
+    confirm() {
+        if (this.selectedDate && this.options.onSelect) {
+            this.options.onSelect(this.selectedDate);
+        }
+        this.hideCalendar();
+    }
+}
+
+// 全局日历实例
+let calendar = null;
+
+// 初始化日历
+function initCalendars() {
+    // 初始化目标日期日历
+    const targetDateInput = document.getElementById('target-date');
+    if (targetDateInput) {
+        calendar = new Calendar({
+            input: 'target-date',
+            minDate: '2026-01-01'
+        });
+    }
+    
+    // 初始化支出日期日历
+    const expenseDateInput = document.getElementById('expense-date');
+    if (expenseDateInput) {
+        new Calendar({
+            input: 'expense-date'
+        });
+    }
+}
+
 // 点击模态框背景关闭
 document.getElementById('modal').addEventListener('click', function(e) {
     if (e.target === this) {
@@ -1966,4 +2228,7 @@ document.getElementById('modal').addEventListener('click', function(e) {
 });
 
 // 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function() {
+    init();
+    initCalendars();
+});
