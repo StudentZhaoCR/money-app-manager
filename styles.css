@@ -1039,19 +1039,14 @@ body {
     opacity: 0;
     transform: scale(0.8) translateY(20px);
     transition: all 0.3s var(--transition-normal);
-    overflow: hidden;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
+    overflow: visible;
 }
 
 .modal-body {
-    flex: 1;
-    overflow-y: auto;
     margin-bottom: 24px;
-    padding-right: 8px;
 }
 
+/* 滚动条样式 */
 .modal-body::-webkit-scrollbar {
     width: 6px;
     height: 6px;

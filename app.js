@@ -5,15 +5,25 @@ const DATA_KEY = 'moneyAppData';
 let modalIsShowing = false;
 
 // 显示模态框
-function showModal(title, body, buttons) {
+function showModal(title, body, buttons, enableScroll = false) {
     // 防止重复触发
     if (modalIsShowing) return;
     
     const modal = document.getElementById('modal');
+    const modalContent = document.querySelector('.modal-content');
+    const modalBody = document.getElementById('modal-body');
     
     // 先确保模态框是隐藏状态
     modal.style.display = 'none';
     modal.classList.remove('show');
+    
+    // 重置模态框样式
+    modalContent.style.overflow = 'visible';
+    modalContent.style.maxHeight = '';
+    modalContent.style.display = '';
+    modalBody.style.flex = '';
+    modalBody.style.overflowY = '';
+    modalBody.style.paddingRight = '';
     
     // 清空按钮容器，移除事件监听器
     const buttonsContainer = document.getElementById('modal-buttons');
@@ -31,6 +41,17 @@ function showModal(title, body, buttons) {
         button.addEventListener('click', btn.action);
         buttonsContainer.appendChild(button);
     });
+    
+    // 如果需要滚动功能，添加滚动样式
+    if (enableScroll) {
+        modalContent.style.overflow = 'hidden';
+        modalContent.style.maxHeight = '80vh';
+        modalContent.style.display = 'flex';
+        modalContent.style.flexDirection = 'column';
+        modalBody.style.flex = '1';
+        modalBody.style.overflowY = 'auto';
+        modalBody.style.paddingRight = '8px';
+    }
     
     // 设置模态框显示状态
     modalIsShowing = true;
@@ -704,6 +725,22 @@ function renderDashboard() {
     const totalEarned = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => appSum + (app.earned || 0), 0);
     }, 0);
+    
+    // 计算待支出余额（总提现金额 - 总支出金额）
+    const totalWithdrawn = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => {
+            return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+        }, 0);
+    }, 0);
+    const totalExpenses = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => {
+            if (app.expenses && app.expenses.length > 0) {
+                return appSum + app.expenses.reduce((expenseSum, expense) => expenseSum + expense.amount, 0);
+            }
+            return appSum;
+        }, 0);
+    }, 0);
+    const pendingExpenseBalance = totalWithdrawn - totalExpenses;
     const readyApps = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
     }, 0);
@@ -715,7 +752,7 @@ function renderDashboard() {
     // 更新DOM
     document.getElementById('total-phones').textContent = totalPhones;
     document.getElementById('total-apps').textContent = totalApps;
-    document.getElementById('total-balance').textContent = `¥${totalBalance.toFixed(2)}`;
+    document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
     document.getElementById('ready-apps').textContent = readyApps;
     document.getElementById('yearly-progress').textContent = `${yearlyProgress.toFixed(0)}%`;
     document.getElementById('yearly-progress-bar').style.width = `${yearlyProgress}%`;
@@ -1635,7 +1672,7 @@ function openAddInstallmentModal() {
                 closeModal();
             }
         }
-    ]);
+    ], true);
 }
 
 // 打开编辑分期模态框
