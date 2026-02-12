@@ -1,39 +1,38 @@
 /* 卡通风格设计系统 */
 @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Bubblegum+Sans&family=Comic+Neue:wght@400;700&display=swap');
 
+/* 默认主题 - 梦幻紫 */
 :root {
-    /* 主色调 - 柔和的紫色 */
     --primary-color: #7c6bcf;
     --primary-light: #a99fe8;
     --primary-dark: #5a4ba2;
     
-    /* 辅助色 - 可爱的糖果色 */
     --secondary-color: #ff8fa3;
     --secondary-light: #ffb3c1;
     --accent-color: #ffd93d;
     --accent-light: #ffe066;
     
-    /* 功能色 */
     --success-color: #6bcf7f;
     --warning-color: #ffb347;
     --error-color: #ff6b6b;
     --info-color: #74c0fc;
     
-    /* 背景色 */
     --bg-primary: #fef9f3;
     --bg-secondary: #ffffff;
     --bg-cream: #fff8e7;
     
-    /* 文字色 */
     --text-primary: #4a4a4a;
     --text-secondary: #7a7a7a;
     --text-muted: #a0a0a0;
     
-    /* 边框和阴影 */
     --border-color: #e8e0d5;
     --shadow-soft: 0 4px 15px rgba(0, 0, 0, 0.08);
     --shadow-card: 0 8px 25px rgba(124, 107, 207, 0.15);
     --shadow-hover: 0 12px 35px rgba(124, 107, 207, 0.2);
+    
+    --gradient-primary: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+    --gradient-secondary: linear-gradient(135deg, var(--secondary-color) 0%, var(--secondary-light) 100%);
+    --gradient-accent: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-light) 100%);
     
     /* 圆角 - 卡通风格大圆角 */
     --radius-sm: 12px;
@@ -58,6 +57,163 @@
     --font-primary: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
     --font-display: 'Fredoka One', 'Bubblegum Sans', cursive;
     --font-secondary: 'Bubblegum Sans', 'Comic Sans MS', cursive;
+    
+    --theme-name: '梦幻紫';
+}
+
+/* 青春绿主题 */
+[data-theme="youth-green"] {
+    --primary-color: #22c55e;
+    --primary-light: #4ade80;
+    --primary-dark: #16a34a;
+    
+    --secondary-color: #34d399;
+    --secondary-light: #6ee7b7;
+    --accent-color: #fbbf24;
+    --accent-light: #fcd34d;
+    
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --error-color: #ef4444;
+    --info-color: #06b6d4;
+    
+    --bg-primary: #f0fdf4;
+    --bg-secondary: #ffffff;
+    --bg-cream: #ecfdf5;
+    
+    --text-primary: #166534;
+    --text-secondary: #15803d;
+    --text-muted: #22c55e;
+    
+    --border-color: #bbf7d0;
+    --shadow-card: 0 8px 25px rgba(34, 197, 94, 0.15);
+    --shadow-hover: 0 12px 35px rgba(34, 197, 94, 0.2);
+    
+    --theme-name: '青春绿';
+}
+
+/* 活力橙主题 */
+[data-theme="vitality-orange"] {
+    --primary-color: #f97316;
+    --primary-light: #fb923c;
+    --primary-dark: #ea580c;
+    
+    --secondary-color: #fb7185;
+    --secondary-light: #fda4af;
+    --accent-color: #facc15;
+    --accent-light: #fde047;
+    
+    --success-color: #22c55e;
+    --warning-color: #eab308;
+    --error-color: #dc2626;
+    --info-color: #0ea5e9;
+    
+    --bg-primary: #fff7ed;
+    --bg-secondary: #ffffff;
+    --bg-cream: #ffedd5;
+    
+    --text-primary: #9a3412;
+    --text-secondary: #c2410c;
+    --text-muted: #ea580c;
+    
+    --border-color: #fed7aa;
+    --shadow-card: 0 8px 25px rgba(249, 115, 22, 0.15);
+    --shadow-hover: 0 12px 35px rgba(249, 115, 22, 0.2);
+    
+    --theme-name: '活力橙';
+}
+
+/* 海洋蓝主题 */
+[data-theme="ocean-blue"] {
+    --primary-color: #0ea5e9;
+    --primary-light: #38bdf8;
+    --primary-dark: #0284c7;
+    
+    --secondary-color: #06b6d4;
+    --secondary-light: #22d3ee;
+    --accent-color: #8b5cf6;
+    --accent-light: #a78bfa;
+    
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --error-color: #ef4444;
+    --info-color: #6366f1;
+    
+    --bg-primary: #f0f9ff;
+    --bg-secondary: #ffffff;
+    --bg-cream: #e0f2fe;
+    
+    --text-primary: #0c4a6e;
+    --text-secondary: #0369a1;
+    --text-muted: #0284c7;
+    
+    --border-color: #bae6fd;
+    --shadow-card: 0 8px 25px rgba(14, 165, 233, 0.15);
+    --shadow-hover: 0 12px 35px rgba(14, 165, 233, 0.2);
+    
+    --theme-name: '海洋蓝';
+}
+
+/* 甜美粉主题 */
+[data-theme="sweet-pink"] {
+    --primary-color: #ec4899;
+    --primary-light: #f472b6;
+    --primary-dark: #db2777;
+    
+    --secondary-color: #f472b6;
+    --secondary-light: #f9a8d4;
+    --accent-color: #fbbf24;
+    --accent-light: #fcd34d;
+    
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --error-color: #ef4444;
+    --info-color: #8b5cf6;
+    
+    --bg-primary: #fdf2f8;
+    --bg-secondary: #ffffff;
+    --bg-cream: #fce7f3;
+    
+    --text-primary: #831843;
+    --text-secondary: #9d174d;
+    --text-muted: #db2777;
+    
+    --border-color: #fbcfe8;
+    --shadow-card: 0 8px 25px rgba(236, 72, 153, 0.15);
+    --shadow-hover: 0 12px 35px rgba(236, 72, 153, 0.2);
+    
+    --theme-name: '甜美粉';
+}
+
+/* 酷炫黑主题 */
+[data-theme="cool-black"] {
+    --primary-color: #8b5cf6;
+    --primary-light: #a78bfa;
+    --primary-dark: #7c3aed;
+    
+    --secondary-color: #06b6d4;
+    --secondary-light: #22d3ee;
+    --accent-color: #f472b6;
+    --accent-light: #f9a8d4;
+    
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --error-color: #ef4444;
+    --info-color: #3b82f6;
+    
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-cream: #262626;
+    
+    --text-primary: #f5f5f5;
+    --text-secondary: #d4d4d4;
+    --text-muted: #a3a3a3;
+    
+    --border-color: #404040;
+    --shadow-card: 0 8px 25px rgba(139, 92, 246, 0.25);
+    --shadow-hover: 0 12px 35px rgba(139, 92, 246, 0.35);
+    
+    --theme-name: '酷炫黑';
 }
 
 /* 全局样式 */
@@ -1997,4 +2153,128 @@ body {
 ::selection {
     background: var(--primary-light);
     color: white;
+}
+
+/* 主题选择器样式 */
+.theme-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.theme-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 12px;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    border: 3px solid transparent;
+    background: var(--bg-secondary);
+}
+
+.theme-item:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: var(--shadow-hover);
+}
+
+.theme-item.active {
+    border-color: var(--primary-color);
+    background: linear-gradient(135deg, rgba(124, 107, 207, 0.1) 0%, rgba(166, 137, 225, 0.1) 100%);
+}
+
+.theme-preview {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+}
+
+.theme-preview::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 50%;
+    bottom: 50%;
+    background: var(--primary-color);
+}
+
+.theme-preview::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    right: 0;
+    bottom: 0;
+    background: var(--secondary-color);
+}
+
+.theme-item:hover .theme-preview {
+    transform: scale(1.1) rotate(5deg);
+}
+
+.theme-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-secondary);
+    text-align: center;
+}
+
+/* 各主题预览色块 */
+.theme-preview-default {
+    background: linear-gradient(135deg, #7c6bcf 0%, #ff8fa3 100%);
+}
+
+.theme-preview-youth-green {
+    background: linear-gradient(135deg, #22c55e 0%, #34d399 100%);
+}
+
+.theme-preview-vitality-orange {
+    background: linear-gradient(135deg, #f97316 0%, #fb7185 100%);
+}
+
+.theme-preview-ocean-blue {
+    background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+}
+
+.theme-preview-sweet-pink {
+    background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+}
+
+.theme-preview-cool-black {
+    background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+}
+
+/* 主题切换动画 */
+* {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 响应式主题选择器 */
+@media (max-width: 480px) {
+    .theme-selector {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    
+    .theme-item {
+        padding: 12px 8px;
+    }
+    
+    .theme-preview {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .theme-name {
+        font-size: 12px;
+    }
 }

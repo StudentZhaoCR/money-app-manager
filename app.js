@@ -832,6 +832,15 @@ class DataManager {
         }
         keysToRemove.forEach(key => localStorage.removeItem(key));
     }
+    
+    // 主题相关方法
+    static getTheme() {
+        return localStorage.getItem('app-theme') || 'default';
+    }
+    
+    static setTheme(theme) {
+        localStorage.setItem('app-theme', theme);
+    }
 
     // 分期还款相关方法
     static addInstallment(installmentData) {
@@ -960,6 +969,9 @@ function init() {
         expandedPhones = JSON.parse(savedExpanded);
     }
     
+    // 初始化主题
+    initTheme();
+    
     // 设置默认日期
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -976,6 +988,55 @@ function init() {
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
+}
+
+// 初始化主题
+function initTheme() {
+    const savedTheme = DataManager.getTheme();
+    applyTheme(savedTheme);
+}
+
+// 应用主题
+function applyTheme(theme) {
+    if (theme === 'default') {
+        document.documentElement.removeAttribute('data-theme');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+    updateThemeSelector(theme);
+}
+
+// 设置主题
+function setTheme(theme) {
+    DataManager.setTheme(theme);
+    applyTheme(theme);
+    showSuccess(`主题已切换为${getThemeName(theme)}`);
+}
+
+// 获取主题名称
+function getThemeName(theme) {
+    const themeNames = {
+        'default': '梦幻紫',
+        'youth-green': '青春绿',
+        'vitality-orange': '活力橙',
+        'ocean-blue': '海洋蓝',
+        'sweet-pink': '甜美粉',
+        'cool-black': '酷炫黑'
+    };
+    return themeNames[theme] || '梦幻紫';
+}
+
+// 更新主题选择器状态
+function updateThemeSelector(currentTheme) {
+    const themeItems = document.querySelectorAll('.theme-item');
+    themeItems.forEach(item => {
+        const itemTheme = item.getAttribute('data-theme');
+        if (itemTheme === currentTheme) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
 }
 
 // 初始化通知系统
