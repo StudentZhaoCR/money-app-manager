@@ -434,9 +434,11 @@ function updatePhoneCard(phoneId) {
     
     // 计算每日目标和进度
     const settings = DataManager.loadData().settings;
-    const yearlyGoal = settings.yearlyGoal || 10000;
+    const yearlyGoal = settings.yearlyGoal || 0;
     const phoneCount = data.phones.length || 1;
-    const dailyTarget = yearlyGoal / 365 / phoneCount;
+    const currentYear = getCurrentYear();
+    const yearDays = getYearDays(currentYear);
+    const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
     
     // 计算今日已赚（简化计算：使用今日新增的余额）
     const today = new Date().toISOString().split('T')[0];
@@ -1428,9 +1430,11 @@ function renderPhones() {
         
         // 计算每日目标和进度
         const settings = DataManager.loadData().settings;
-        const yearlyGoal = settings.yearlyGoal || 10000;
+        const yearlyGoal = settings.yearlyGoal || 0;
         const phoneCount = data.phones.length || 1;
-        const dailyTarget = yearlyGoal / 365 / phoneCount;
+        const currentYear = getCurrentYear();
+        const yearDays = getYearDays(currentYear);
+        const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
         
         // 计算今日已赚（简化计算：使用今日新增的余额）
         const today = new Date().toISOString().split('T')[0];
@@ -1574,6 +1578,16 @@ function calculateNextPlayDate(earned, minWithdraw) {
     const targetDate = new Date(startDate);
     targetDate.setDate(targetDate.getDate() + daysEarned);
     return `${targetDate.getMonth() + 1}.${targetDate.getDate()}`;
+}
+
+// 获取指定年份的天数（考虑闰年）
+function getYearDays(year) {
+    return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0) ? 366 : 365;
+}
+
+// 获取当前年份
+function getCurrentYear() {
+    return new Date().getFullYear();
 }
 
 // 切换手机展开/折叠
@@ -2095,6 +2109,14 @@ function calculateForecast() {
 function renderSettings() {
     const data = DataManager.loadData();
     document.getElementById('yearly-goal').value = data.settings.yearlyGoal || 0;
+    
+    // 显示当年天数信息
+    const currentYear = getCurrentYear();
+    const yearDays = getYearDays(currentYear);
+    const yearDaysHint = document.getElementById('year-days-hint');
+    if (yearDaysHint) {
+        yearDaysHint.textContent = `${currentYear}年共${yearDays}天${yearDays === 366 ? '（闰年）' : ''}`;
+    }
     
     // 计算剩余提现金额
     let totalWithdrawn = 0;

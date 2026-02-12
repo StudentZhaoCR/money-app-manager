@@ -2173,8 +2173,14 @@ body {
 
 .goal-input-container {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.year-days-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-secondary);
 }
 
 /* 数据管理按钮 */
@@ -2336,36 +2342,48 @@ body {
     }
     
     .phone-header-middle {
-        flex-direction: column;
+        flex-direction: row;
         gap: 12px;
+        align-items: center;
     }
     
     .phone-stats-row {
         gap: 10px;
-        width: 100%;
+        flex: 1;
     }
     
     .phone-stat-card {
         flex: 1;
-        padding: 10px 12px;
-        gap: 8px;
+        padding: 8px 10px;
+        gap: 6px;
+        min-width: 0;
     }
     
     .phone-stat-icon {
-        font-size: 22px;
+        font-size: 20px;
     }
     
     .phone-stat-value {
-        font-size: 16px;
+        font-size: 14px;
     }
     
     .phone-stat-label {
-        font-size: 11px;
+        font-size: 10px;
     }
     
     .phone-header-right {
-        margin-left: 0;
-        align-self: flex-end;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+    
+    .phone-icon-buttons {
+        gap: 8px;
+    }
+    
+    .icon-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
     }
 }
 
