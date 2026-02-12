@@ -1949,13 +1949,54 @@ body {
     }
     
     .phone-header {
-        flex-wrap: wrap;
-        gap: 12px;
+        flex-direction: column;
+        gap: 16px;
     }
     
     .phone-header-left {
         width: 100%;
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .phone-name-container {
+        width: 100%;
+    }
+    
+    .phone-name {
+        font-size: 20px;
+        word-break: break-word;
+    }
+    
+    .phone-stats {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .phone-header-buttons {
+        width: 100%;
+        margin-top: 0;
+    }
+    
+    .phone-header-buttons .btn {
+        max-width: none;
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+    
+    .phone-header-right {
+        align-self: flex-end;
+        margin-top: -40px;
+    }
+    
+    .phone-card {
+        margin-bottom: 16px;
+        border-radius: var(--radius-md);
+    }
+    
+    .phone-header {
+        padding: 16px;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
     }
     
     .app-header {
