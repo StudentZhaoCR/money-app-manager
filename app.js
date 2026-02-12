@@ -1070,7 +1070,7 @@ function getThemeName(theme) {
         'vitality-orange': '活力橙',
         'ocean-blue': '海洋蓝',
         'sweet-pink': '甜美粉',
-        'cool-black': '酷炫黑'
+        'warm-sunset': '温暖夕阳'
     };
     return themeNames[theme] || '梦幻紫';
 }
