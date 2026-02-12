@@ -1,5 +1,16 @@
 /* 卡通风格设计系统 */
+/* 梦幻紫字体：Fredoka One + Bubblegum Sans + Comic Neue */
 @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Bubblegum+Sans&family=Comic+Neue:wght@400;700&display=swap');
+/* 青春绿字体：Nunito + Quicksand + Varela Round */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&family=Quicksand:wght@500;700&family=Varela+Round&display=swap');
+/* 活力橙字体：Poppins + Righteous + Cabin */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Righteous&family=Cabin:wght@500;700&display=swap');
+/* 海洋蓝字体：Raleway + Comfortaa + Open Sans */
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;700;800&family=Comfortaa:wght@500;700&family=Open+Sans:wght@400;600&display=swap');
+/* 甜美粉字体：Pacifico + Dancing Script + Josefin Sans */
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Dancing+Script:wght@600;700&family=Josefin+Sans:wght@400;600;700&display=swap');
+/* 温暖主题字体：Merriweather + Playfair Display + Lora */
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Playfair+Display:wght@600;700&family=Lora:wght@500;600&display=swap');
 
 /* 默认主题 - 梦幻紫 */
 :root {
@@ -34,6 +45,18 @@
     --gradient-secondary: linear-gradient(135deg, var(--secondary-color) 0%, var(--secondary-light) 100%);
     --gradient-accent: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-light) 100%);
     
+    /* 导航栏渐变 */
+    --gradient-navbar: linear-gradient(135deg, #9c89ff, #7c6bcf, #ff8fa3, #ffd93d);
+    
+    /* 导航栏阴影 */
+    --shadow-navbar: 0 8px 30px rgba(124, 107, 207, 0.4);
+    
+    /* 手机卡片头部渐变 */
+    --gradient-phone-header: linear-gradient(135deg, #9c89ff, #7c6bcf, #a689e1);
+    
+    /* body背景渐变 */
+    --gradient-body: linear-gradient(135deg, #fef9f3 0%, #fff8e7 50%, #fef9f3 100%);
+    
     /* 圆角 - 卡通风格大圆角 */
     --radius-sm: 12px;
     --radius-md: 20px;
@@ -53,7 +76,7 @@
     --transition-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     --transition-slow: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
     
-    /* 字体 */
+    /* 字体 - 梦幻紫主题：圆润可爱风格 */
     --font-primary: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
     --font-display: 'Fredoka One', 'Bubblegum Sans', cursive;
     --font-secondary: 'Bubblegum Sans', 'Comic Sans MS', cursive;
@@ -89,6 +112,17 @@
     --shadow-card: 0 8px 25px rgba(34, 197, 94, 0.15);
     --shadow-hover: 0 12px 35px rgba(34, 197, 94, 0.2);
     
+    /* 主题特定渐变 */
+    --gradient-navbar: linear-gradient(135deg, #4ade80, #22c55e, #fbbf24, #fcd34d);
+    --gradient-phone-header: linear-gradient(135deg, #4ade80, #22c55e, #34d399);
+    --gradient-body: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #f0fdf4 100%);
+    --shadow-navbar: 0 8px 30px rgba(34, 197, 94, 0.4);
+    
+    /* 字体 - 青春绿主题：清新活力风格 */
+    --font-primary: 'Varela Round', 'Nunito', sans-serif;
+    --font-display: 'Nunito', 'Quicksand', sans-serif;
+    --font-secondary: 'Quicksand', 'Varela Round', sans-serif;
+    
     --theme-name: '青春绿';
 }
 
@@ -119,6 +153,17 @@
     --border-color: #fed7aa;
     --shadow-card: 0 8px 25px rgba(249, 115, 22, 0.15);
     --shadow-hover: 0 12px 35px rgba(249, 115, 22, 0.2);
+    
+    /* 主题特定渐变 */
+    --gradient-navbar: linear-gradient(135deg, #fb923c, #f97316, #fb7185, #facc15);
+    --gradient-phone-header: linear-gradient(135deg, #fb923c, #f97316, #fda4af);
+    --gradient-body: linear-gradient(135deg, #fff7ed 0%, #ffedd5 50%, #fff7ed 100%);
+    --shadow-navbar: 0 8px 30px rgba(249, 115, 22, 0.4);
+    
+    /* 字体 - 活力橙主题：动感现代风格 */
+    --font-primary: 'Cabin', 'Poppins', sans-serif;
+    --font-display: 'Righteous', 'Poppins', cursive;
+    --font-secondary: 'Poppins', 'Cabin', sans-serif;
     
     --theme-name: '活力橙';
 }
@@ -151,6 +196,17 @@
     --shadow-card: 0 8px 25px rgba(14, 165, 233, 0.15);
     --shadow-hover: 0 12px 35px rgba(14, 165, 233, 0.2);
     
+    /* 主题特定渐变 */
+    --gradient-navbar: linear-gradient(135deg, #38bdf8, #0ea5e9, #06b6d4, #8b5cf6);
+    --gradient-phone-header: linear-gradient(135deg, #38bdf8, #0ea5e9, #22d3ee);
+    --gradient-body: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0f9ff 100%);
+    --shadow-navbar: 0 8px 30px rgba(14, 165, 233, 0.4);
+    
+    /* 字体 - 海洋蓝主题：优雅流畅风格 */
+    --font-primary: 'Open Sans', 'Raleway', sans-serif;
+    --font-display: 'Raleway', 'Comfortaa', sans-serif;
+    --font-secondary: 'Comfortaa', 'Open Sans', sans-serif;
+    
     --theme-name: '海洋蓝';
 }
 
@@ -182,38 +238,60 @@
     --shadow-card: 0 8px 25px rgba(236, 72, 153, 0.15);
     --shadow-hover: 0 12px 35px rgba(236, 72, 153, 0.2);
     
+    /* 主题特定渐变 */
+    --gradient-navbar: linear-gradient(135deg, #f472b6, #ec4899, #fbbf24, #fcd34d);
+    --gradient-phone-header: linear-gradient(135deg, #f472b6, #ec4899, #f9a8d4);
+    --gradient-body: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 50%, #fdf2f8 100%);
+    --shadow-navbar: 0 8px 30px rgba(236, 72, 153, 0.4);
+    
+    /* 字体 - 甜美粉主题：手写浪漫风格 */
+    --font-primary: 'Josefin Sans', 'Dancing Script', sans-serif;
+    --font-display: 'Pacifico', 'Dancing Script', cursive;
+    --font-secondary: 'Dancing Script', 'Josefin Sans', cursive;
+    
     --theme-name: '甜美粉';
 }
 
-/* 酷炫黑主题 */
-[data-theme="cool-black"] {
-    --primary-color: #8b5cf6;
-    --primary-light: #a78bfa;
-    --primary-dark: #7c3aed;
+/* 温暖主题 */
+[data-theme="warm-sunset"] {
+    --primary-color: #d97706;
+    --primary-light: #f59e0b;
+    --primary-dark: #b45309;
     
-    --secondary-color: #06b6d4;
-    --secondary-light: #22d3ee;
-    --accent-color: #f472b6;
-    --accent-light: #f9a8d4;
+    --secondary-color: #ea580c;
+    --secondary-light: #fb923c;
+    --accent-color: #fbbf24;
+    --accent-light: #fcd34d;
     
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --error-color: #ef4444;
-    --info-color: #3b82f6;
+    --success-color: #65a30d;
+    --warning-color: #d97706;
+    --error-color: #dc2626;
+    --info-color: #0891b2;
     
-    --bg-primary: #0f0f0f;
-    --bg-secondary: #1a1a1a;
-    --bg-cream: #262626;
+    --bg-primary: #fffbeb;
+    --bg-secondary: #ffffff;
+    --bg-cream: #fef3c7;
     
-    --text-primary: #f5f5f5;
-    --text-secondary: #d4d4d4;
-    --text-muted: #a3a3a3;
+    --text-primary: #78350f;
+    --text-secondary: #92400e;
+    --text-muted: #b45309;
     
-    --border-color: #404040;
-    --shadow-card: 0 8px 25px rgba(139, 92, 246, 0.25);
-    --shadow-hover: 0 12px 35px rgba(139, 92, 246, 0.35);
+    --border-color: #fde68a;
+    --shadow-card: 0 8px 25px rgba(217, 119, 6, 0.15);
+    --shadow-hover: 0 12px 35px rgba(217, 119, 6, 0.2);
     
-    --theme-name: '酷炫黑';
+    /* 主题特定渐变 */
+    --gradient-navbar: linear-gradient(135deg, #fbbf24, #d97706, #ea580c, #f59e0b);
+    --gradient-phone-header: linear-gradient(135deg, #fbbf24, #d97706, #ea580c);
+    --gradient-body: linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fffbeb 100%);
+    --shadow-navbar: 0 8px 30px rgba(217, 119, 6, 0.4);
+    
+    /* 字体 - 温暖主题：优雅衬线风格 */
+    --font-primary: 'Lora', 'Merriweather', serif;
+    --font-display: 'Playfair Display', 'Merriweather', serif;
+    --font-secondary: 'Merriweather', 'Lora', serif;
+    
+    --theme-name: '温暖夕阳';
 }
 
 /* 全局样式 */
@@ -225,7 +303,7 @@
 
 body {
     font-family: var(--font-primary);
-    background: linear-gradient(135deg, #fef9f3 0%, #fff8e7 50%, #fef9f3 100%);
+    background: var(--gradient-body);
     min-height: 100vh;
     color: var(--text-primary);
     line-height: 1.6;
@@ -234,11 +312,11 @@ body {
 
 /* 导航栏 */
 .navbar {
-    background: linear-gradient(135deg, #9c89ff, #7c6bcf, #ff8fa3, #ffd93d);
+    background: var(--gradient-navbar);
     background-size: 400% 400%;
     padding: 20px;
     text-align: center;
-    box-shadow: 0 8px 30px rgba(124, 107, 207, 0.4);
+    box-shadow: var(--shadow-navbar, 0 8px 30px rgba(124, 107, 207, 0.4));
     position: sticky;
     top: 0;
     z-index: 100;
@@ -929,10 +1007,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: linear-gradient(135deg, #9c89ff, #7c6bcf, #a689e1);
+    background: var(--gradient-phone-header);
     padding: 16px 20px;
     position: relative;
-    overflow: hidden;
 }
 
 .phone-header::before {
@@ -944,6 +1021,7 @@ body {
     height: 200%;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
     animation: phoneHeaderFloat 6s ease-in-out infinite;
+    pointer-events: none;
 }
 
 @keyframes phoneHeaderFloat {
@@ -1002,6 +1080,233 @@ body {
 .phone-header-right {
     display: flex;
     align-items: center;
+    position: relative;
+    z-index: 20;
+}
+
+/* 手机头部内容区域 */
+.phone-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    width: 100%;
+    margin-bottom: 12px;
+}
+
+/* 手机名称胶囊标签 - 毛玻璃效果 */
+.phone-name-capsule {
+    display: inline-block;
+    padding: 10px 24px;
+    border-radius: 9999px;
+    font-size: 18px;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-family: var(--font-display);
+    letter-spacing: 1px;
+    /* 毛玻璃效果 */
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.phone-name-capsule:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* 胶囊标签颜色 - 通过边框和阴影区分 */
+.capsule-purple {
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.capsule-purple:hover {
+    border-color: rgba(167, 139, 250, 0.7);
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 胶囊标签颜色 - 绿色 */
+.capsule-green {
+    border-color: rgba(74, 222, 128, 0.5);
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.capsule-green:hover {
+    border-color: rgba(74, 222, 128, 0.7);
+    box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 胶囊标签颜色 - 蓝色 */
+.capsule-blue {
+    border-color: rgba(96, 165, 250, 0.5);
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.capsule-blue:hover {
+    border-color: rgba(96, 165, 250, 0.7);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 胶囊标签颜色 - 橙色 */
+.capsule-orange {
+    border-color: rgba(251, 146, 60, 0.5);
+    box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.capsule-orange:hover {
+    border-color: rgba(251, 146, 60, 0.7);
+    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 胶囊标签颜色 - 粉色 */
+.capsule-pink {
+    border-color: rgba(244, 114, 182, 0.5);
+    box-shadow: 0 4px 15px rgba(236, 72, 153, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.capsule-pink:hover {
+    border-color: rgba(244, 114, 182, 0.7);
+    box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 胶囊标签颜色 - 青色 */
+.capsule-cyan {
+    border-color: rgba(34, 211, 238, 0.5);
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.capsule-cyan:hover {
+    border-color: rgba(34, 211, 238, 0.7);
+    box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* 每日目标进度条 */
+.daily-goal-progress {
+    width: calc(100% + 40px);
+    margin-bottom: 8px;
+    margin-left: -20px;
+    padding: 0 20px;
+}
+
+.daily-goal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: var(--font-secondary);
+}
+
+.daily-goal-label {
+    font-weight: 600;
+}
+
+.daily-earned-label {
+    font-weight: 600;
+}
+
+.progress-bar-container {
+    width: 100%;
+}
+
+.progress-bar-bg {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.progress-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+/* 手机头部中间区域 - 统计和按钮并排 */
+.phone-header-middle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 16px;
+}
+
+/* 统计卡片行 */
+.phone-stats-row {
+    display: flex;
+    justify-content: flex-start;
+    gap: 12px;
+    flex: 1;
+}
+
+/* 统计卡片 */
+.phone-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 48%;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* 统计图标 */
+.phone-stat-icon {
+    font-size: 24px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* 统计信息 */
+.phone-stat-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* 统计金额 */
+.phone-stat-value {
+    font-size: 18px;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    font-family: var(--font-display);
+}
+
+/* 统计标签 */
+.phone-stat-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
+    font-family: var(--font-secondary);
 }
 
 .phone-header-buttons {
@@ -1020,6 +1325,8 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    position: relative;
+    z-index: 30;
 }
 
 /* 图标按钮样式 */
@@ -1035,6 +1342,9 @@ body {
     justify-content: center;
     transition: all var(--transition-fast);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
 }
 
 .icon-btn:hover {
@@ -2012,6 +2322,51 @@ body {
     .phone-header-right {
         margin-left: auto;
     }
+    
+    /* 手机端统计卡片适配 */
+    .phone-header-content {
+        margin-bottom: 8px;
+    }
+    
+    .daily-goal-progress {
+        width: calc(100% + 32px);
+        margin-bottom: 6px;
+        margin-left: -16px;
+        padding: 0 16px;
+    }
+    
+    .phone-header-middle {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .phone-stats-row {
+        gap: 10px;
+        width: 100%;
+    }
+    
+    .phone-stat-card {
+        flex: 1;
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    
+    .phone-stat-icon {
+        font-size: 22px;
+    }
+    
+    .phone-stat-value {
+        font-size: 16px;
+    }
+    
+    .phone-stat-label {
+        font-size: 11px;
+    }
+    
+    .phone-header-right {
+        margin-left: 0;
+        align-self: flex-end;
+    }
 }
 
 @media (max-width: 480px) {
@@ -2394,8 +2749,8 @@ body {
     background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
 }
 
-.theme-preview-cool-black {
-    background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+.theme-preview-warm-sunset {
+    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
 }
 
 /* 主题切换动画 */
