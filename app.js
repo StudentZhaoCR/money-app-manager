@@ -518,6 +518,14 @@ class DataManager {
         }
         return data;
     }
+    
+    static deletePhone(phoneId) {
+        const data = this.loadData();
+        data.phones = data.phones.filter(p => p.id !== phoneId);
+        this.saveData(data);
+        this.calculateYearlyGoal();
+        return data;
+    }
 
     static clearAllData() {
         localStorage.removeItem(DATA_KEY);
@@ -864,7 +872,10 @@ function renderPhones() {
                                 <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
                             </div>
                         </div>
-                        <button class="btn btn-secondary" onclick="openAddAppModal('${phone.id}')">添加软件</button>
+                        <div class="phone-header-buttons">
+                            <button class="btn btn-secondary" onclick="openAddAppModal('${phone.id}')">添加软件</button>
+                            <button class="btn btn-error" onclick="deletePhone('${phone.id}')">删除手机</button>
+                        </div>
                     </div>
                     <div class="phone-header-right">
                         <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
@@ -986,6 +997,15 @@ function editPhoneName(phoneId) {
             }
         }
     ]);
+}
+
+// 删除手机
+function deletePhone(phoneId) {
+    if (confirm('确定要删除这部手机吗？删除后将无法恢复。')) {
+        DataManager.deletePhone(phoneId);
+        renderPhones();
+        showToast('手机已删除！');
+    }
 }
 
 // 打开添加手机模态框
