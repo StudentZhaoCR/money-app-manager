@@ -432,25 +432,74 @@ function updatePhoneCard(phoneId) {
         return sum + (app.balance || 0);
     }, 0);
     
+    // 计算每日目标和进度
+    const settings = DataManager.loadData().settings;
+    const yearlyGoal = settings.yearlyGoal || 10000;
+    const phoneCount = data.phones.length || 1;
+    const dailyTarget = yearlyGoal / 365 / phoneCount;
+    
+    // 计算今日已赚（简化计算：使用今日新增的余额）
+    const today = new Date().toISOString().split('T')[0];
+    let todayEarned = 0;
+    phone.apps.forEach(app => {
+        if (app.withdrawals && app.withdrawals.length > 0) {
+            app.withdrawals.forEach(w => {
+                if (w.date === today) {
+                    todayEarned += w.amount;
+                }
+            });
+        }
+    });
+    
+    const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
+    
+    // 根据索引选择胶囊颜色（使用已有的index变量）
+    const capsuleColors = ['purple', 'green', 'blue', 'orange', 'pink', 'cyan'];
+    const capsuleColor = capsuleColors[index % capsuleColors.length];
+    
     // 更新卡片内容
     cardElement.innerHTML = `
         <div class="phone-header">
-            <div class="phone-header-left">
-                <div class="phone-name-container">
-                    <span class="phone-name" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
-                    <div class="phone-stats">
-                        <span class="phone-stat-item">💰 总赚取: ¥${totalEarned.toFixed(2)}</span>
-                        <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
+            <div class="phone-header-content">
+                <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+            </div>
+            <div class="daily-goal-progress">
+                <div class="daily-goal-header">
+                    <span class="daily-goal-label">每日目标：¥${dailyTarget.toFixed(2)}</span>
+                    <span class="daily-earned-label">今日已赚：¥${todayEarned.toFixed(2)}</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${progress}%"></div>
+                        <span class="progress-bar-text">${progress}%</span>
                     </div>
                 </div>
             </div>
-            <div class="phone-header-right">
-                <div class="phone-icon-buttons">
-                    <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
-                    <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
-                    <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
-                        ${isExpanded ? '▼' : '▶'}
-                    </button>
+            <div class="phone-header-middle">
+                <div class="phone-stats-row">
+                    <div class="phone-stat-card">
+                        <div class="phone-stat-icon">💰</div>
+                        <div class="phone-stat-info">
+                            <div class="phone-stat-value">¥${totalEarned.toFixed(2)}</div>
+                            <div class="phone-stat-label">总赚取</div>
+                        </div>
+                    </div>
+                    <div class="phone-stat-card">
+                        <div class="phone-stat-icon">💳</div>
+                        <div class="phone-stat-info">
+                            <div class="phone-stat-value">¥${totalBalance.toFixed(2)}</div>
+                            <div class="phone-stat-label">总余额</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="phone-header-right">
+                    <div class="phone-icon-buttons">
+                        <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
+                        <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
+                        <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
+                            ${isExpanded ? '▼' : '▶'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1377,25 +1426,74 @@ function renderPhones() {
             return sum + (app.balance || 0);
         }, 0);
         
+        // 计算每日目标和进度
+        const settings = DataManager.loadData().settings;
+        const yearlyGoal = settings.yearlyGoal || 10000;
+        const phoneCount = data.phones.length || 1;
+        const dailyTarget = yearlyGoal / 365 / phoneCount;
+        
+        // 计算今日已赚（简化计算：使用今日新增的余额）
+        const today = new Date().toISOString().split('T')[0];
+        let todayEarned = 0;
+        phone.apps.forEach(app => {
+            if (app.withdrawals && app.withdrawals.length > 0) {
+                app.withdrawals.forEach(w => {
+                    if (w.date === today) {
+                        todayEarned += w.amount;
+                    }
+                });
+            }
+        });
+        
+        const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
+        
+        // 根据索引选择胶囊颜色
+        const capsuleColors = ['purple', 'green', 'blue', 'orange', 'pink', 'cyan'];
+        const capsuleColor = capsuleColors[index % capsuleColors.length];
+        
         return `
             <div class="phone-card" data-phone-id="${phone.id}" data-index="${index}">
                 <div class="phone-header">
-                    <div class="phone-header-left">
-                        <div class="phone-name-container">
-                            <span class="phone-name" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
-                            <div class="phone-stats">
-                                <span class="phone-stat-item">💰 总赚取: ¥${totalEarned.toFixed(2)}</span>
-                                <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
+                    <div class="phone-header-content">
+                        <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+                    </div>
+                    <div class="daily-goal-progress">
+                        <div class="daily-goal-header">
+                            <span class="daily-goal-label">每日目标：¥${dailyTarget.toFixed(2)}</span>
+                            <span class="daily-earned-label">今日已赚：¥${todayEarned.toFixed(2)}</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill" style="width: ${progress}%"></div>
+                                <span class="progress-bar-text">${progress}%</span>
                             </div>
                         </div>
                     </div>
-                    <div class="phone-header-right">
-                        <div class="phone-icon-buttons">
-                            <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
-                            <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
-                            <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
-                                ${isExpanded ? '▼' : '▶'}
-                            </button>
+                    <div class="phone-header-middle">
+                        <div class="phone-stats-row">
+                            <div class="phone-stat-card">
+                                <div class="phone-stat-icon">💰</div>
+                                <div class="phone-stat-info">
+                                    <div class="phone-stat-value">¥${totalEarned.toFixed(2)}</div>
+                                    <div class="phone-stat-label">总赚取</div>
+                                </div>
+                            </div>
+                            <div class="phone-stat-card">
+                                <div class="phone-stat-icon">💳</div>
+                                <div class="phone-stat-info">
+                                    <div class="phone-stat-value">¥${totalBalance.toFixed(2)}</div>
+                                    <div class="phone-stat-label">总余额</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="phone-header-right">
+                            <div class="phone-icon-buttons">
+                                <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
+                                <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
+                                <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
+                                    ${isExpanded ? '▼' : '▶'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1996,7 +2094,7 @@ function calculateForecast() {
 // 渲染设置页面
 function renderSettings() {
     const data = DataManager.loadData();
-    document.getElementById('yearly-goal').value = data.settings.yearlyGoal || 10000;
+    document.getElementById('yearly-goal').value = data.settings.yearlyGoal || 0;
     
     // 计算剩余提现金额
     let totalWithdrawn = 0;
