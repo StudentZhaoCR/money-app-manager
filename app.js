@@ -808,8 +808,29 @@ class DataManager {
     }
 
     static clearAllData() {
+        // 清除旧的存储键
         localStorage.removeItem(DATA_KEY);
         localStorage.removeItem('expandedPhones');
+        
+        // 清除新的分片存储键
+        localStorage.removeItem(PHONES_KEY);
+        localStorage.removeItem(INSTALLMENTS_KEY);
+        localStorage.removeItem(EXPENSES_KEY);
+        localStorage.removeItem(SETTINGS_KEY);
+        
+        // 清除提醒相关的存储键
+        localStorage.removeItem('withdraw_reminder');
+        localStorage.removeItem('daily_goal_reminder');
+        
+        // 清除所有分期提醒键
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('installment_reminder_')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
     }
 
     // 分期还款相关方法
