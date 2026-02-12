@@ -443,15 +443,15 @@ function updatePhoneCard(phoneId) {
                         <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
                     </div>
                 </div>
-                <div class="phone-header-buttons">
-                    <button class="btn btn-secondary" onclick="openAddAppModal('${phone.id}')">添加软件</button>
-                    <button class="btn btn-error" onclick="deletePhone('${phone.id}')">删除手机</button>
-                </div>
             </div>
             <div class="phone-header-right">
-                <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
-                    ${isExpanded ? '▼' : '▶'}
-                </button>
+                <div class="phone-icon-buttons">
+                    <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
+                    <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
+                    <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
+                        ${isExpanded ? '▼' : '▶'}
+                    </button>
+                </div>
             </div>
         </div>
         ${isExpanded ? renderAppList(phone) : `<div class="collapsed-hint">点击展开查看 ${phone.apps.length} 个软件</div>`}
@@ -1388,15 +1388,15 @@ function renderPhones() {
                                 <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
                             </div>
                         </div>
-                        <div class="phone-header-buttons">
-                            <button class="btn btn-secondary" onclick="openAddAppModal('${phone.id}')">添加软件</button>
-                            <button class="btn btn-error" onclick="deletePhone('${phone.id}')">删除手机</button>
-                        </div>
                     </div>
                     <div class="phone-header-right">
-                        <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
-                            ${isExpanded ? '▼' : '▶'}
-                        </button>
+                        <div class="phone-icon-buttons">
+                            <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
+                            <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
+                            <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
+                                ${isExpanded ? '▼' : '▶'}
+                            </button>
+                        </div>
                     </div>
                 </div>
                 ${isExpanded ? renderAppList(phone) : `<div class="collapsed-hint">点击展开查看 ${phone.apps.length} 个软件</div>`}

@@ -1015,6 +1015,52 @@ body {
     max-width: 120px;
 }
 
+/* 图标按钮容器 */
+.phone-icon-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 图标按钮样式 */
+.icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.icon-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.icon-btn-add {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+}
+
+.icon-btn-add:hover {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.icon-btn-delete {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+    font-size: 16px;
+}
+
+.icon-btn-delete:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+}
+
 /* 软件卡片 */
 .app-card {
     background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
@@ -1949,18 +1995,18 @@ body {
         font-size: 11px;
     }
     
-    .phone-header-buttons {
-        display: flex;
-        gap: 8px;
-        margin-top: 0;
-        flex-wrap: nowrap;
+    .phone-icon-buttons {
+        gap: 6px;
     }
     
-    .phone-header-buttons .btn {
-        max-width: none;
-        padding: 8px 12px;
-        font-size: 12px;
-        white-space: nowrap;
+    .icon-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+    
+    .icon-btn-delete {
+        font-size: 14px;
     }
     
     .phone-header-right {
