@@ -1913,6 +1913,59 @@ body {
     .expense-form .flex .btn {
         width: 100%;
     }
+    
+    /* 手机卡片适配 */
+    .phone-header {
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px 16px;
+    }
+    
+    .phone-header-left {
+        width: 100%;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .phone-name-container {
+        width: 100%;
+    }
+    
+    .phone-name {
+        font-size: 18px;
+        word-break: break-word;
+    }
+    
+    .phone-stats {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 12px;
+    }
+    
+    .phone-header-buttons {
+        width: 100%;
+        margin-top: 8px;
+        gap: 8px;
+    }
+    
+    .phone-header-buttons .btn {
+        max-width: none;
+        flex: 1;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    
+    .phone-header-right {
+        position: absolute;
+        top: 12px;
+        right: 16px;
+    }
+    
+    .phone-card {
+        position: relative;
+        margin-bottom: 16px;
+    }
 }
 
 @media (max-width: 480px) {
