@@ -732,6 +732,22 @@ body {
     border-radius: var(--radius-full);
 }
 
+.prediction-item.prediction-recommend {
+    background: linear-gradient(135deg, rgba(124, 107, 207, 0.1) 0%, rgba(166, 137, 225, 0.1) 100%);
+    border: 2px dashed var(--primary-light);
+    border-radius: var(--radius-md);
+    margin-top: 8px;
+}
+
+.prediction-item.prediction-recommend:hover {
+    background: linear-gradient(135deg, rgba(124, 107, 207, 0.2) 0%, rgba(166, 137, 225, 0.2) 100%);
+    transform: translateX(5px) scale(1.02);
+}
+
+.prediction-item.prediction-recommend .prediction-name {
+    color: var(--primary-color);
+}
+
 /* 手机网格 */
 .phone-grid {
     margin-top: 20px;
@@ -1146,16 +1162,46 @@ body {
     z-index: 2000;
     animation: toastSlide 0.3s var(--transition-normal);
     font-family: var(--font-secondary);
+    transition: all 0.3s ease;
+}
+
+.toast.toast-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.toast.toast-error {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.toast.toast-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.toast.toast-info {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.toast.toast-animate {
+    animation: toastSlide 0.3s ease, toastPulse 0.5s ease 0.3s;
 }
 
 @keyframes toastSlide {
     from {
         opacity: 0;
-        transform: translateX(-50%) translateY(-20px);
+        transform: translateX(-50%) translateY(-20px) scale(0.9);
     }
     to {
         opacity: 1;
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+}
+
+@keyframes toastPulse {
+    0%, 100% {
+        transform: translateX(-50%) scale(1);
+    }
+    50% {
+        transform: translateX(-50%) scale(1.05);
     }
 }
 

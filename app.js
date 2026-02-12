@@ -1,5 +1,9 @@
 // 赚钱软件管理系统 - 主应用逻辑
 const DATA_KEY = 'moneyAppData';
+const PHONES_KEY = 'moneyApp_phones';
+const INSTALLMENTS_KEY = 'moneyApp_installments';
+const EXPENSES_KEY = 'moneyApp_expenses';
+const SETTINGS_KEY = 'moneyApp_settings';
 
 // 全局变量和辅助函数定义
 let modalIsShowing = false;
@@ -98,14 +102,121 @@ function closeModal() {
 }
 
 // 显示提示消息
-function showToast(message) {
+function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.style.display = 'block';
     
+    // 移除所有类型类
+    toast.classList.remove('toast-success', 'toast-error', 'toast-warning', 'toast-info');
+    
+    // 添加对应类型类
+    toast.classList.add(`toast-${type}`);
+    
+    // 添加动画类
+    toast.classList.add('toast-animate');
+    
     setTimeout(() => {
         toast.style.display = 'none';
-    }, 2000);
+        toast.classList.remove('toast-animate');
+    }, 2500);
+}
+
+// 显示成功提示
+function showSuccess(message) {
+    showToast(message, 'success');
+}
+
+// 显示错误提示
+function showError(message) {
+    showToast(message, 'error');
+}
+
+// 显示警告提示
+function showWarning(message) {
+    showToast(message, 'warning');
+}
+
+// 显示信息提示
+function showInfo(message) {
+    showToast(message, 'info');
+}
+
+// 输入验证函数
+function validateInput(value, type, fieldName) {
+    if (!value || value.toString().trim() === '') {
+        showError(`${fieldName}不能为空`);
+        return false;
+    }
+    
+    switch (type) {
+        case 'number':
+            if (isNaN(parseFloat(value))) {
+                showError(`${fieldName}必须是有效的数字`);
+                return false;
+            }
+            if (parseFloat(value) < 0) {
+                showError(`${fieldName}不能为负数`);
+                return false;
+            }
+            break;
+        case 'positive':
+            if (parseFloat(value) <= 0) {
+                showError(`${fieldName}必须大于0`);
+                return false;
+            }
+            break;
+        case 'date':
+            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+            if (!dateRegex.test(value)) {
+                showError(`${fieldName}格式不正确`);
+                return false;
+            }
+            break;
+    }
+    
+    return true;
+}
+
+// 全局错误处理
+function handleError(error, operation = '操作') {
+    console.error(`${operation}出错:`, error);
+    
+    let errorMessage = `${operation}失败`;
+    
+    if (error.message) {
+        if (error.message.includes('localStorage')) {
+            errorMessage = '存储空间不足，请清理浏览器缓存';
+        } else if (error.message.includes('JSON')) {
+            errorMessage = '数据格式错误，请检查输入';
+        } else if (error.message.includes('network')) {
+            errorMessage = '网络连接失败，请检查网络';
+        } else {
+            errorMessage = error.message;
+        }
+    }
+    
+    showError(errorMessage);
+}
+
+// 安全执行函数（带错误处理）
+function safeExecute(operation, fn) {
+    try {
+        return fn();
+    } catch (error) {
+        handleError(error, operation);
+        return null;
+    }
+}
+
+// 安全执行异步函数
+async function safeExecuteAsync(operation, fn) {
+    try {
+        return await fn();
+    } catch (error) {
+        handleError(error, operation);
+        return null;
+    }
 }
 
 // 全局函数定义（提前定义以避免函数未定义错误）
@@ -295,16 +406,160 @@ function renderInstallments() {
     }).join('');
 }
 
+// 局部更新单个手机卡片（优化性能）
+function updatePhoneCard(phoneId) {
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === phoneId);
+    if (!phone) return;
+    
+    const cardElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
+    if (!cardElement) {
+        // 如果找不到元素，回退到完整渲染
+        renderPhones();
+        return;
+    }
+    
+    const index = data.phones.findIndex(p => p.id === phoneId);
+    const isExpanded = expandedPhones[phoneId];
+    
+    // 计算该手机的总赚取金额
+    const totalEarned = phone.apps.reduce((sum, app) => {
+        return sum + (app.earned || app.balance || 0);
+    }, 0);
+    
+    // 计算该手机的总余额
+    const totalBalance = phone.apps.reduce((sum, app) => {
+        return sum + (app.balance || 0);
+    }, 0);
+    
+    // 更新卡片内容
+    cardElement.innerHTML = `
+        <div class="phone-header">
+            <div class="phone-header-left">
+                <div class="phone-name-container">
+                    <span class="phone-name" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+                    <div class="phone-stats">
+                        <span class="phone-stat-item">💰 总赚取: ¥${totalEarned.toFixed(2)}</span>
+                        <span class="phone-stat-item">💳 总余额: ¥${totalBalance.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="phone-header-buttons">
+                    <button class="btn btn-secondary" onclick="openAddAppModal('${phone.id}')">添加软件</button>
+                    <button class="btn btn-error" onclick="deletePhone('${phone.id}')">删除手机</button>
+                </div>
+            </div>
+            <div class="phone-header-right">
+                <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
+                    ${isExpanded ? '▼' : '▶'}
+                </button>
+            </div>
+        </div>
+        ${isExpanded ? renderAppList(phone) : `<div class="collapsed-hint">点击展开查看 ${phone.apps.length} 个软件</div>`}
+    `;
+}
+
+// 局部更新单个软件卡片（优化性能）
+function updateAppCard(phoneId, appId) {
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === phoneId);
+    if (!phone) return;
+    
+    const app = phone.apps.find(a => a.id === appId);
+    if (!app) return;
+    
+    // 找到软件卡片元素
+    const appCards = document.querySelectorAll('.app-card');
+    let targetCard = null;
+    
+    appCards.forEach(card => {
+        const appName = card.querySelector('.app-name');
+        if (appName && appName.textContent === app.name) {
+            targetCard = card;
+        }
+    });
+    
+    if (!targetCard) {
+        // 如果找不到元素，回退到更新整个手机卡片
+        updatePhoneCard(phoneId);
+        return;
+    }
+    
+    const now = new Date();
+    const startDate = new Date('2026-01-01');
+    const daysFromStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    
+    const shouldHaveEarned = daysFromStart * app.minWithdraw;
+    const earned = app.earned || app.balance || 0;
+    const daysIncome = Math.floor(earned / app.minWithdraw);
+    const nextPlayDate = calculateNextPlayDate(earned, app.minWithdraw);
+    const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
+    
+    // 更新卡片内容
+    targetCard.innerHTML = `
+        <div class="app-header">
+            <span class="app-name">${app.name}</span>
+            <span class="status-tag ${app.balance >= app.minWithdraw ? 'ready' : 'pending'}">
+                ${app.balance >= app.minWithdraw ? '可提现' : '待赚取'}
+            </span>
+        </div>
+        <div class="app-core-info">
+            <span class="core-label">当前余额:</span>
+            <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
+        </div>
+        <div class="app-info-row">
+            <span>最小提现: ¥${(app.minWithdraw || 0).toFixed(2)}</span>
+            <span>已赚金额: ¥${earned.toFixed(2)}</span>
+        </div>
+        <div class="progress-section">
+            <div class="progress-header">
+                <span class="progress-label">任务进度</span>
+                <span class="progress-percentage">${progressPercentage}%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: ${progressPercentage}%"></div>
+            </div>
+        </div>
+        <div class="app-info-row">
+            <span>截止今天应赚: ¥${shouldHaveEarned.toFixed(2)}</span>
+        </div>
+        <div class="app-info-row">
+            <span>相当于 ${daysIncome} 天的收入</span>
+            <span>下次玩: ${nextPlayDate}</span>
+        </div>
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="openWithdrawModal('${phoneId}', '${appId}')">提现</button>
+            <button class="btn btn-secondary" onclick="openEditAppModal('${phoneId}', '${appId}')">编辑</button>
+            <button class="btn btn-error" onclick="deleteApp('${phoneId}', '${appId}')">删除</button>
+        </div>
+    `;
+}
+
 // 原始代码开始
 
 // 数据管理类
 class DataManager {
     static loadData() {
+        // 尝试从分片存储加载数据
+        const phones = localStorage.getItem(PHONES_KEY);
+        const installments = localStorage.getItem(INSTALLMENTS_KEY);
+        const expenses = localStorage.getItem(EXPENSES_KEY);
+        const settings = localStorage.getItem(SETTINGS_KEY);
+        
+        // 如果分片存储有数据，使用分片存储
+        if (phones || installments || expenses || settings) {
+            return {
+                phones: phones ? JSON.parse(phones) : [],
+                installments: installments ? JSON.parse(installments) : [],
+                expenses: expenses ? JSON.parse(expenses) : [],
+                settings: settings ? JSON.parse(settings) : { yearlyGoal: 10000 }
+            };
+        }
+        
+        // 否则从旧的单文件存储加载数据（兼容旧版本）
         const savedData = localStorage.getItem(DATA_KEY);
         if (savedData) {
             const parsedData = JSON.parse(savedData);
-            // 确保返回的数据对象包含必要的属性
-            return {
+            const data = {
                 phones: parsedData.phones || [],
                 installments: parsedData.installments || [],
                 expenses: parsedData.expenses || [],
@@ -312,7 +567,11 @@ class DataManager {
                     yearlyGoal: parsedData.settings?.yearlyGoal || 10000
                 }
             };
+            // 迁移数据到分片存储
+            this.saveData(data);
+            return data;
         }
+        
         return {
             phones: [],
             installments: [],
@@ -324,7 +583,28 @@ class DataManager {
     }
 
     static saveData(data) {
-        localStorage.setItem(DATA_KEY, JSON.stringify(data));
+        // 分片存储数据
+        localStorage.setItem(PHONES_KEY, JSON.stringify(data.phones));
+        localStorage.setItem(INSTALLMENTS_KEY, JSON.stringify(data.installments));
+        localStorage.setItem(EXPENSES_KEY, JSON.stringify(data.expenses));
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+    }
+    
+    // 保存特定类型的数据（优化性能）
+    static savePhones(phones) {
+        localStorage.setItem(PHONES_KEY, JSON.stringify(phones));
+    }
+    
+    static saveInstallments(installments) {
+        localStorage.setItem(INSTALLMENTS_KEY, JSON.stringify(installments));
+    }
+    
+    static saveExpenses(expenses) {
+        localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
+    }
+    
+    static saveSettings(settings) {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     }
 
     static calculateYearlyGoal() {
@@ -671,6 +951,160 @@ function init() {
     renderPhones();
     renderStats();
     renderSettings();
+    
+    // 初始化提醒系统
+    initNotificationSystem();
+    checkReminders();
+}
+
+// 初始化通知系统
+function initNotificationSystem() {
+    // 请求通知权限
+    if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    console.log('通知权限已获取');
+                }
+            });
+        }
+    }
+}
+
+// 发送浏览器通知
+function sendNotification(title, body, icon = '💰') {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification(title, {
+            body: body,
+            icon: `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>${icon}</text></svg>`
+        });
+        
+        notification.onclick = function() {
+            window.focus();
+            notification.close();
+        };
+        
+        // 3秒后自动关闭
+        setTimeout(() => notification.close(), 3000);
+    }
+}
+
+// 检查所有提醒
+function checkReminders() {
+    checkInstallmentReminders();
+    checkWithdrawReminders();
+    checkDailyGoalReminders();
+}
+
+// 分期还款提醒
+function checkInstallmentReminders() {
+    const data = DataManager.loadData();
+    const now = new Date();
+    
+    data.installments.forEach(installment => {
+        if (installment.status !== 'active') return;
+        
+        const dueDate = new Date(installment.dueDate);
+        const daysRemaining = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+        
+        // 提前3天、1天提醒
+        if (daysRemaining <= 3 && daysRemaining > 0) {
+            const lastReminder = localStorage.getItem(`installment_reminder_${installment.id}`);
+            const todayStr = now.toISOString().split('T')[0];
+            
+            // 每天只提醒一次
+            if (lastReminder !== todayStr) {
+                sendNotification(
+                    '分期还款提醒',
+                    `${installment.platform} 还款日期还有 ${daysRemaining} 天，请及时准备！`,
+                    '💳'
+                );
+                localStorage.setItem(`installment_reminder_${installment.id}`, todayStr);
+            }
+        } else if (daysRemaining <= 0) {
+            // 已过期提醒
+            sendNotification(
+                '分期还款逾期提醒',
+                `${installment.platform} 已过期 ${Math.abs(daysRemaining)} 天，请尽快处理！`,
+                '⚠️'
+            );
+        }
+    });
+}
+
+// 提现提醒
+function checkWithdrawReminders() {
+    const data = DataManager.loadData();
+    const readyApps = [];
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (app.balance >= app.minWithdraw) {
+                readyApps.push({
+                    phoneName: phone.name,
+                    appName: app.name,
+                    balance: app.balance
+                });
+            }
+        });
+    });
+    
+    if (readyApps.length > 0) {
+        const lastReminder = localStorage.getItem('withdraw_reminder');
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        // 每天只提醒一次
+        if (lastReminder !== todayStr) {
+            const appNames = readyApps.map(app => `${app.phoneName}-${app.appName}`).join('、');
+            sendNotification(
+                '提现提醒',
+                `以下软件已达到提现门槛：${appNames}`,
+                '💵'
+            );
+            localStorage.setItem('withdraw_reminder', todayStr);
+        }
+    }
+}
+
+// 每日目标提醒
+function checkDailyGoalReminders() {
+    const data = DataManager.loadData();
+    const now = new Date();
+    const startDate = new Date('2026-01-01');
+    const daysFromStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    
+    let totalEarnedToday = 0;
+    let totalTargetToday = 0;
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            const dailyTarget = app.minWithdraw;
+            totalTargetToday += dailyTarget;
+            
+            // 计算今日已赚（简化计算）
+            const earned = app.earned || app.balance || 0;
+            const yesterdayEarned = Math.max(0, earned - dailyTarget);
+            totalEarnedToday += Math.max(0, earned - yesterdayEarned);
+        });
+    });
+    
+    const progress = totalTargetToday > 0 ? (totalEarnedToday / totalTargetToday) * 100 : 0;
+    
+    // 如果进度低于50%，发送提醒
+    if (progress < 50 && totalTargetToday > 0) {
+        const lastReminder = localStorage.getItem('daily_goal_reminder');
+        const todayStr = now.toISOString().split('T')[0];
+        
+        // 每天只提醒一次
+        if (lastReminder !== todayStr) {
+            sendNotification(
+                '每日目标提醒',
+                `今日目标完成度：${progress.toFixed(0)}%，还需努力！目标：¥${totalTargetToday.toFixed(2)}`,
+                '🎯'
+            );
+            localStorage.setItem('daily_goal_reminder', todayStr);
+        }
+    }
 }
 
 // 更新所有页面的日期
@@ -1087,12 +1521,67 @@ function openAddAppModal(phoneId) {
         const data = DataManager.loadData();
         const allApps = data.phones.flatMap(phone => phone.apps);
         
-        // 查找匹配的软件
-        const predictions = allApps.filter(app => {
-            return app.name.toLowerCase().includes(inputText.toLowerCase());
-        }).slice(0, 5); // 最多显示5个预测结果
+        // 计算每个软件的使用频率和最近使用时间
+        const appsWithScore = allApps.map(app => {
+            let score = 0;
+            const name = app.name.toLowerCase();
+            const input = inputText.toLowerCase();
+            
+            // 完全匹配得分最高
+            if (name === input) {
+                score += 100;
+            }
+            // 开头匹配得分较高
+            else if (name.startsWith(input)) {
+                score += 80;
+            }
+            // 包含匹配得分中等
+            else if (name.includes(input)) {
+                score += 60;
+            }
+            // 模糊匹配（每个字符都按顺序出现）
+            else {
+                let fuzzyScore = 0;
+                let lastIndex = -1;
+                for (let char of input) {
+                    const index = name.indexOf(char, lastIndex + 1);
+                    if (index > lastIndex) {
+                        fuzzyScore += 10;
+                        lastIndex = index;
+                    } else {
+                        fuzzyScore = 0;
+                        break;
+                    }
+                }
+                score += fuzzyScore;
+            }
+            
+            // 根据余额增加得分（余额高的软件可能更常用）
+            if (app.balance > 0) {
+                score += Math.min(20, app.balance);
+            }
+            
+            // 根据提现次数增加得分
+            const withdrawCount = app.withdrawals ? app.withdrawals.length : 0;
+            score += withdrawCount * 5;
+            
+            return {
+                ...app,
+                score
+            };
+        });
+        
+        // 按得分排序并取前5个
+        const predictions = appsWithScore
+            .filter(app => app.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
         
         if (predictions.length > 0) {
+            // 计算推荐金额（基于历史平均值）
+            const avgMinWithdraw = allApps.reduce((sum, app) => sum + app.minWithdraw, 0) / allApps.length;
+            const avgBalance = allApps.reduce((sum, app) => sum + (app.balance || 0), 0) / allApps.length;
+            
             predictionContainer.innerHTML = `
                 <div class="prediction-list">
                     ${predictions.map(app => `
@@ -1104,10 +1593,33 @@ function openAddAppModal(phoneId) {
                             </div>
                         </div>
                     `).join('')}
+                    <div class="prediction-item prediction-recommend" onclick="selectPrediction('', ${avgMinWithdraw.toFixed(2)}, ${avgBalance.toFixed(2)})")>
+                        <div class="prediction-name">💡 智能推荐</div>
+                        <div class="prediction-details">
+                            <span>最小提现: ¥${avgMinWithdraw.toFixed(2)}</span>
+                            <span>余额: ¥${avgBalance.toFixed(2)}</span>
+                        </div>
+                    </div>
                 </div>
             `;
         } else {
-            predictionContainer.innerHTML = '';
+            // 如果没有匹配结果，显示智能推荐
+            const avgMinWithdraw = allApps.length > 0 ? 
+                allApps.reduce((sum, app) => sum + app.minWithdraw, 0) / allApps.length : 0.3;
+            const avgBalance = allApps.length > 0 ? 
+                allApps.reduce((sum, app) => sum + (app.balance || 0), 0) / allApps.length : 0;
+            
+            predictionContainer.innerHTML = `
+                <div class="prediction-list">
+                    <div class="prediction-item prediction-recommend" onclick="selectPrediction('', ${avgMinWithdraw.toFixed(2)}, ${avgBalance.toFixed(2)})")>
+                        <div class="prediction-name">💡 智能推荐（基于历史平均值）</div>
+                        <div class="prediction-details">
+                            <span>最小提现: ¥${avgMinWithdraw.toFixed(2)}</span>
+                            <span>余额: ¥${avgBalance.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
     }
 }
