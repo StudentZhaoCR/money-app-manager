@@ -739,6 +739,8 @@ body {
     color: var(--text-primary);
     flex: 1;
     font-family: var(--font-secondary);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .app-info {
@@ -937,6 +939,8 @@ body {
     color: var(--text-primary);
     margin-bottom: 8px;
     font-family: var(--font-secondary);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .form-input {
@@ -1281,17 +1285,19 @@ body {
     font-size: 18px;
     font-weight: 800;
     color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 0, 0, 0.3);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
     cursor: pointer;
     transition: all var(--transition-fast);
     font-family: var(--font-display);
     letter-spacing: 1px;
     /* 毛玻璃效果 */
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.2);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    /* 增强可读性 */
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.1);
 }
 
 .phone-name-capsule:hover {
@@ -1529,14 +1535,14 @@ body {
     transform: translateX(-50%);
     width: 90%;
     max-width: 600px;
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     display: flex;
     justify-content: space-around;
     padding: 12px 0;
-    box-shadow: 0 8px 30px rgba(124, 107, 207, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.5);
     border-radius: var(--radius-xl);
     z-index: 100;
     transition: all var(--transition-normal);
@@ -1688,12 +1694,14 @@ body {
 }
 
 .modal-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 20px;
-    text-align: center;
-    font-family: var(--font-display);
+	font-size: 20px;
+	font-weight: 700;
+	color: var(--text-primary);
+	margin-bottom: 20px;
+	text-align: center;
+	font-family: var(--font-display);
+	/* 增强可读性 */
+	text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .modal-body {
@@ -1922,6 +1930,8 @@ body {
     font-weight: 800;
     color: var(--primary-dark);
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .installment-date {
@@ -1934,8 +1944,8 @@ body {
 .installment-amount {
     font-size: 24px;
     font-weight: 900;
-    color: var(--primary-color);
-    text-shadow: 2px 2px 4px rgba(124, 107, 207, 0.2);
+    color: var(--primary-dark);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     margin: 12px 0;
     font-family: var(--font-display);
 }
@@ -2118,6 +2128,8 @@ body {
     margin-bottom: 8px;
     line-height: 1.4;
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .expense-source {
@@ -2131,7 +2143,7 @@ body {
     font-size: 28px;
     font-weight: 900;
     color: var(--error-color);
-    text-shadow: 2px 2px 4px rgba(255, 107, 107, 0.2);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
     transition: transform var(--transition-fast);
     font-family: var(--font-display);
 }
@@ -2906,6 +2918,8 @@ body {
     font-weight: 700;
     color: var(--primary-dark);
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .summary-stats {
@@ -2936,8 +2950,10 @@ body {
     display: block;
     font-size: 20px;
     font-weight: 800;
-    color: var(--primary-color);
+    color: var(--primary-dark);
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .summary-value.earned {
@@ -3046,13 +3062,17 @@ body {
     font-weight: 700;
     color: var(--text-primary);
     font-family: var(--font-secondary);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .earn-record-amount {
     font-size: 18px;
     font-weight: 800;
-    color: var(--success-color);
+    color: #15803d;
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .earn-record-details {
@@ -3122,13 +3142,17 @@ body {
     font-size: 15px;
     font-weight: 700;
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 }
 
 .app-earn-total {
     font-size: 16px;
     font-weight: 800;
-    color: var(--accent-color);
+    color: #b45309;
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .app-earn-record {
@@ -3157,8 +3181,10 @@ body {
 .app-earn-amount {
     font-size: 16px;
     font-weight: 800;
-    color: var(--success-color);
+    color: #15803d;
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .app-earn-progress-row {
