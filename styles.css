@@ -2167,17 +2167,53 @@ body {
 .stat-item {
     text-align: center;
     padding: 12px;
-    background: rgba(124, 107, 207, 0.05);
     border-radius: var(--radius-md);
+    border: 2px solid;
+}
+
+/* 已赚金额 - 使用主色调 */
+.stat-earned {
+    background: linear-gradient(135deg, rgba(124, 107, 207, 0.15) 0%, rgba(169, 159, 232, 0.25) 100%);
+    border-color: var(--primary-color);
+}
+
+/* 提现金额 - 使用成功/绿色调 */
+.stat-withdrawn {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(74, 222, 128, 0.25) 100%);
+    border-color: var(--success-color);
+}
+
+/* 剩余余额 - 使用强调/金色调 */
+.stat-balance {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 214, 79, 0.25) 100%);
+    border-color: var(--accent-color);
 }
 
 .stat-item .stat-label {
     font-size: 12px;
     margin-bottom: 4px;
+    color: var(--text-secondary);
+    font-weight: 600;
 }
 
 .stat-item .stat-value {
     font-size: 16px;
+    font-weight: 700;
+}
+
+/* 已赚金额数值 - 主色调 */
+.stat-earned .stat-value {
+    color: var(--primary-color);
+}
+
+/* 提现金额数值 - 成功绿色 */
+.stat-withdrawn .stat-value {
+    color: var(--success-color);
+}
+
+/* 剩余余额数值 - 强调金色 */
+.stat-balance .stat-value {
+    color: #d97706;
 }
 
 .app-progress {
