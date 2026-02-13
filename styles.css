@@ -16,25 +16,25 @@
 :root {
     --primary-color: #7c6bcf;
     --primary-light: #a99fe8;
-    --primary-dark: #5a4ba2;
-    
+    --primary-dark: #4a3d7a;
+
     --secondary-color: #ff8fa3;
     --secondary-light: #ffb3c1;
     --accent-color: #ffd93d;
     --accent-light: #ffe066;
-    
-    --success-color: #6bcf7f;
-    --warning-color: #ffb347;
-    --error-color: #ff6b6b;
-    --info-color: #74c0fc;
-    
+
+    --success-color: #22c55e;
+    --warning-color: #f59e0b;
+    --error-color: #ef4444;
+    --info-color: #3b82f6;
+
     --bg-primary: #fef9f3;
     --bg-secondary: #ffffff;
     --bg-cream: #fff8e7;
-    
-    --text-primary: #4a4a4a;
-    --text-secondary: #7a7a7a;
-    --text-muted: #a0a0a0;
+
+    --text-primary: #2d2d2d;
+    --text-secondary: #4a4a4a;
+    --text-muted: #6b6b6b;
     
     --border-color: #e8e0d5;
     --shadow-soft: 0 4px 15px rgba(0, 0, 0, 0.08);
@@ -86,27 +86,27 @@
 
 /* 青春绿主题 */
 [data-theme="youth-green"] {
-    --primary-color: #22c55e;
+    --primary-color: #16a34a;
     --primary-light: #4ade80;
-    --primary-dark: #16a34a;
-    
+    --primary-dark: #14532d;
+
     --secondary-color: #34d399;
     --secondary-light: #6ee7b7;
     --accent-color: #fbbf24;
     --accent-light: #fcd34d;
-    
+
     --success-color: #10b981;
     --warning-color: #f59e0b;
     --error-color: #ef4444;
     --info-color: #06b6d4;
-    
+
     --bg-primary: #f0fdf4;
     --bg-secondary: #ffffff;
     --bg-cream: #ecfdf5;
-    
-    --text-primary: #166534;
-    --text-secondary: #15803d;
-    --text-muted: #22c55e;
+
+    --text-primary: #0f3d1f;
+    --text-secondary: #166534;
+    --text-muted: #2d7a4a;
     
     --border-color: #bbf7d0;
     --shadow-card: 0 8px 25px rgba(34, 197, 94, 0.15);
@@ -128,27 +128,27 @@
 
 /* 活力橙主题 */
 [data-theme="vitality-orange"] {
-    --primary-color: #f97316;
+    --primary-color: #ea580c;
     --primary-light: #fb923c;
-    --primary-dark: #ea580c;
-    
+    --primary-dark: #9a3412;
+
     --secondary-color: #fb7185;
     --secondary-light: #fda4af;
     --accent-color: #facc15;
     --accent-light: #fde047;
-    
+
     --success-color: #22c55e;
     --warning-color: #eab308;
     --error-color: #dc2626;
     --info-color: #0ea5e9;
-    
+
     --bg-primary: #fff7ed;
     --bg-secondary: #ffffff;
     --bg-cream: #ffedd5;
-    
-    --text-primary: #9a3412;
-    --text-secondary: #c2410c;
-    --text-muted: #ea580c;
+
+    --text-primary: #431407;
+    --text-secondary: #9a3412;
+    --text-muted: #c2410c;
     
     --border-color: #fed7aa;
     --shadow-card: 0 8px 25px rgba(249, 115, 22, 0.15);
@@ -170,27 +170,27 @@
 
 /* 海洋蓝主题 */
 [data-theme="ocean-blue"] {
-    --primary-color: #0ea5e9;
+    --primary-color: #0284c7;
     --primary-light: #38bdf8;
-    --primary-dark: #0284c7;
-    
+    --primary-dark: #0c4a6e;
+
     --secondary-color: #06b6d4;
     --secondary-light: #22d3ee;
     --accent-color: #8b5cf6;
     --accent-light: #a78bfa;
-    
+
     --success-color: #10b981;
     --warning-color: #f59e0b;
     --error-color: #ef4444;
     --info-color: #6366f1;
-    
+
     --bg-primary: #f0f9ff;
     --bg-secondary: #ffffff;
     --bg-cream: #e0f2fe;
-    
-    --text-primary: #0c4a6e;
-    --text-secondary: #0369a1;
-    --text-muted: #0284c7;
+
+    --text-primary: #082f49;
+    --text-secondary: #0c4a6e;
+    --text-muted: #0369a1;
     
     --border-color: #bae6fd;
     --shadow-card: 0 8px 25px rgba(14, 165, 233, 0.15);
@@ -212,27 +212,27 @@
 
 /* 甜美粉主题 */
 [data-theme="sweet-pink"] {
-    --primary-color: #ec4899;
+    --primary-color: #db2777;
     --primary-light: #f472b6;
-    --primary-dark: #db2777;
-    
+    --primary-dark: #831843;
+
     --secondary-color: #f472b6;
     --secondary-light: #f9a8d4;
     --accent-color: #fbbf24;
     --accent-light: #fcd34d;
-    
+
     --success-color: #10b981;
     --warning-color: #f59e0b;
     --error-color: #ef4444;
     --info-color: #8b5cf6;
-    
+
     --bg-primary: #fdf2f8;
     --bg-secondary: #ffffff;
     --bg-cream: #fce7f3;
-    
-    --text-primary: #831843;
-    --text-secondary: #9d174d;
-    --text-muted: #db2777;
+
+    --text-primary: #500724;
+    --text-secondary: #831843;
+    --text-muted: #9d174d;
     
     --border-color: #fbcfe8;
     --shadow-card: 0 8px 25px rgba(236, 72, 153, 0.15);
@@ -254,27 +254,27 @@
 
 /* 温暖主题 */
 [data-theme="warm-sunset"] {
-    --primary-color: #d97706;
+    --primary-color: #b45309;
     --primary-light: #f59e0b;
-    --primary-dark: #b45309;
-    
+    --primary-dark: #78350f;
+
     --secondary-color: #ea580c;
     --secondary-light: #fb923c;
     --accent-color: #fbbf24;
     --accent-light: #fcd34d;
-    
+
     --success-color: #65a30d;
     --warning-color: #d97706;
     --error-color: #dc2626;
     --info-color: #0891b2;
-    
+
     --bg-primary: #fffbeb;
     --bg-secondary: #ffffff;
     --bg-cream: #fef3c7;
-    
-    --text-primary: #78350f;
-    --text-secondary: #92400e;
-    --text-muted: #b45309;
+
+    --text-primary: #451a03;
+    --text-secondary: #78350f;
+    --text-muted: #92400e;
     
     --border-color: #fde68a;
     --shadow-card: 0 8px 25px rgba(217, 119, 6, 0.15);
@@ -308,6 +308,10 @@ body {
     color: var(--text-primary);
     line-height: 1.6;
     padding-bottom: 80px;
+    /* 全局字体渲染优化 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
 /* 导航栏 */
@@ -353,18 +357,20 @@ body {
     color: white;
     font-size: 24px;
     font-weight: 900;
-    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.2);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.2);
     letter-spacing: 2px;
     font-family: var(--font-display);
     position: relative;
     z-index: 1;
     display: inline-block;
     padding: 8px 20px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
     border-radius: var(--radius-full);
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 3px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
     transition: all var(--transition-fast);
+    /* 增强文字可读性 */
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.1);
 }
 
 .nav-title:hover {
@@ -434,7 +440,7 @@ body {
 /* 统计卡片 - 卡通风格 */
 .stat-card {
     flex: 1;
-    background: var(--bg-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
     border-radius: var(--radius-lg);
     padding: 20px;
     text-align: center;
@@ -443,6 +449,8 @@ body {
     transition: all var(--transition-normal);
     position: relative;
     overflow: hidden;
+    /* 增强可读性 */
+    backdrop-filter: blur(10px);
 }
 
 .stat-card::before {
@@ -468,59 +476,99 @@ body {
 
 .stat-card.border-primary {
     border-color: var(--primary-color);
-    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    background: linear-gradient(135deg, #7c6bcf 0%, #9c89ff 100%);
 }
 
 .stat-card.border-secondary {
     border-color: var(--secondary-color);
-    background: linear-gradient(135deg, #fff0f3 0%, #ffe4e9 100%);
+    background: linear-gradient(135deg, #ff8fa3 0%, #ffb3c1 100%);
 }
 
 .stat-card.border-tertiary {
     border-color: #c084fc;
-    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    background: linear-gradient(135deg, #c084fc 0%, #d8b4fe 100%);
 }
 
 .stat-card.border-accent {
     border-color: var(--accent-color);
-    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%);
 }
 
 .stat-card.primary {
     border-color: var(--primary-color);
-    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    background: linear-gradient(135deg, #7c6bcf 0%, #9c89ff 100%);
 }
 
 .stat-card.secondary {
     border-color: var(--secondary-color);
-    background: linear-gradient(135deg, #fff0f3 0%, #ffe4e9 100%);
+    background: linear-gradient(135deg, #ff8fa3 0%, #ffb3c1 100%);
 }
 
 .stat-card.tertiary {
     border-color: #c084fc;
-    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    background: linear-gradient(135deg, #c084fc 0%, #d8b4fe 100%);
 }
 
 .stat-label {
     display: block;
     font-size: 13px;
-    color: var(--text-secondary);
+    color: rgba(255, 255, 255, 0.9);
     margin-bottom: 8px;
     font-weight: 600;
     font-family: var(--font-secondary);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .stat-value {
     display: block;
     font-size: 24px;
     font-weight: 800;
-    color: var(--primary-dark);
+    color: white;
     font-family: var(--font-display);
+    /* 增强数字可读性 */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: 0.5px;
 }
 
 .stat-value.large {
     font-size: 28px;
-    color: var(--primary-color);
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 统计卡片在彩色背景下的文字样式 */
+.stat-card.border-primary .stat-label,
+.stat-card.border-secondary .stat-label,
+.stat-card.border-tertiary .stat-label,
+.stat-card.border-accent .stat-label,
+.stat-card.primary .stat-label,
+.stat-card.secondary .stat-label,
+.stat-card.tertiary .stat-label {
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.stat-card.border-primary .stat-value,
+.stat-card.border-secondary .stat-value,
+.stat-card.border-tertiary .stat-value,
+.stat-card.border-accent .stat-value,
+.stat-card.primary .stat-value,
+.stat-card.secondary .stat-value,
+.stat-card.tertiary .stat-value {
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* 黄色卡片使用深色文字 */
+.stat-card.border-accent .stat-label {
+    color: rgba(120, 53, 15, 0.9);
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.stat-card.border-accent .stat-value {
+    color: #78350f;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
 }
 
 /* 边框流光动画 */
@@ -563,7 +611,7 @@ body {
 
 /* 目标卡片 */
 .goal-card {
-    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    background: linear-gradient(135deg, rgba(240, 249, 255, 0.95) 0%, rgba(224, 242, 254, 0.95) 100%);
     border-radius: var(--radius-lg);
     padding: 24px;
     box-shadow: var(--shadow-card);
@@ -571,6 +619,8 @@ body {
     margin-bottom: 24px;
     position: relative;
     overflow: hidden;
+    /* 增强可读性 */
+    backdrop-filter: blur(10px);
 }
 
 /* 区块标题 */
@@ -583,6 +633,9 @@ body {
     align-items: center;
     gap: 8px;
     font-family: var(--font-display);
+    /* 增强可读性 */
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9);
+    letter-spacing: 0.3px;
 }
 
 .section-title::before {
@@ -656,13 +709,15 @@ body {
 }
 
 .app-item {
-    background: var(--bg-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
     border-radius: var(--radius-lg);
     padding: 20px;
     margin-bottom: 16px;
     box-shadow: var(--shadow-card);
     border: 3px solid var(--border-color);
     transition: all var(--transition-normal);
+    /* 增强可读性 */
+    backdrop-filter: blur(10px);
 }
 
 .app-item:hover {
@@ -989,13 +1044,15 @@ body {
 
 /* 手机卡片 */
 .phone-card {
-    background: var(--bg-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
     border-radius: var(--radius-lg);
     margin-bottom: 20px;
     box-shadow: var(--shadow-card);
     border: 3px solid var(--border-color);
     overflow: hidden;
     transition: all var(--transition-normal);
+    /* 增强可读性 */
+    backdrop-filter: blur(10px);
 }
 
 .phone-card:hover {
@@ -1062,16 +1119,18 @@ body {
     font-size: 18px;
     font-weight: 800;
     color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 0 10px rgba(0, 0, 0, 0.2);
     font-family: var(--font-display);
+    letter-spacing: 0.5px;
 }
 
 /* 统计标签 */
 .stat-label {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.95);
     font-weight: 600;
     font-family: var(--font-secondary);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* 每日统计项 - 特殊样式 */
@@ -1097,10 +1156,11 @@ body {
 /* 每日标签 */
 .daily-label {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.95);
     font-weight: 600;
     font-family: var(--font-secondary);
     min-width: 32px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* 每日值 */
@@ -1109,6 +1169,7 @@ body {
     font-weight: 700;
     color: white;
     font-family: var(--font-display);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .daily-value.earned {
@@ -1149,7 +1210,8 @@ body {
     font-weight: 700;
     font-size: 10px;
     text-anchor: middle;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    /* SVG文字阴影 */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 @keyframes progress {
