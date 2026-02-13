@@ -231,7 +231,19 @@
 
             <div class="card mt-6">
                 <div class="section-header">
-                    <div class="section-title">数据备份</div>
+                    <div class="section-title">数据备份（JSON）</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-hint mb-4">导出JSON格式包含所有数据（手机、软件、提现记录、支出记录、分期还款），用于完整备份和恢复</div>
+                <div class="data-management-buttons flex gap-4">
+                    <button class="btn btn-primary flex-1" onclick="exportJSON()">导出JSON</button>
+                    <button class="btn btn-secondary flex-1" onclick="importJSON()">导入JSON</button>
+                </div>
+            </div>
+
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">数据导出（Excel）</div>
                     <div class="section-divider"></div>
                 </div>
                 <div class="form-hint mb-4">导出为Excel格式，支持在手机端查看和分享</div>
@@ -300,6 +312,83 @@
             </div>
             <div class="expense-records" id="expense-records-list">
                 <div class="empty-state">暂无支出记录</div>
+            </div>
+        </div>
+
+        <!-- 今日赚取页面 -->
+        <div class="page" id="page-today-earn">
+            <div class="page-header">
+                <button class="btn btn-secondary" onclick="showPage('phones')">返回</button>
+                <div class="section-title" id="today-earn-title">今日赚取</div>
+            </div>
+            
+            <!-- 切换按钮 -->
+            <div class="today-earn-tabs">
+                <button class="today-earn-tab active" id="tab-phone-earn" onclick="switchTodayEarnTab('phone')">
+                    📱 手机今日赚取
+                </button>
+                <button class="today-earn-tab" id="tab-app-earn" onclick="switchTodayEarnTab('app')">
+                    📲 软件今日赚取
+                </button>
+            </div>
+            
+            <!-- 手机今日赚取内容 -->
+            <div class="today-earn-content" id="phone-earn-content">
+                <div class="today-earn-summary card">
+                    <div class="summary-header">
+                        <span class="summary-title">📊 赚取概览</span>
+                    </div>
+                    <div class="summary-stats">
+                        <div class="summary-stat">
+                            <span class="summary-label">今日目标</span>
+                            <span class="summary-value" id="phone-daily-target">¥0.00</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="summary-label">今日已赚</span>
+                            <span class="summary-value earned" id="phone-today-earned">¥0.00</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="summary-label">完成进度</span>
+                            <span class="summary-value" id="phone-today-progress">0%</span>
+                        </div>
+                    </div>
+                    <div class="summary-progress-bar">
+                        <div class="summary-progress-fill" id="phone-progress-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="section-title mt-6">📅 历史赚取记录</div>
+                <div class="earn-records-list" id="phone-earn-records">
+                    <div class="empty-state">暂无赚取记录</div>
+                </div>
+            </div>
+            
+            <!-- 软件今日赚取内容 -->
+            <div class="today-earn-content hidden" id="app-earn-content">
+                <div class="today-earn-summary card">
+                    <div class="summary-header">
+                        <span class="summary-title">📊 软件赚取概览</span>
+                    </div>
+                    <div class="summary-stats">
+                        <div class="summary-stat">
+                            <span class="summary-label">软件总数</span>
+                            <span class="summary-value" id="app-total-count">0</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="summary-label">今日有变化</span>
+                            <span class="summary-value earned" id="app-changed-count">0</span>
+                        </div>
+                        <div class="summary-stat">
+                            <span class="summary-label">总赚取</span>
+                            <span class="summary-value earned" id="app-total-earned">¥0.00</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="section-title mt-6">📅 软件历史记录</div>
+                <div class="earn-records-list" id="app-earn-records">
+                    <div class="empty-state">暂无软件赚取记录</div>
+                </div>
             </div>
         </div>
 

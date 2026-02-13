@@ -440,19 +440,23 @@ function updatePhoneCard(phoneId) {
     const yearDays = getYearDays(currentYear);
     const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
     
-    // 计算今日已赚（简化计算：使用今日新增的余额）
-    const today = new Date().toISOString().split('T')[0];
+    // 计算今日已赚：各软件已赚金额相比上次记录的变化之和
     let todayEarned = 0;
     phone.apps.forEach(app => {
-        if (app.withdrawals && app.withdrawals.length > 0) {
-            app.withdrawals.forEach(w => {
-                if (w.date === today) {
-                    todayEarned += w.amount;
-                }
-            });
+        const history = app.dailyEarnedHistory || {};
+        const currentEarned = app.earned || 0;
+        // 获取最近一次记录的已赚金额
+        const dates = Object.keys(history).sort();
+        let lastRecordedEarned = 0;
+        if (dates.length > 0) {
+            lastRecordedEarned = history[dates[dates.length - 1]];
+        }
+        const change = currentEarned - lastRecordedEarned;
+        if (change > 0) {
+            todayEarned += change;
         }
     });
-    
+
     const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
     
     // 根据索引选择胶囊颜色（使用已有的index变量）
@@ -462,45 +466,51 @@ function updatePhoneCard(phoneId) {
     // 更新卡片内容
     cardElement.innerHTML = `
         <div class="phone-header">
-            <div class="phone-header-content">
+            <div class="phone-header-top">
                 <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
-            </div>
-            <div class="daily-goal-progress">
-                <div class="daily-goal-header">
-                    <span class="daily-goal-label">每日目标：¥${dailyTarget.toFixed(2)}</span>
-                    <span class="daily-earned-label">今日已赚：¥${todayEarned.toFixed(2)}</span>
-                </div>
-                <div class="progress-bar-container">
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" style="width: ${progress}%"></div>
-                        <span class="progress-bar-text">${progress}%</span>
-                    </div>
-                </div>
-            </div>
-            <div class="phone-header-middle">
-                <div class="phone-stats-row">
-                    <div class="phone-stat-card">
-                        <div class="phone-stat-icon">💰</div>
-                        <div class="phone-stat-info">
-                            <div class="phone-stat-value">¥${totalEarned.toFixed(2)}</div>
-                            <div class="phone-stat-label">总赚取</div>
-                        </div>
-                    </div>
-                    <div class="phone-stat-card">
-                        <div class="phone-stat-icon">💳</div>
-                        <div class="phone-stat-info">
-                            <div class="phone-stat-value">¥${totalBalance.toFixed(2)}</div>
-                            <div class="phone-stat-label">总余额</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="phone-header-right">
+                <div class="phone-header-actions">
+                    <button class="btn-today-earn" onclick="showTodayEarnPage('${phone.id}')" title="今日赚取">📊 今日赚取</button>
                     <div class="phone-icon-buttons">
                         <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
                         <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
                         <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
                             ${isExpanded ? '▼' : '▶'}
                         </button>
+                    </div>
+                </div>
+            </div>
+            <div class="phone-header-stats">
+                <div class="phone-stat-item">
+                    <span class="stat-icon">💰</span>
+                    <div class="stat-content">
+                        <span class="stat-label">总赚取</span>
+                        <span class="stat-value">¥${totalEarned.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="phone-stat-item">
+                    <span class="stat-icon">💳</span>
+                    <div class="stat-content">
+                        <span class="stat-label">总余额</span>
+                        <span class="stat-value">¥${totalBalance.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="phone-stat-item daily-stat">
+                    <div class="daily-info">
+                        <div class="daily-row">
+                            <span class="daily-label">目标</span>
+                            <span class="daily-value">¥${dailyTarget.toFixed(2)}</span>
+                        </div>
+                        <div class="daily-row">
+                            <span class="daily-label">已赚</span>
+                            <span class="daily-value earned">¥${todayEarned.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <div class="daily-progress-ring">
+                        <svg viewBox="0 0 36 36" class="circular-chart">
+                            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <path class="circle" stroke-dasharray="${progress}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            <text x="18" y="20.35" class="percentage">${progress}%</text>
+                        </svg>
                     </div>
                 </div>
             </div>
@@ -595,42 +605,59 @@ class DataManager {
         const installments = localStorage.getItem(INSTALLMENTS_KEY);
         const expenses = localStorage.getItem(EXPENSES_KEY);
         const settings = localStorage.getItem(SETTINGS_KEY);
-        
+
+        let result;
         // 如果分片存储有数据，使用分片存储
         if (phones || installments || expenses || settings) {
-            return {
+            result = {
                 phones: phones ? JSON.parse(phones) : [],
                 installments: installments ? JSON.parse(installments) : [],
                 expenses: expenses ? JSON.parse(expenses) : [],
                 settings: settings ? JSON.parse(settings) : { yearlyGoal: 10000 }
             };
-        }
-        
-        // 否则从旧的单文件存储加载数据（兼容旧版本）
-        const savedData = localStorage.getItem(DATA_KEY);
-        if (savedData) {
-            const parsedData = JSON.parse(savedData);
-            const data = {
-                phones: parsedData.phones || [],
-                installments: parsedData.installments || [],
-                expenses: parsedData.expenses || [],
-                settings: {
-                    yearlyGoal: parsedData.settings?.yearlyGoal || 10000
-                }
-            };
-            // 迁移数据到分片存储
-            this.saveData(data);
-            return data;
-        }
-        
-        return {
-            phones: [],
-            installments: [],
-            expenses: [],
-            settings: {
-                yearlyGoal: 10000
+        } else {
+            // 否则从旧的单文件存储加载数据（兼容旧版本）
+            const savedData = localStorage.getItem(DATA_KEY);
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                result = {
+                    phones: parsedData.phones || [],
+                    installments: parsedData.installments || [],
+                    expenses: parsedData.expenses || [],
+                    settings: {
+                        yearlyGoal: parsedData.settings?.yearlyGoal || 10000
+                    }
+                };
+            } else {
+                result = {
+                    phones: [],
+                    installments: [],
+                    expenses: [],
+                    settings: {
+                        yearlyGoal: 10000
+                    }
+                };
             }
-        };
+        }
+
+        // 数据迁移：为旧数据添加 dailyEarnedHistory 字段
+        const today = new Date().toISOString().split('T')[0];
+        let needsMigration = false;
+        result.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (!app.dailyEarnedHistory) {
+                    app.dailyEarnedHistory = {
+                        [today]: app.earned || 0
+                    };
+                    needsMigration = true;
+                }
+            });
+        });
+        if (needsMigration) {
+            this.saveData(result);
+        }
+
+        return result;
     }
 
     static saveData(data) {
@@ -685,18 +712,23 @@ class DataManager {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
         if (phone) {
+            const today = new Date().toISOString().split('T')[0];
+            const initialEarned = parseFloat(appData.balance) || 0;
             const app = {
                 id: Date.now().toString(),
                 name: appData.name,
                 minWithdraw: parseFloat(appData.minWithdraw),
-                balance: parseFloat(appData.balance) || 0,
-                earned: parseFloat(appData.balance) || 0,
+                balance: initialEarned,
+                earned: initialEarned,
                 withdrawn: 0,
                 remainingWithdrawn: 0,
                 historicalWithdrawn: 0,
                 expenses: [],
                 withdrawals: [],
-                lastUpdated: new Date().toISOString()
+                lastUpdated: new Date().toISOString(),
+                dailyEarnedHistory: {
+                    [today]: initialEarned
+                }
             };
             phone.apps.push(app);
             this.saveData(data);
@@ -713,21 +745,27 @@ class DataManager {
             if (app) {
                 app.name = appData.name;
                 app.minWithdraw = parseFloat(appData.minWithdraw);
-                
+
                 const oldBalance = app.balance;
                 const newBalance = parseFloat(appData.balance) || 0;
                 const formattedBalance = parseFloat(newBalance.toFixed(2));
-                
+
                 if (formattedBalance > oldBalance) {
                     app.earned = (app.earned || 0) + (formattedBalance - oldBalance);
                 } else if (formattedBalance === 0 && oldBalance > 0) {
                     app.earned = Math.max(0, (app.earned || 0) - oldBalance);
                 }
-                
+
                 app.balance = formattedBalance;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
-                
+
+                const today = new Date().toISOString().split('T')[0];
+                if (!app.dailyEarnedHistory) {
+                    app.dailyEarnedHistory = {};
+                }
+                app.dailyEarnedHistory[today] = app.earned;
+
                 this.saveData(data);
                 this.calculateYearlyGoal();
             }
@@ -1011,6 +1049,8 @@ class DataManager {
 let currentPhoneId = null;
 let currentAppId = null;
 let expandedPhones = {};
+let currentTodayEarnPhoneId = null;
+let currentTodayEarnTab = 'phone'; // 'phone' 或 'app'
 
 // 初始化
 function init() {
@@ -1268,6 +1308,7 @@ function showPage(pageName) {
     if (pageName === 'withdraw-records') renderWithdrawRecords();
     if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
+    if (pageName === 'today-earn') renderTodayEarnPage();
     
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(page => {
@@ -1284,6 +1325,300 @@ function showPage(pageName) {
             item.classList.add('active');
         }
     });
+}
+
+// 显示今日赚取页面
+function showTodayEarnPage(phoneId) {
+    currentTodayEarnPhoneId = phoneId;
+    currentTodayEarnTab = 'phone';
+    
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === phoneId);
+    if (phone) {
+        document.getElementById('today-earn-title').textContent = `${phone.name} - 今日赚取`;
+    }
+    
+    // 重置切换按钮状态
+    document.getElementById('tab-phone-earn').classList.add('active');
+    document.getElementById('tab-app-earn').classList.remove('active');
+    document.getElementById('phone-earn-content').classList.remove('hidden');
+    document.getElementById('app-earn-content').classList.add('hidden');
+    
+    showPage('today-earn');
+}
+
+// 切换今日赚取标签页
+function switchTodayEarnTab(tab) {
+    currentTodayEarnTab = tab;
+    
+    // 更新按钮状态
+    document.getElementById('tab-phone-earn').classList.toggle('active', tab === 'phone');
+    document.getElementById('tab-app-earn').classList.toggle('active', tab === 'app');
+    
+    // 显示/隐藏内容
+    document.getElementById('phone-earn-content').classList.toggle('hidden', tab !== 'phone');
+    document.getElementById('app-earn-content').classList.toggle('hidden', tab !== 'app');
+    
+    // 重新渲染
+    renderTodayEarnPage();
+}
+
+// 渲染今日赚取页面
+function renderTodayEarnPage() {
+    if (!currentTodayEarnPhoneId) return;
+    
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === currentTodayEarnPhoneId);
+    if (!phone) return;
+    
+    if (currentTodayEarnTab === 'phone') {
+        renderPhoneEarnContent(phone, data);
+    } else {
+        renderAppEarnContent(phone, data);
+    }
+}
+
+// 渲染手机今日赚取内容
+function renderPhoneEarnContent(phone, data) {
+    const settings = data.settings;
+    const yearlyGoal = settings.yearlyGoal || 0;
+    const phoneCount = data.phones.length || 1;
+    const currentYear = getCurrentYear();
+    const yearDays = getYearDays(currentYear);
+    const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
+    
+    // 收集所有历史记录
+    const allDates = new Set();
+    const dateStats = {};
+    
+    phone.apps.forEach(app => {
+        const history = app.dailyEarnedHistory || {};
+        Object.keys(history).forEach(date => {
+            allDates.add(date);
+            if (!dateStats[date]) {
+                dateStats[date] = {
+                    totalEarned: 0,
+                    totalTarget: dailyTarget,
+                    apps: []
+                };
+            }
+        });
+    });
+    
+    // 计算每天的赚取情况
+    const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a));
+    
+    // 计算今日数据：各软件已赚金额相比上次记录的变化之和
+    let todayEarned = 0;
+    phone.apps.forEach(app => {
+        const history = app.dailyEarnedHistory || {};
+        const currentEarned = app.earned || 0;
+        // 获取最近一次记录的已赚金额
+        const dates = Object.keys(history).sort();
+        let lastRecordedEarned = 0;
+        if (dates.length > 0) {
+            lastRecordedEarned = history[dates[dates.length - 1]];
+        }
+        const change = currentEarned - lastRecordedEarned;
+        if (change > 0) {
+            todayEarned += change;
+        }
+    });
+
+    const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
+    
+    // 更新概览数据
+    document.getElementById('phone-daily-target').textContent = `¥${dailyTarget.toFixed(2)}`;
+    document.getElementById('phone-today-earned').textContent = `¥${todayEarned.toFixed(2)}`;
+    document.getElementById('phone-today-progress').textContent = `${progress}%`;
+    document.getElementById('phone-progress-fill').style.width = `${progress}%`;
+    
+    // 渲染历史记录
+    const container = document.getElementById('phone-earn-records');
+    if (sortedDates.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无赚取记录</div>';
+        return;
+    }
+    
+    // 按日期分组计算每天的赚取
+    let html = '';
+    sortedDates.forEach(date => {
+        let dayEarned = 0;
+        let dayTarget = dailyTarget;
+        let appChanges = [];
+        
+        phone.apps.forEach(app => {
+            const history = app.dailyEarnedHistory || {};
+            const dateEarned = history[date] || app.earned || 0;
+
+            // 找到前一天的记录
+            const dateObj = new Date(date);
+            const prevDate = new Date(dateObj - 86400000).toISOString().split('T')[0];
+            let prevEarned = history[prevDate];
+            if (prevEarned === undefined) {
+                // 找最近的历史记录
+                const dates = Object.keys(history).filter(d => d < date).sort();
+                if (dates.length > 0) {
+                    prevEarned = history[dates[dates.length - 1]];
+                } else {
+                    prevEarned = 0;
+                }
+            }
+
+            const change = dateEarned - prevEarned;
+            if (change > 0) {
+                dayEarned += change;
+                appChanges.push({
+                    name: app.name,
+                    amount: change,
+                    target: app.minWithdraw
+                });
+            }
+        });
+        
+        // 只显示有赚取的日期
+        if (dayEarned > 0) {
+            const dayProgress = dayTarget > 0 ? Math.min(100, Math.round((dayEarned / dayTarget) * 100)) : 0;
+            
+            html += `
+                <div class="earn-date-group">
+                    <div class="earn-date-header">
+                        <div class="earn-date">${date}</div>
+                        <div class="earn-date-stats">
+                            <span class="earn-date-total">+¥${dayEarned.toFixed(2)}</span>
+                            <span class="earn-date-progress">${dayProgress}%</span>
+                        </div>
+                    </div>
+            `;
+            
+            appChanges.forEach(app => {
+                const appProgress = app.target > 0 ? Math.min(100, Math.round((app.amount / app.target) * 100)) : 0;
+                html += `
+                    <div class="earn-record-item">
+                        <div class="earn-record-header">
+                            <span class="earn-record-name">${app.name}</span>
+                            <span class="earn-record-amount">+¥${app.amount.toFixed(2)}</span>
+                        </div>
+                        <div class="earn-record-details">
+                            <span class="earn-record-target">目标: ¥${app.target.toFixed(2)}</span>
+                        </div>
+                        <div class="earn-record-progress">
+                            <div class="earn-progress-bar">
+                                <div class="earn-progress-fill" style="width: ${appProgress}%"></div>
+                            </div>
+                            <span class="earn-progress-text">${appProgress}%</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+    });
+    
+    container.innerHTML = html || '<div class="empty-state">暂无赚取记录</div>';
+}
+
+// 渲染软件今日赚取内容
+function renderAppEarnContent(phone, data) {
+    const settings = data.settings;
+    const yearlyGoal = settings.yearlyGoal || 0;
+    const phoneCount = data.phones.length || 1;
+    const currentYear = getCurrentYear();
+    const yearDays = getYearDays(currentYear);
+    const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
+    const appCount = phone.apps.length || 1;
+    const appDailyTarget = dailyTarget / appCount;
+    
+    // 收集所有软件的历史记录
+    const appRecords = [];
+    let totalChangedApps = 0;
+    let totalEarned = 0;
+    
+    phone.apps.forEach(app => {
+        const history = app.dailyEarnedHistory || {};
+        const dates = Object.keys(history).sort((a, b) => new Date(b) - new Date(a));
+        
+        const records = [];
+        let appTotalEarned = 0;
+        let hasChanges = false;
+        
+        dates.forEach((date, index) => {
+            const dateEarned = history[date];
+            const prevDate = dates[index + 1];
+            const prevEarned = prevDate ? history[prevDate] : dateEarned;
+            const change = dateEarned - prevEarned;
+            
+            if (change > 0) {
+                records.push({
+                    date: date,
+                    amount: change,
+                    target: app.minWithdraw
+                });
+                appTotalEarned += change;
+                hasChanges = true;
+            }
+        });
+        
+        if (hasChanges) {
+            totalChangedApps++;
+            totalEarned += appTotalEarned;
+        }
+        
+        if (records.length > 0) {
+            appRecords.push({
+                app: app,
+                records: records,
+                totalEarned: appTotalEarned
+            });
+        }
+    });
+    
+    // 更新概览数据
+    document.getElementById('app-total-count').textContent = phone.apps.length;
+    document.getElementById('app-changed-count').textContent = totalChangedApps;
+    document.getElementById('app-total-earned').textContent = `¥${totalEarned.toFixed(2)}`;
+    
+    // 渲染软件记录
+    const container = document.getElementById('app-earn-records');
+    if (appRecords.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无软件赚取记录</div>';
+        return;
+    }
+    
+    let html = '';
+    appRecords.forEach(({ app, records, totalEarned }) => {
+        html += `
+            <div class="app-earn-group">
+                <div class="app-earn-header">
+                    <span class="app-earn-name">${app.name}</span>
+                    <span class="app-earn-total">+¥${totalEarned.toFixed(2)}</span>
+                </div>
+        `;
+        
+        records.forEach(record => {
+            const progress = record.target > 0 ? Math.min(100, Math.round((record.amount / record.target) * 100)) : 0;
+            html += `
+                <div class="app-earn-record">
+                    <div class="app-earn-date-row">
+                        <span class="app-earn-date">${record.date}</span>
+                        <span class="app-earn-amount">+¥${record.amount.toFixed(2)}</span>
+                    </div>
+                    <div class="app-earn-progress-row">
+                        <div class="earn-progress-bar">
+                            <div class="earn-progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                        <span class="earn-progress-text">${progress}%</span>
+                        <span class="app-earn-target">目标: ¥${record.target.toFixed(2)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `</div>`;
+    });
+    
+    container.innerHTML = html;
 }
 
 // 渲染仪表盘
@@ -1436,19 +1771,23 @@ function renderPhones() {
         const yearDays = getYearDays(currentYear);
         const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
         
-        // 计算今日已赚（简化计算：使用今日新增的余额）
-        const today = new Date().toISOString().split('T')[0];
+        // 计算今日已赚：各软件已赚金额相比上次记录的变化之和
         let todayEarned = 0;
         phone.apps.forEach(app => {
-            if (app.withdrawals && app.withdrawals.length > 0) {
-                app.withdrawals.forEach(w => {
-                    if (w.date === today) {
-                        todayEarned += w.amount;
-                    }
-                });
+            const history = app.dailyEarnedHistory || {};
+            const currentEarned = app.earned || 0;
+            // 获取最近一次记录的已赚金额
+            const dates = Object.keys(history).sort();
+            let lastRecordedEarned = 0;
+            if (dates.length > 0) {
+                lastRecordedEarned = history[dates[dates.length - 1]];
+            }
+            const change = currentEarned - lastRecordedEarned;
+            if (change > 0) {
+                todayEarned += change;
             }
         });
-        
+
         const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
         
         // 根据索引选择胶囊颜色
@@ -1458,45 +1797,51 @@ function renderPhones() {
         return `
             <div class="phone-card" data-phone-id="${phone.id}" data-index="${index}">
                 <div class="phone-header">
-                    <div class="phone-header-content">
+                    <div class="phone-header-top">
                         <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
-                    </div>
-                    <div class="daily-goal-progress">
-                        <div class="daily-goal-header">
-                            <span class="daily-goal-label">每日目标：¥${dailyTarget.toFixed(2)}</span>
-                            <span class="daily-earned-label">今日已赚：¥${todayEarned.toFixed(2)}</span>
-                        </div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar-bg">
-                                <div class="progress-bar-fill" style="width: ${progress}%"></div>
-                                <span class="progress-bar-text">${progress}%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="phone-header-middle">
-                        <div class="phone-stats-row">
-                            <div class="phone-stat-card">
-                                <div class="phone-stat-icon">💰</div>
-                                <div class="phone-stat-info">
-                                    <div class="phone-stat-value">¥${totalEarned.toFixed(2)}</div>
-                                    <div class="phone-stat-label">总赚取</div>
-                                </div>
-                            </div>
-                            <div class="phone-stat-card">
-                                <div class="phone-stat-icon">💳</div>
-                                <div class="phone-stat-info">
-                                    <div class="phone-stat-value">¥${totalBalance.toFixed(2)}</div>
-                                    <div class="phone-stat-label">总余额</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="phone-header-right">
+                        <div class="phone-header-actions">
+                            <button class="btn-today-earn" onclick="showTodayEarnPage('${phone.id}')" title="今日赚取">📊 今日赚取</button>
                             <div class="phone-icon-buttons">
                                 <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
                                 <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
                                 <button class="btn btn-icon" onclick="togglePhoneExpand('${phone.id}')">
                                     ${isExpanded ? '▼' : '▶'}
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="phone-header-stats">
+                        <div class="phone-stat-item">
+                            <span class="stat-icon">💰</span>
+                            <div class="stat-content">
+                                <span class="stat-label">总赚取</span>
+                                <span class="stat-value">¥${totalEarned.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div class="phone-stat-item">
+                            <span class="stat-icon">💳</span>
+                            <div class="stat-content">
+                                <span class="stat-label">总余额</span>
+                                <span class="stat-value">¥${totalBalance.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div class="phone-stat-item daily-stat">
+                            <div class="daily-info">
+                                <div class="daily-row">
+                                    <span class="daily-label">目标</span>
+                                    <span class="daily-value">¥${dailyTarget.toFixed(2)}</span>
+                                </div>
+                                <div class="daily-row">
+                                    <span class="daily-label">已赚</span>
+                                    <span class="daily-value earned">¥${todayEarned.toFixed(2)}</span>
+                                </div>
+                            </div>
+                            <div class="daily-progress-ring">
+                                <svg viewBox="0 0 36 36" class="circular-chart">
+                                    <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    <path class="circle" stroke-dasharray="${progress}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    <text x="18" y="20.35" class="percentage">${progress}%</text>
+                                </svg>
                             </div>
                         </div>
                     </div>
@@ -1517,18 +1862,31 @@ function renderAppList(phone) {
             </div>
         `;
     }
-    
+
     const now = new Date();
     const startDate = new Date('2026-01-01');
     const daysFromStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) + 1;
-    
+
+    // 计算该手机的每日目标
+    const data = DataManager.loadData();
+    const settings = data.settings;
+    const yearlyGoal = settings.yearlyGoal || 0;
+    const phoneCount = data.phones.length || 1;
+    const currentYear = getCurrentYear();
+    const yearDays = getYearDays(currentYear);
+    const phoneDailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
+
+    // 计算每个软件的每日目标
+    const appCount = phone.apps.length || 1;
+    const appDailyTarget = phoneDailyTarget / appCount;
+
     return phone.apps.map(app => {
         const shouldHaveEarned = daysFromStart * app.minWithdraw;
         const earned = app.earned || app.balance || 0;
         const daysIncome = Math.floor(earned / app.minWithdraw);
         const nextPlayDate = calculateNextPlayDate(earned, app.minWithdraw);
         const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
-        
+
         return `
             <div class="app-card">
                 <div class="app-header">
@@ -1544,6 +1902,9 @@ function renderAppList(phone) {
                 <div class="app-info-row">
                     <span>最小提现: ¥${(app.minWithdraw || 0).toFixed(2)}</span>
                     <span>已赚金额: ¥${earned.toFixed(2)}</span>
+                </div>
+                <div class="app-info-row">
+                    <span>每日目标: ¥${appDailyTarget.toFixed(2)}</span>
                 </div>
                 <div class="progress-section">
                     <div class="progress-header">
@@ -1779,19 +2140,17 @@ function openAddAppModal(phoneId) {
             predictionContainer.innerHTML = `
                 <div class="prediction-list">
                     ${predictions.map(app => `
-                        <div class="prediction-item" onclick="selectPrediction('${app.name}', ${app.minWithdraw}, ${app.balance || 0})")>
+                        <div class="prediction-item" onclick="selectPrediction('${app.name}', ${app.minWithdraw})")>
                             <div class="prediction-name">${app.name}</div>
                             <div class="prediction-details">
                                 <span>最小提现: ¥${app.minWithdraw.toFixed(2)}</span>
-                                <span>余额: ¥${(app.balance || 0).toFixed(2)}</span>
                             </div>
                         </div>
                     `).join('')}
-                    <div class="prediction-item prediction-recommend" onclick="selectPrediction('', ${avgMinWithdraw.toFixed(2)}, ${avgBalance.toFixed(2)})")>
+                    <div class="prediction-item prediction-recommend" onclick="selectPrediction('', ${avgMinWithdraw.toFixed(2)})")>
                         <div class="prediction-name">💡 智能推荐</div>
                         <div class="prediction-details">
                             <span>最小提现: ¥${avgMinWithdraw.toFixed(2)}</span>
-                            <span>余额: ¥${avgBalance.toFixed(2)}</span>
                         </div>
                     </div>
                 </div>
@@ -1805,11 +2164,10 @@ function openAddAppModal(phoneId) {
             
             predictionContainer.innerHTML = `
                 <div class="prediction-list">
-                    <div class="prediction-item prediction-recommend" onclick="selectPrediction('', ${avgMinWithdraw.toFixed(2)}, ${avgBalance.toFixed(2)})")>
+                    <div class="prediction-item prediction-recommend" onclick="selectPrediction('', ${avgMinWithdraw.toFixed(2)})")>
                         <div class="prediction-name">💡 智能推荐（基于历史平均值）</div>
                         <div class="prediction-details">
                             <span>最小提现: ¥${avgMinWithdraw.toFixed(2)}</span>
-                            <span>余额: ¥${avgBalance.toFixed(2)}</span>
                         </div>
                     </div>
                 </div>
@@ -1819,10 +2177,9 @@ function openAddAppModal(phoneId) {
 }
 
 // 选择预测结果
-function selectPrediction(name, minWithdraw, balance) {
+function selectPrediction(name, minWithdraw) {
     document.getElementById('app-name').value = name;
     document.getElementById('app-min-withdraw').value = minWithdraw;
-    document.getElementById('app-balance').value = balance;
     document.getElementById('app-prediction').innerHTML = '';
 }
 
@@ -2087,18 +2444,17 @@ function calculateForecast() {
             <div class="app-name">${item.phoneName} - ${item.appName}</div>
             <div class="app-info">
                 <span>最小提现: ¥${item.minWithdraw.toFixed(2)}</span>
-                <span>当前已赚: ¥${item.currentEarned.toFixed(2)}</span>
-            </div>
-            <div class="app-info">
                 <span>相当于: ${item.daysEarned} 天</span>
+            </div>
+            <div class="app-info">
                 <span>等效日期: ${item.equivalentDateStr}</span>
-            </div>
-            <div class="app-info">
                 <span>目标日期: ${targetDateStr}</span>
-                <span>比较结果: ${item.comparisonResult}</span>
             </div>
             <div class="app-info">
+                <span>比较结果: ${item.comparisonResult}</span>
                 <span>到目标日期应赚: ¥${item.totalShouldEarn.toFixed(2)}</span>
+            </div>
+            <div class="app-info">
                 <span>还需赚取: ¥${item.neededAmount.toFixed(2)}</span>
             </div>
         </div>
@@ -2118,14 +2474,22 @@ function renderSettings() {
         yearDaysHint.textContent = `${currentYear}年共${yearDays}天${yearDays === 366 ? '（闰年）' : ''}`;
     }
     
-    // 计算剩余提现金额
+    // 计算待支出余额（总提现金额 - 总支出金额）
     let totalWithdrawn = 0;
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
             totalWithdrawn += app.remainingWithdrawn || app.withdrawn || 0;
         });
     });
-    document.getElementById('total-withdrawn').value = totalWithdrawn.toFixed(2);
+    
+    // 计算总支出金额
+    let totalExpenses = 0;
+    if (data.expenses && data.expenses.length > 0) {
+        totalExpenses = data.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+    }
+    
+    const pendingExpenseBalance = totalWithdrawn - totalExpenses;
+    document.getElementById('total-withdrawn').value = pendingExpenseBalance.toFixed(2);
 }
 
 // 添加支出
@@ -2637,6 +3001,109 @@ function restoreFromCode() {
     ]);
 }
 
+// 导出数据为JSON格式（包含所有数据）
+function exportJSON() {
+    const data = DataManager.loadData();
+    
+    // 构建完整的导出数据结构
+    const exportData = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        data: data
+    };
+    
+    // 转换为格式化的JSON字符串
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    
+    // 创建Blob并下载
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `moneyApp_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('数据已导出为JSON格式！');
+}
+
+// 导入JSON数据
+function importJSON() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+                
+                // 验证数据格式
+                let dataToImport = null;
+                
+                // 检查是否是新的导出格式（包含version和data字段）
+                if (importedData.version && importedData.data) {
+                    dataToImport = importedData.data;
+                } else if (importedData.phones && Array.isArray(importedData.phones)) {
+                    // 旧格式直接导入
+                    dataToImport = importedData;
+                } else {
+                    showToast('数据格式错误：无法识别的文件格式');
+                    return;
+                }
+                
+                // 验证必要字段
+                if (!Array.isArray(dataToImport.phones)) {
+                    showToast('数据格式错误：缺少手机数据');
+                    return;
+                }
+                
+                // 确保所有必要字段都存在
+                const validatedData = {
+                    phones: dataToImport.phones || [],
+                    installments: dataToImport.installments || [],
+                    expenses: dataToImport.expenses || [],
+                    settings: dataToImport.settings || { yearlyGoal: 10000 }
+                };
+                
+                // 显示确认对话框，包含数据摘要
+                const phoneCount = validatedData.phones.length;
+                const appCount = validatedData.phones.reduce((sum, phone) => sum + (phone.apps ? phone.apps.length : 0), 0);
+                const expenseCount = validatedData.expenses.length;
+                const installmentCount = validatedData.installments.length;
+                
+                const confirmMessage = `导入数据将覆盖当前所有数据，是否继续？\n\n导入数据摘要：\n- 手机数量：${phoneCount}\n- 软件数量：${appCount}\n- 支出记录：${expenseCount}\n- 分期还款：${installmentCount}`;
+                
+                if (confirm(confirmMessage)) {
+                    DataManager.saveData(validatedData);
+                    renderDashboard();
+                    renderPhones();
+                    renderStats();
+                    renderSettings();
+                    renderInstallments();
+                    showToast('数据导入成功！');
+                }
+            } catch (error) {
+                console.error('导入错误:', error);
+                showToast('文件格式错误：' + error.message);
+            }
+        };
+        reader.onerror = () => {
+            showToast('文件读取失败');
+        };
+        reader.readAsText(file);
+    };
+    
+    input.click();
+}
+
 // 导出数据为Excel兼容格式（CSV）
 function exportData() {
     const data = DataManager.loadData();
@@ -2692,42 +3159,9 @@ function exportData() {
     showToast('数据已导出为Excel格式！');
 }
 
-// 导入数据
+// 导入数据（兼容旧版JSON格式）
 function importData() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const importedData = JSON.parse(event.target.result);
-                
-                if (!importedData.phones || !Array.isArray(importedData.phones)) {
-                    showToast('数据格式错误');
-                    return;
-                }
-                
-                if (confirm('导入数据将覆盖当前所有数据，是否继续？')) {
-                    DataManager.saveData(importedData);
-                    renderDashboard();
-                    renderPhones();
-                    renderStats();
-                    renderSettings();
-                    showToast('导入成功！');
-                }
-            } catch (error) {
-                showToast('文件格式错误');
-            }
-        };
-        reader.readAsText(file);
-    };
-    
-    input.click();
+    importJSON();
 }
 
 // 清空所有数据
