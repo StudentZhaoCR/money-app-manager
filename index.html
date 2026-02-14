@@ -467,6 +467,34 @@
         </div>
     </div>
 
+    <!-- 游戏抽签弹窗 -->
+    <div class="game-draw-modal" id="game-draw-modal" style="display: none;">
+        <div class="game-draw-modal-content" onclick="event.stopPropagation()">
+            <div class="modal-title">🎮 游戏抽签</div>
+            <div class="game-draw-body" id="game-draw-body">
+                <!-- 游戏管理区域 -->
+                <div class="game-manage-section" id="game-manage-section">
+                    <div class="section-subtitle">管理游戏列表</div>
+                    <div class="game-list" id="game-list"></div>
+                    <div class="game-add-form">
+                        <input type="text" id="new-game-name" class="form-input" placeholder="输入游戏名称">
+                        <button class="btn btn-primary" onclick="addGame()">添加游戏</button>
+                    </div>
+                </div>
+                
+                <!-- 抽签结果区域 -->
+                <div class="game-draw-result-section hidden" id="game-draw-result-section">
+                    <div class="draw-result-title">🎯 今日游戏任务</div>
+                    <div class="game-draw-list" id="game-draw-list"></div>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeGameDrawModal()">关闭</button>
+                <button class="btn btn-primary" id="game-draw-btn" onclick="startGameDraw()">开始抽签</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 提示消息 -->
     <div class="toast" id="toast" style="display: none;"></div>
 

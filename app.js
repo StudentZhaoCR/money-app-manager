@@ -930,6 +930,42 @@ class DataManager {
         return data;
     }
 
+    // ==================== 游戏管理功能 ====================
+    
+    static addGame(phoneId, gameName) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone) {
+            if (!phone.games) {
+                phone.games = [];
+            }
+            const game = {
+                id: Date.now().toString(),
+                name: gameName,
+                addedDate: new Date().toISOString()
+            };
+            phone.games.push(game);
+            this.saveData(data);
+        }
+        return data;
+    }
+    
+    static deleteGame(phoneId, gameId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone && phone.games) {
+            phone.games = phone.games.filter(g => g.id !== gameId);
+            this.saveData(data);
+        }
+        return data;
+    }
+    
+    static getGames(phoneId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        return phone ? (phone.games || []) : [];
+    }
+
     static clearAllData() {
         // 清除旧的存储键
         localStorage.removeItem(DATA_KEY);
@@ -1867,6 +1903,7 @@ function renderPhones() {
                         <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
                         <div class="phone-header-actions">
                             <button class="btn-today-earn" onclick="showTodayEarnPage('${phone.id}')" title="今日赚取">📊 今日赚取</button>
+                            <button class="btn-game-draw" onclick="openGameDrawModal('${phone.id}')" title="游戏抽签">🎮 游戏抽签</button>
                             <div class="phone-icon-buttons">
                                 <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
                                 <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
@@ -3489,6 +3526,185 @@ function initCalendars() {
             input: 'expense-date'
         });
     }
+}
+
+// ==================== 游戏抽签功能 ====================
+
+let currentGameDrawPhoneId = null;
+
+// 打开游戏抽签弹窗
+function openGameDrawModal(phoneId) {
+    currentGameDrawPhoneId = phoneId;
+    const modal = document.getElementById('game-draw-modal');
+    const manageSection = document.getElementById('game-manage-section');
+    const resultSection = document.getElementById('game-draw-result-section');
+    const drawBtn = document.getElementById('game-draw-btn');
+    
+    // 重置状态
+    manageSection.classList.remove('hidden');
+    resultSection.classList.add('hidden');
+    drawBtn.textContent = '开始抽签';
+    drawBtn.onclick = startGameDraw;
+    
+    // 加载游戏列表
+    renderGameList();
+    
+    modal.style.display = 'flex';
+}
+
+// 关闭游戏抽签弹窗
+function closeGameDrawModal() {
+    const modal = document.getElementById('game-draw-modal');
+    modal.style.display = 'none';
+    currentGameDrawPhoneId = null;
+}
+
+// 渲染游戏列表
+function renderGameList() {
+    const games = DataManager.getGames(currentGameDrawPhoneId);
+    const container = document.getElementById('game-list');
+    
+    if (games.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无游戏，请添加游戏</div>';
+        return;
+    }
+    
+    let html = '';
+    games.forEach(game => {
+        html += `
+            <div class="game-item">
+                <span class="game-name">${game.name}</span>
+                <button class="btn btn-error btn-sm" onclick="deleteGame('${game.id}')">删除</button>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 添加游戏
+function addGame() {
+    const input = document.getElementById('new-game-name');
+    const gameName = input.value.trim();
+    
+    if (!gameName) {
+        showToast('请输入游戏名称', 'warning');
+        return;
+    }
+    
+    DataManager.addGame(currentGameDrawPhoneId, gameName);
+    input.value = '';
+    renderGameList();
+    showToast('游戏添加成功', 'success');
+}
+
+// 删除游戏
+function deleteGame(gameId) {
+    if (confirm('确定要删除这个游戏吗？')) {
+        DataManager.deleteGame(currentGameDrawPhoneId, gameId);
+        renderGameList();
+        showToast('游戏删除成功', 'success');
+    }
+}
+
+// 随机打乱数组
+function shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
+// 随机生成游玩时间（15-60分钟）
+function getRandomPlayTime() {
+    // 生成15-60分钟，步进5分钟
+    const times = [15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
+    return times[Math.floor(Math.random() * times.length)];
+}
+
+// 开始游戏抽签
+function startGameDraw() {
+    const games = DataManager.getGames(currentGameDrawPhoneId);
+    
+    if (games.length === 0) {
+        showToast('请先添加游戏', 'warning');
+        return;
+    }
+    
+    const manageSection = document.getElementById('game-manage-section');
+    const resultSection = document.getElementById('game-draw-result-section');
+    const drawBtn = document.getElementById('game-draw-btn');
+    const resultList = document.getElementById('game-draw-list');
+    
+    // 禁用按钮
+    drawBtn.disabled = true;
+    drawBtn.textContent = '抽签中...';
+    
+    // 动画效果
+    let animationCount = 0;
+    const emojis = ['🎲', '🎯', '🎰', '🎪', '🎨'];
+    
+    const animationInterval = setInterval(() => {
+        drawBtn.textContent = `抽签中 ${emojis[animationCount % emojis.length]}`;
+        animationCount++;
+        
+        if (animationCount >= 8) {
+            clearInterval(animationInterval);
+            
+            // 执行抽签
+            const result = performGameDraw(games);
+            
+            // 显示结果
+            displayGameDrawResult(result, resultList);
+            
+            // 切换显示
+            manageSection.classList.add('hidden');
+            resultSection.classList.remove('hidden');
+            
+            // 更新按钮
+            drawBtn.disabled = false;
+            drawBtn.textContent = '重新抽签';
+        }
+    }, 200);
+}
+
+// 执行游戏抽签
+function performGameDraw(games) {
+    // 随机决定抽取游戏数量 (1-3个，但不超过总数)
+    const maxGames = Math.min(3, games.length);
+    const minGames = 1;
+    const gameCount = Math.floor(Math.random() * (maxGames - minGames + 1)) + minGames;
+    
+    // 随机选择游戏
+    const shuffledGames = shuffleArray(games);
+    const selectedGames = shuffledGames.slice(0, gameCount);
+    
+    // 为每个游戏分配游玩时间
+    return selectedGames.map(game => ({
+        ...game,
+        playTime: getRandomPlayTime()
+    }));
+}
+
+// 显示游戏抽签结果
+function displayGameDrawResult(result, container) {
+    let html = '';
+    
+    result.forEach((game, index) => {
+        html += `
+            <div class="game-draw-item" style="animation-delay: ${index * 0.1}s">
+                <div class="game-draw-order">#${index + 1}</div>
+                <div class="game-draw-info">
+                    <span class="game-draw-name">${game.name}</span>
+                    <span class="game-draw-time">⏱️ ${game.playTime} 分钟</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
 }
 
 // 点击模态框背景关闭

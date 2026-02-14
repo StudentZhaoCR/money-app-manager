@@ -3348,4 +3348,297 @@ body {
     }
 }
 
+/* ==================== 游戏抽签样式 ==================== */
+
+/* 游戏抽签按钮 */
+.btn-game-draw {
+    background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    font-family: var(--font-display);
+}
+
+.btn-game-draw:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+}
+
+/* 游戏抽签弹窗 - 独立样式 */
+.game-draw-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(5px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.game-draw-modal-content {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+    max-width: 420px;
+    max-height: 80vh;
+    width: 100%;
+    animation: modalSlideIn 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.game-draw-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.game-draw-modal-content .modal-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-display);
+}
+
+.game-draw-modal-content .modal-buttons {
+    display: flex;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.game-draw-modal-content .modal-buttons .btn {
+    flex: 1;
+}
+
+/* 游戏管理区域 */
+.game-manage-section {
+    padding: 20px;
+}
+
+.section-subtitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    font-family: var(--font-display);
+}
+
+/* 游戏列表 */
+.game-list {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-primary);
+    padding: 12px;
+}
+
+.game-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+.game-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.game-item:last-child {
+    margin-bottom: 0;
+}
+
+.game-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* 添加游戏表单 */
+.game-add-form {
+    display: flex;
+    gap: 10px;
+}
+
+.game-add-form .form-input {
+    flex: 1;
+}
+
+.game-add-form .btn {
+    white-space: nowrap;
+}
+
+/* 抽签结果区域 */
+.game-draw-result-section {
+    padding: 20px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.draw-result-title {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--primary-color);
+    margin-bottom: 24px;
+    font-family: var(--font-display);
+}
+
+.draw-result-title::before,
+.draw-result-title::after {
+    content: '🎯';
+    margin: 0 8px;
+}
+
+.game-draw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* 抽签结果项 */
+.game-draw-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-cream) 100%);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    border: 2px solid var(--primary-light);
+    animation: slideInUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+@keyframes slideInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.game-draw-order {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--primary-color);
+    background: var(--bg-cream);
+    padding: 8px 14px;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--primary-light);
+    min-width: 40px;
+    text-align: center;
+}
+
+.game-draw-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.game-draw-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+}
+
+.game-draw-time {
+    font-size: 14px;
+    font-weight: 600;
+    color: #16a34a;
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    display: inline-block;
+    width: fit-content;
+}
+
+/* 响应式适配 */
+@media (max-width: 480px) {
+    .btn-game-draw {
+        font-size: 12px;
+        padding: 6px 12px;
+    }
+    
+    .game-draw-modal {
+        padding: 10px;
+    }
+    
+    .game-draw-modal-content {
+        max-width: 95%;
+    }
+    
+    .game-manage-section,
+    .game-draw-result-section {
+        padding: 16px;
+    }
+    
+    .game-item {
+        padding: 8px 10px;
+    }
+    
+    .game-name {
+        font-size: 14px;
+    }
+    
+    .game-add-form {
+        flex-direction: column;
+    }
+    
+    .game-add-form .btn {
+        width: 100%;
+    }
+    
+    .draw-result-title {
+        font-size: 18px;
+    }
+    
+    .game-draw-item {
+        padding: 14px 16px;
+        gap: 12px;
+    }
+    
+    .game-draw-order {
+        font-size: 16px;
+        padding: 6px 10px;
+        min-width: 32px;
+    }
+    
+    .game-draw-name {
+        font-size: 16px;
+    }
+    
+    .game-draw-time {
+        font-size: 13px;
+        padding: 4px 10px;
+    }
+}
+
 
