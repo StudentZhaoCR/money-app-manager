@@ -3037,6 +3037,20 @@ body {
     border: 2px solid var(--border-color);
 }
 
+/* 今天的记录特殊样式 */
+.earn-date-group.today {
+    border: 3px solid var(--primary-color);
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.3);
+}
+
+.earn-date-group.today .earn-date-header {
+    background: linear-gradient(135deg, #8b5cf6, #ec4899);
+}
+
+.earn-date-group.today .earn-date {
+    font-size: 16px;
+}
+
 .earn-date-header {
     background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
     color: white;
