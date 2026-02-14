@@ -776,18 +776,16 @@ class DataManager {
                     app.dailyEarnedHistory = {};
                 }
                 
-                // 只在今天还没有记录时才保存基准值（今天开始时的earned值）
-                // 这样可以确保今日赚取计算正确：当前值 - 今天基准值
-                if (app.dailyEarnedHistory[today] === undefined) {
-                    app.dailyEarnedHistory[today] = oldEarned;
-                }
-
                 // 更新已赚金额：如果余额增加，earned也增加；如果余额减少，earned不变（因为可能是提现）
                 if (balanceChange > 0) {
                     // 余额增加，说明有新收入
                     app.earned = oldEarned + balanceChange;
                 }
                 // 如果余额减少，可能是提现，earned保持不变
+
+                // 保存今天最终的 earned 值（用于历史记录显示）
+                // 注意：这里保存的是今天的最终值，不是基准值
+                app.dailyEarnedHistory[today] = app.earned;
 
                 app.balance = formattedBalance;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
@@ -797,12 +795,10 @@ class DataManager {
                 if (!phone.dailyTotalEarnedHistory) {
                     phone.dailyTotalEarnedHistory = {};
                 }
-                // 计算编辑前的手机总赚取
-                const oldTotalEarned = phone.apps.reduce((sum, a) => sum + (a.id === appId ? oldEarned : (a.earned || 0)), 0);
-                // 只在今天还没有记录时才保存基准值
-                if (phone.dailyTotalEarnedHistory[today] === undefined) {
-                    phone.dailyTotalEarnedHistory[today] = oldTotalEarned;
-                }
+                // 计算当前手机总赚取
+                const currentTotalEarned = phone.apps.reduce((sum, a) => sum + (a.earned || 0), 0);
+                // 保存今天的最终总赚取
+                phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
 
                 this.saveData(data);
                 this.calculateYearlyGoal();
@@ -1446,14 +1442,26 @@ function renderPhoneEarnContent(phone, data) {
     // 计算每天的赚取情况
     const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a));
     
-    // 计算今日数据：手机总赚取金额相比今天首次记录的变化
+    // 计算今日数据
     const today = new Date().toISOString().split('T')[0];
     const phoneHistory = phone.dailyTotalEarnedHistory || {};
     const currentTotalEarned = phone.apps.reduce((sum, a) => sum + (a.earned || 0), 0);
-    // 获取今天首次记录的总赚取金额（0点时的基准）
-    // 注意：如果今天没有记录，使用当前总值作为基准（今日赚取为0）
-    const todayStartEarned = phoneHistory.hasOwnProperty(today) ? phoneHistory[today] : currentTotalEarned;
-    const todayEarned = Math.max(0, currentTotalEarned - todayStartEarned);
+    
+    // 找到昨天结束时的总赚取作为今天开始的基准
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    let yesterdayTotal = phoneHistory[yesterday];
+    if (yesterdayTotal === undefined) {
+        // 找最近的历史记录
+        const dates = Object.keys(phoneHistory).filter(d => d < today).sort();
+        if (dates.length > 0) {
+            yesterdayTotal = phoneHistory[dates[dates.length - 1]];
+        } else {
+            yesterdayTotal = 0;
+        }
+    }
+    
+    // 今日赚取 = 当前总赚取 - 昨天结束时的总赚取
+    const todayEarned = Math.max(0, currentTotalEarned - yesterdayTotal);
 
     const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
     
@@ -1597,15 +1605,18 @@ function renderAppEarnContent(phone, data) {
                 }
             }
             
-            const dailyEarned = Math.max(0, dateEarned - prevEarned);
+            // 计算当日赚取
+            let displayEarned = 0;
             
-            // 实时计算今日赚取（如果是今天）
-            let displayEarned = dailyEarned;
             if (date === today) {
+                // 对于今天，需要找到今天开始时的基准值
+                // 基准值 = 昨天结束时的 earned 值
+                const todayStartEarned = prevEarned;
                 const currentEarned = app.earned || 0;
-                // 注意：如果今天没有记录，使用当前值作为基准（今日赚取为0）
-                const todayStartEarned = history.hasOwnProperty(today) ? history[today] : currentEarned;
                 displayEarned = Math.max(0, currentEarned - todayStartEarned);
+            } else {
+                // 对于历史日期，当日赚取 = 当天结束值 - 前一天结束值
+                displayEarned = Math.max(0, dateEarned - prevEarned);
             }
             
             if (displayEarned > 0) {
@@ -1648,12 +1659,17 @@ function renderAppEarnContent(phone, data) {
                         prevEarned = 0;
                     }
                 }
-                let dailyEarned = Math.max(0, dateEarned - prevEarned);
+                // 计算当日赚取
+                let dailyEarned = 0;
+                
                 if (date === today) {
+                    // 对于今天，基准值 = 昨天结束时的 earned 值
+                    const todayStartEarned = prevEarned;
                     const currentEarned = app.earned || 0;
-                    // 注意：如果今天没有记录，使用当前值作为基准（今日赚取为0）
-                    const todayStartEarned = history.hasOwnProperty(today) ? history[today] : currentEarned;
                     dailyEarned = Math.max(0, currentEarned - todayStartEarned);
+                } else {
+                    // 对于历史日期，当日赚取 = 当天结束值 - 前一天结束值
+                    dailyEarned = Math.max(0, dateEarned - prevEarned);
                 }
                 dayTotalEarned += dailyEarned;
             });
