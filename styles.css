@@ -3505,7 +3505,7 @@ body {
     font-size: 20px;
     font-weight: 800;
     color: var(--primary-color);
-    margin-bottom: 24px;
+    margin-bottom: 8px;
     font-family: var(--font-display);
 }
 
@@ -3515,10 +3515,166 @@ body {
     margin: 0 8px;
 }
 
+.draw-date {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    font-family: var(--font-display);
+}
+
 .game-draw-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+/* 完成标记复选框 */
+.game-complete-checkbox {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    margin-left: 10px;
+}
+
+.game-complete-checkbox input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    width: 0;
+    height: 0;
+}
+
+.checkmark {
+    width: 24px;
+    height: 24px;
+    background: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.game-complete-checkbox input:checked + .checkmark {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-color: #22c55e;
+}
+
+.checkmark::after {
+    content: '✓';
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.game-complete-checkbox input:checked + .checkmark::after {
+    opacity: 1;
+}
+
+/* 已完成的项目样式 */
+.game-draw-item.completed {
+    opacity: 0.7;
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+}
+
+.game-draw-item.completed .game-draw-name {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+/* 历史记录区域 */
+.game-history-section {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.game-history-list {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.history-item {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.history-item:last-child {
+    margin-bottom: 0;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.history-date {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.history-progress {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-cream);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+}
+
+.history-progress.all-completed {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    color: #16a34a;
+}
+
+.history-games {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-game-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.history-game-item.completed {
+    background: #f0fdf4;
+}
+
+.history-game-item.completed .history-game-name {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.history-game-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.history-game-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
 }
 
 /* 抽签结果项 */
@@ -3580,6 +3736,151 @@ body {
     width: fit-content;
 }
 
+/* ==================== 抽签结果弹出弹窗样式 ==================== */
+
+.game-result-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    padding: 20px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.game-result-popup.show {
+    opacity: 1;
+}
+
+.game-result-popup-content {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-cream) 100%);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+    width: 100%;
+    max-height: 80vh;
+    overflow: hidden;
+    transform: scale(0.5) translateY(100px);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 3px solid var(--primary-light);
+}
+
+.game-result-popup.show .game-result-popup-content {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+.game-result-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    padding: 24px;
+    text-align: center;
+    color: white;
+}
+
+.game-result-title {
+    font-size: 22px;
+    font-weight: 800;
+    font-family: var(--font-display);
+    margin-bottom: 8px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.game-result-date {
+    font-size: 14px;
+    opacity: 0.9;
+    font-family: var(--font-display);
+}
+
+.game-result-body {
+    padding: 24px;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.game-result-footer {
+    display: flex;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.game-result-footer .btn {
+    flex: 1;
+}
+
+/* 弹出弹窗中的游戏项样式 */
+.popup-game-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 20px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-xl);
+    margin-bottom: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    border: 2px solid var(--border-color);
+    animation: popupSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+    transform: translateX(-30px);
+}
+
+@keyframes popupSlideIn {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.popup-game-item:last-child {
+    margin-bottom: 0;
+}
+
+.popup-game-order {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--primary-color);
+    background: var(--bg-cream);
+    padding: 10px 16px;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--primary-light);
+    min-width: 44px;
+    text-align: center;
+}
+
+.popup-game-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.popup-game-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+}
+
+.popup-game-time {
+    font-size: 14px;
+    font-weight: 600;
+    color: #16a34a;
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    display: inline-block;
+    width: fit-content;
+}
+
 /* 响应式适配 */
 @media (max-width: 480px) {
     .btn-game-draw {
@@ -3594,6 +3895,46 @@ body {
     .game-draw-modal-content {
         max-width: 95%;
     }
+    
+    .game-result-popup {
+        padding: 16px;
+    }
+    
+    .game-result-popup-content {
+        max-width: 100%;
+    }
+    
+    .game-result-header {
+        padding: 20px;
+    }
+    
+    .game-result-title {
+        font-size: 20px;
+    }
+    
+    .game-result-body {
+        padding: 20px;
+    }
+    
+    .popup-game-item {
+        padding: 16px;
+        gap: 12px;
+    }
+    
+    .popup-game-order {
+        font-size: 18px;
+        padding: 8px 12px;
+        min-width: 36px;
+    }
+    
+    .popup-game-name {
+        font-size: 16px;
+    }
+    
+    .popup-game-time {
+        font-size: 13px;
+    }
+}
     
     .game-manage-section,
     .game-draw-result-section {
@@ -3638,6 +3979,32 @@ body {
     .game-draw-time {
         font-size: 13px;
         padding: 4px 10px;
+    }
+    
+    .checkmark {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .checkmark::after {
+        font-size: 12px;
+    }
+    
+    .history-date {
+        font-size: 12px;
+    }
+    
+    .history-progress {
+        font-size: 11px;
+        padding: 3px 8px;
+    }
+    
+    .history-game-name {
+        font-size: 13px;
+    }
+    
+    .history-game-time {
+        font-size: 11px;
     }
 }
 

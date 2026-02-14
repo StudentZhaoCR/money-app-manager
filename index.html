@@ -485,12 +485,34 @@
                 <!-- 抽签结果区域 -->
                 <div class="game-draw-result-section hidden" id="game-draw-result-section">
                     <div class="draw-result-title">🎯 今日游戏任务</div>
+                    <div class="draw-date" id="draw-date"></div>
                     <div class="game-draw-list" id="game-draw-list"></div>
+                </div>
+                
+                <!-- 历史记录区域 -->
+                <div class="game-history-section" id="game-history-section">
+                    <div class="section-subtitle">📜 历史记录</div>
+                    <div class="game-history-list" id="game-history-list"></div>
                 </div>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeGameDrawModal()">关闭</button>
                 <button class="btn btn-primary" id="game-draw-btn" onclick="startGameDraw()">开始抽签</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 抽签结果弹窗 -->
+    <div class="game-result-popup" id="game-result-popup" style="display: none;">
+        <div class="game-result-popup-content" onclick="event.stopPropagation()">
+            <div class="game-result-header">
+                <div class="game-result-title">🎮 今日游戏任务</div>
+                <div class="game-result-date" id="popup-draw-date"></div>
+            </div>
+            <div class="game-result-body" id="popup-game-result-list"></div>
+            <div class="game-result-footer">
+                <button class="btn btn-secondary" onclick="closeGameResultPopup()">关闭</button>
+                <button class="btn btn-primary" onclick="startGameDraw()">重新抽签</button>
             </div>
         </div>
     </div>

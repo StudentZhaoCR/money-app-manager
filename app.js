@@ -965,6 +965,52 @@ class DataManager {
         const phone = data.phones.find(p => p.id === phoneId);
         return phone ? (phone.games || []) : [];
     }
+    
+    // ==================== 游戏抽签历史记录功能 ====================
+    
+    static addGameDrawHistory(phoneId, drawResult) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone) {
+            if (!phone.gameDrawHistory) {
+                phone.gameDrawHistory = [];
+            }
+            const historyItem = {
+                id: Date.now().toString(),
+                date: new Date().toISOString(),
+                games: drawResult.map(game => ({
+                    ...game,
+                    completed: false
+                }))
+            };
+            phone.gameDrawHistory.unshift(historyItem); // 最新的在前面
+            // 只保留最近30天的记录
+            if (phone.gameDrawHistory.length > 30) {
+                phone.gameDrawHistory = phone.gameDrawHistory.slice(0, 30);
+            }
+            this.saveData(data);
+        }
+        return data;
+    }
+    
+    static toggleGameCompleted(phoneId, historyId, gameIndex) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone && phone.gameDrawHistory) {
+            const historyItem = phone.gameDrawHistory.find(h => h.id === historyId);
+            if (historyItem && historyItem.games[gameIndex]) {
+                historyItem.games[gameIndex].completed = !historyItem.games[gameIndex].completed;
+                this.saveData(data);
+            }
+        }
+        return data;
+    }
+    
+    static getGameDrawHistory(phoneId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        return phone ? (phone.gameDrawHistory || []) : [];
+    }
 
     static clearAllData() {
         // 清除旧的存储键
@@ -3538,16 +3584,19 @@ function openGameDrawModal(phoneId) {
     const modal = document.getElementById('game-draw-modal');
     const manageSection = document.getElementById('game-manage-section');
     const resultSection = document.getElementById('game-draw-result-section');
+    const historySection = document.getElementById('game-history-section');
     const drawBtn = document.getElementById('game-draw-btn');
     
     // 重置状态
     manageSection.classList.remove('hidden');
     resultSection.classList.add('hidden');
+    historySection.classList.remove('hidden');
     drawBtn.textContent = '开始抽签';
     drawBtn.onclick = startGameDraw;
     
-    // 加载游戏列表
+    // 加载游戏列表和历史记录
     renderGameList();
+    renderGameHistory();
     
     modal.style.display = 'flex';
 }
@@ -3656,18 +3705,31 @@ function startGameDraw() {
             // 执行抽签
             const result = performGameDraw(games);
             
-            // 显示结果
-            displayGameDrawResult(result, resultList);
+            // 保存到历史记录
+            DataManager.addGameDrawHistory(currentGameDrawPhoneId, result);
             
-            // 切换显示
-            manageSection.classList.add('hidden');
-            resultSection.classList.remove('hidden');
+            // 刷新历史记录
+            renderGameHistory();
             
-            // 更新按钮
+            // 恢复按钮状态
             drawBtn.disabled = false;
-            drawBtn.textContent = '重新抽签';
+            drawBtn.textContent = '开始抽签';
+            
+            // 显示弹出弹窗
+            openGameResultPopup(result);
         }
     }, 200);
+}
+
+// 格式化日期
+function formatDate(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
 // 执行游戏抽签
@@ -3689,16 +3751,86 @@ function performGameDraw(games) {
 }
 
 // 显示游戏抽签结果
-function displayGameDrawResult(result, container) {
+function displayGameDrawResult(result, container, showCheckbox = false, historyId = null) {
     let html = '';
     
     result.forEach((game, index) => {
+        const isCompleted = game.completed || false;
+        const completedClass = isCompleted ? 'completed' : '';
+        const checkboxHtml = showCheckbox ? `
+            <label class="game-complete-checkbox">
+                <input type="checkbox" ${isCompleted ? 'checked' : ''} 
+                    onchange="toggleGameCompleted('${historyId}', ${index})" 
+                    ${!historyId ? 'disabled' : ''}>
+                <span class="checkmark"></span>
+            </label>
+        ` : '';
+        
         html += `
-            <div class="game-draw-item" style="animation-delay: ${index * 0.1}s">
+            <div class="game-draw-item ${completedClass}" style="animation-delay: ${index * 0.1}s">
                 <div class="game-draw-order">#${index + 1}</div>
                 <div class="game-draw-info">
                     <span class="game-draw-name">${game.name}</span>
                     <span class="game-draw-time">⏱️ ${game.playTime} 分钟</span>
+                </div>
+                ${checkboxHtml}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 切换游戏完成状态
+function toggleGameCompleted(historyId, gameIndex) {
+    DataManager.toggleGameCompleted(currentGameDrawPhoneId, historyId, gameIndex);
+    renderGameHistory();
+}
+
+// 渲染历史记录
+function renderGameHistory() {
+    const history = DataManager.getGameDrawHistory(currentGameDrawPhoneId);
+    const container = document.getElementById('game-history-list');
+    
+    if (history.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无历史记录</div>';
+        return;
+    }
+    
+    let html = '';
+    history.forEach((item, index) => {
+        const date = formatDate(item.date);
+        const completedCount = item.games.filter(g => g.completed).length;
+        const totalCount = item.games.length;
+        const isAllCompleted = completedCount === totalCount;
+        
+        html += `
+            <div class="history-item">
+                <div class="history-header">
+                    <span class="history-date">${date}</span>
+                    <span class="history-progress ${isAllCompleted ? 'all-completed' : ''}">
+                        ${completedCount}/${totalCount} 完成
+                    </span>
+                </div>
+                <div class="history-games">
+        `;
+        
+        item.games.forEach((game, gameIndex) => {
+            const isCompleted = game.completed || false;
+            html += `
+                <div class="history-game-item ${isCompleted ? 'completed' : ''}">
+                    <label class="game-complete-checkbox">
+                        <input type="checkbox" ${isCompleted ? 'checked' : ''} 
+                            onchange="toggleGameCompleted('${item.id}', ${gameIndex})">
+                        <span class="checkmark"></span>
+                    </label>
+                    <span class="history-game-name">${game.name}</span>
+                    <span class="history-game-time">${game.playTime}分钟</span>
+                </div>
+            `;
+        });
+        
+        html += `
                 </div>
             </div>
         `;
@@ -3706,6 +3838,58 @@ function displayGameDrawResult(result, container) {
     
     container.innerHTML = html;
 }
+
+// ==================== 抽签结果弹窗功能 ====================
+
+// 打开抽签结果弹窗
+function openGameResultPopup(result) {
+    const popup = document.getElementById('game-result-popup');
+    const dateEl = document.getElementById('popup-draw-date');
+    const listEl = document.getElementById('popup-game-result-list');
+    
+    // 设置日期
+    const drawDate = new Date();
+    dateEl.textContent = formatDate(drawDate);
+    
+    // 显示结果
+    let html = '';
+    result.forEach((game, index) => {
+        html += `
+            <div class="popup-game-item" style="animation-delay: ${index * 0.15}s">
+                <div class="popup-game-order">#${index + 1}</div>
+                <div class="popup-game-info">
+                    <span class="popup-game-name">${game.name}</span>
+                    <span class="popup-game-time">⏱️ ${game.playTime} 分钟</span>
+                </div>
+            </div>
+        `;
+    });
+    listEl.innerHTML = html;
+    
+    // 显示弹窗
+    popup.style.display = 'flex';
+    // 强制重绘以触发动画
+    popup.offsetHeight;
+    popup.classList.add('show');
+}
+
+// 关闭抽签结果弹窗
+function closeGameResultPopup() {
+    const popup = document.getElementById('game-result-popup');
+    popup.classList.remove('show');
+    
+    // 等待动画结束后隐藏
+    setTimeout(() => {
+        popup.style.display = 'none';
+    }, 300);
+}
+
+// 点击弹窗背景关闭
+document.getElementById('game-result-popup').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeGameResultPopup();
+    }
+});
 
 // 点击模态框背景关闭
 document.getElementById('modal').addEventListener('click', function(e) {
