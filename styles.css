@@ -3347,3 +3347,231 @@ body {
         font-size: 13px;
     }
 }
+
+/* ==================== 幸运抽选样式 ==================== */
+
+/* 幸运抽选卡片 */
+.lucky-draw-card {
+    overflow: hidden;
+}
+
+/* 抽选区域 */
+.lucky-draw-area {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    margin-bottom: 16px;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 初始状态 */
+.lucky-draw-initial {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.lucky-draw-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.7;
+}
+
+.lucky-draw-text {
+    font-size: 16px;
+    color: var(--text-muted);
+    font-family: var(--font-display);
+}
+
+/* 抽选动画 */
+.lucky-draw-animation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+}
+
+.lucky-draw-emoji {
+    font-size: 72px;
+    margin-bottom: 20px;
+    animation: bounce 0.5s ease-in-out infinite alternate;
+}
+
+.lucky-draw-status {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+}
+
+@keyframes bounce {
+    from { transform: scale(1); }
+    to { transform: scale(1.1); }
+}
+
+/* 抽选结果 */
+.lucky-draw-result {
+    padding: 20px;
+    width: 100%;
+}
+
+.lucky-result-title {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 16px;
+    font-family: var(--font-display);
+}
+
+.lucky-result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* 抽中的手机 */
+.lucky-result-phone {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    box-shadow: var(--shadow-soft);
+    border: 2px solid var(--border-color);
+    animation: slideInUp 0.5s ease-out forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+@keyframes slideInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.lucky-result-phone-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.lucky-result-icon {
+    font-size: 20px;
+}
+
+.lucky-result-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    flex: 1;
+}
+
+.lucky-result-order {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary-color);
+    background: var(--bg-cream);
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+}
+
+/* 抽中的软件 */
+.lucky-result-apps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lucky-result-app {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+    animation: slideInUp 0.5s ease-out forwards;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.lucky-result-app-icon {
+    font-size: 16px;
+}
+
+.lucky-result-app-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.lucky-result-app-balance {
+    font-size: 13px;
+    font-weight: 700;
+    color: #15803d;
+    font-family: var(--font-display);
+}
+
+/* 幸运抽选按钮 */
+.lucky-draw-buttons {
+    margin-top: 8px;
+}
+
+.btn-accent {
+    background: var(--gradient-accent);
+    color: var(--text-primary);
+    font-weight: 700;
+    box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
+}
+
+.btn-accent:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(251, 191, 36, 0.5);
+}
+
+.btn-accent:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* 响应式适配 */
+@media (max-width: 480px) {
+    .lucky-draw-icon {
+        font-size: 48px;
+    }
+    
+    .lucky-draw-emoji {
+        font-size: 56px;
+    }
+    
+    .lucky-draw-status {
+        font-size: 16px;
+    }
+    
+    .lucky-result-title {
+        font-size: 16px;
+    }
+    
+    .lucky-result-phone {
+        padding: 12px;
+    }
+    
+    .lucky-result-name {
+        font-size: 15px;
+    }
+    
+    .lucky-result-app-name {
+        font-size: 13px;
+    }
+}

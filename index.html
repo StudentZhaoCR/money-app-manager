@@ -229,6 +229,40 @@
                 </div>
             </div>
 
+            <!-- 幸运抽选 -->
+            <div class="card mt-6 lucky-draw-card">
+                <div class="section-header">
+                    <div class="section-title">🎲 幸运抽选</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-hint mb-4">不知道今天玩哪个？让系统帮你随机选择手机和软件！</div>
+                
+                <!-- 抽选区域 -->
+                <div class="lucky-draw-area" id="lucky-draw-area">
+                    <!-- 初始状态 -->
+                    <div class="lucky-draw-initial" id="lucky-draw-initial">
+                        <div class="lucky-draw-icon">🎰</div>
+                        <div class="lucky-draw-text">点击按钮开始抽选今日任务</div>
+                    </div>
+                    
+                    <!-- 抽选动画 -->
+                    <div class="lucky-draw-animation hidden" id="lucky-draw-animation">
+                        <div class="lucky-draw-emoji" id="lucky-draw-emoji">🎰</div>
+                        <div class="lucky-draw-status" id="lucky-draw-status">正在洗牌...</div>
+                    </div>
+                    
+                    <!-- 抽选结果 -->
+                    <div class="lucky-draw-result hidden" id="lucky-draw-result">
+                        <div class="lucky-result-title">✨ 今日幸运组合 ✨</div>
+                        <div class="lucky-result-list" id="lucky-result-list"></div>
+                    </div>
+                </div>
+                
+                <div class="lucky-draw-buttons">
+                    <button class="btn btn-accent w-full" id="lucky-draw-btn" onclick="startLuckyDrawInline()">开始幸运抽选</button>
+                </div>
+            </div>
+
             <div class="card mt-6">
                 <div class="section-header">
                     <div class="section-title">数据备份（JSON）</div>
