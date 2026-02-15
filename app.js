@@ -422,12 +422,12 @@ function updatePhoneCard(phoneId) {
     const index = data.phones.findIndex(p => p.id === phoneId);
     const isExpanded = expandedPhones[phoneId];
     
-    // 计算该手机的总赚取金额
+    // 计算该手机的总赚取金额（累计 earned + 已提现金额，提现后不应减少）
     const totalEarned = phone.apps.reduce((sum, app) => {
-        return sum + (app.earned || app.balance || 0);
+        return sum + (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     }, 0);
     
-    // 计算该手机的总余额
+    // 计算该手机的未提现余额（当前可提现的金额）
     const totalBalance = phone.apps.reduce((sum, app) => {
         return sum + (app.balance || 0);
     }, 0);
@@ -560,7 +560,8 @@ function updateAppCard(phoneId, appId) {
     const daysFromStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) + 1;
     
     const shouldHaveEarned = daysFromStart * app.minWithdraw;
-    const earned = app.earned || app.balance || 0;
+    // 已赚金额 = 累计 earned + 已提现金额，提现后不应减少
+    const earned = (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     const daysIncome = Math.floor(earned / app.minWithdraw);
     const nextPlayDate = calculateNextPlayDate(earned, app.minWithdraw);
     const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
@@ -1183,7 +1184,7 @@ class DataManager {
             totalDaysRemaining,
             totalWithdrawn,
             totalNeeded,
-            overallProgress: Math.min(100, (totalWithdrawn / totalInstallmentAmount) * 100) || 0
+            overallProgress: totalInstallmentAmount > 0 ? Math.min(100, (totalWithdrawn / totalInstallmentAmount) * 100) : 0
         };
     }
 }
@@ -1831,21 +1832,20 @@ function renderDashboard() {
         return sum + phone.apps.reduce((appSum, app) => appSum + (app.earned || 0), 0);
     }, 0);
     
-    // 计算待支出余额（总提现金额 - 总支出金额）
-    const totalWithdrawn = data.phones.reduce((sum, phone) => {
+    // 计算待支出余额（剩余待支出金额）
+    const pendingExpenseBalance = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => {
-            return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-        }, 0);
-    }, 0);
-    const totalExpenses = data.phones.reduce((sum, phone) => {
-        return sum + phone.apps.reduce((appSum, app) => {
-            if (app.expenses && app.expenses.length > 0) {
-                return appSum + app.expenses.reduce((expenseSum, expense) => expenseSum + expense.amount, 0);
+            // 使用 remainingWithdrawn（剩余待支出金额）
+            if (app.remainingWithdrawn !== undefined) {
+                return appSum + app.remainingWithdrawn;
+            } else {
+                // 兼容旧数据：计算剩余金额 = 总提现 - 已支出
+                const appWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+                const appExpenses = app.expenses ? app.expenses.reduce((eSum, e) => eSum + e.amount, 0) : 0;
+                return appSum + Math.max(0, appWithdrawn - appExpenses);
             }
-            return appSum;
         }, 0);
     }, 0);
-    const pendingExpenseBalance = totalWithdrawn - totalExpenses;
     const readyApps = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
     }, 0);
@@ -2088,7 +2088,8 @@ function renderAppList(phone) {
 
     return phone.apps.map(app => {
         const shouldHaveEarned = daysFromStart * app.minWithdraw;
-        const earned = app.earned || app.balance || 0;
+        // 已赚金额 = 累计 earned + 已提现金额，提现后不应减少
+        const earned = (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const daysIncome = Math.floor(earned / app.minWithdraw);
         const nextPlayDate = calculateNextPlayDate(earned, app.minWithdraw);
         const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
@@ -2503,7 +2504,8 @@ function renderStats() {
         });
     });
     
-    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + (app.earned || app.balance), 0);
+    // 已赚金额应该是累计的 earned，不包括当前余额
+    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + (app.earned || 0), 0);
     const totalWithdrawn = allAppsWithPhone.reduce((sum, app) => {
         return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     }, 0);
@@ -2533,7 +2535,8 @@ function renderStats() {
     }
     
     container.innerHTML = allAppsWithPhone.map(app => {
-        const earned = app.earned || app.balance;
+        // 已赚金额是累计的 earned，提现后不应减少
+        const earned = (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const expenses = app.expenses && app.expenses.length > 0 ? 
             app.expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0;
@@ -2681,10 +2684,20 @@ function renderSettings() {
     }
     
     // 计算待支出余额（总提现金额 - 总支出金额）
+    // 使用 remainingWithdrawn（剩余待支出金额），如果为 undefined 则计算
     let totalWithdrawn = 0;
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
-            totalWithdrawn += app.remainingWithdrawn || app.withdrawn || 0;
+            // remainingWithdrawn 是剩余待支出金额，优先使用它
+            // 如果 undefined，则计算：总提现 - 该软件已支出
+            if (app.remainingWithdrawn !== undefined) {
+                totalWithdrawn += app.remainingWithdrawn;
+            } else {
+                // 兼容旧数据：计算剩余金额
+                const appWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+                const appExpenses = app.expenses ? app.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
+                totalWithdrawn += Math.max(0, appWithdrawn - appExpenses);
+            }
         });
     });
     
