@@ -5,6 +5,23 @@ const INSTALLMENTS_KEY = 'moneyApp_installments';
 const EXPENSES_KEY = 'moneyApp_expenses';
 const SETTINGS_KEY = 'moneyApp_settings';
 
+// ==================== 通用计算函数 ====================
+
+// 计算软件的已赚金额（累计）
+// 公式：(当前余额 - 初始基准值) + 已提现金额
+function calculateAppEarned(app) {
+    const initialBalance = app.initialBalance || 0;
+    const currentBalance = app.balance || 0;
+    const balanceEarned = Math.max(0, currentBalance - initialBalance);
+    const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+    return balanceEarned + withdrawn;
+}
+
+// 计算手机的总已赚金额
+function calculatePhoneTotalEarned(phone) {
+    return phone.apps.reduce((sum, app) => sum + calculateAppEarned(app), 0);
+}
+
 // 全局变量和辅助函数定义
 let modalIsShowing = false;
 
@@ -317,8 +334,8 @@ function renderInstallments() {
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
-    document.getElementById('installment-earned').textContent = `¥${summary.totalWithdrawn.toFixed(2)}`;
-    document.getElementById('installment-needed').textContent = `¥${summary.totalNeeded.toFixed(2)}`;
+    document.getElementById('installment-earned').textContent = `¥${summary.pendingExpense.toFixed(2)}`;  // 待支出金额
+    document.getElementById('installment-needed').textContent = `¥${summary.pendingWithdrawal.toFixed(2)}`;  // 待提现金额
     document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
     document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
     
@@ -360,7 +377,7 @@ function renderInstallments() {
                 <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
                 <div class="installment-details">
                     <span>剩余天数: ${installment.daysRemaining}天</span>
-                    <span>每日需要: ¥${((installment.amount - installment.totalWithdrawn) / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                    <span>每日需要: ¥${((installment.amount - installment.pendingExpense) / (installment.daysRemaining || 1)).toFixed(2)}</span>
                 </div>
                 <div class="installment-progress">
                     <div class="progress-header">
@@ -422,10 +439,8 @@ function updatePhoneCard(phoneId) {
     const index = data.phones.findIndex(p => p.id === phoneId);
     const isExpanded = expandedPhones[phoneId];
     
-    // 计算该手机的总赚取金额（累计 earned + 已提现金额，提现后不应减少）
-    const totalEarned = phone.apps.reduce((sum, app) => {
-        return sum + (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-    }, 0);
+    // 计算该手机的总赚取金额
+    const totalEarned = calculatePhoneTotalEarned(phone);
     
     // 计算该手机的未提现余额（当前可提现的金额）
     const totalBalance = phone.apps.reduce((sum, app) => {
@@ -443,7 +458,8 @@ function updatePhoneCard(phoneId) {
     // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
     const today = new Date().toISOString().split('T')[0];
     const history = phone.dailyTotalEarnedHistory || {};
-    const currentTotalEarned = phone.apps.reduce((sum, a) => sum + (a.earned || 0), 0);
+    // 使用新的计算函数获取当前总已赚金额
+    const currentTotalEarned = calculatePhoneTotalEarned(phone);
     
     // 找到昨天结束时的总赚取作为今天开始的基准
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -559,19 +575,25 @@ function updateAppCard(phoneId, appId) {
     const startDate = new Date('2026-01-01');
     const daysFromStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24)) + 1;
     
-    const shouldHaveEarned = daysFromStart * app.minWithdraw;
-    // 已赚金额 = 累计 earned + 已提现金额，提现后不应减少
-    const earned = (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-    const daysIncome = Math.floor(earned / app.minWithdraw);
-    const nextPlayDate = calculateNextPlayDate(earned, app.minWithdraw);
+    // 确保 minWithdraw 有效，使用软件存储的值或默认值
+    let minWithdraw = parseFloat(app.minWithdraw);
+    if (!minWithdraw || minWithdraw <= 0 || isNaN(minWithdraw)) {
+        minWithdraw = 0.3; // 默认最小提现金额
+    }
+    
+    const shouldHaveEarned = daysFromStart * minWithdraw;
+    // 使用统一函数计算已赚金额
+    const earned = calculateAppEarned(app);
+    const daysIncome = Math.floor(earned / minWithdraw);
+    const nextPlayDate = calculateNextPlayDate(earned, minWithdraw);
     const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
     
     // 更新卡片内容
     targetCard.innerHTML = `
         <div class="app-header">
             <span class="app-name">${app.name}</span>
-            <span class="status-tag ${app.balance >= app.minWithdraw ? 'ready' : 'pending'}">
-                ${app.balance >= app.minWithdraw ? '可提现' : '待赚取'}
+            <span class="status-tag ${app.balance >= minWithdraw ? 'ready' : 'pending'}">
+                ${app.balance >= minWithdraw ? '可提现' : '待赚取'}
             </span>
         </div>
         <div class="app-core-info">
@@ -579,7 +601,7 @@ function updateAppCard(phoneId, appId) {
             <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
         </div>
         <div class="app-info-row">
-            <span>最小提现: ¥${(app.minWithdraw || 0).toFixed(2)}</span>
+            <span>最小提现: ¥${minWithdraw.toFixed(2)}</span>
             <span>已赚金额: ¥${earned.toFixed(2)}</span>
         </div>
         <div class="progress-section">
@@ -707,9 +729,14 @@ class DataManager {
 
     static calculateYearlyGoal() {
         const data = this.loadData();
+        // 如果用户已经手动设置了全年目标，不要自动覆盖
+        if (data.settings.yearlyGoal && data.settings.yearlyGoal > 0) {
+            return data.settings.yearlyGoal;
+        }
+        // 只有在没有设置目标时，才根据软件自动计算
         const allApps = data.phones.flatMap(phone => phone.apps);
         const yearlyGoal = allApps.reduce((total, app) => {
-            return total + (app.minWithdraw * 365);
+            return total + ((app.minWithdraw || 0.3) * 365);
         }, 0);
         data.settings.yearlyGoal = yearlyGoal;
         this.saveData(data);
@@ -745,8 +772,9 @@ class DataManager {
             const app = {
                 id: Date.now().toString(),
                 name: appData.name,
-                minWithdraw: parseFloat(appData.minWithdraw),
+                minWithdraw: parseFloat(appData.minWithdraw) || 0.3,  // 默认最小提现0.3元
                 balance: initialBalance,
+                initialBalance: initialBalance,  // 保存初始基准值
                 earned: 0,  // 第一次添加，earned 设为 0，从下次编辑开始记录收益
                 withdrawn: 0,
                 remainingWithdrawn: 0,
@@ -778,7 +806,7 @@ class DataManager {
             const app = phone.apps.find(a => a.id === appId);
             if (app) {
                 app.name = appData.name;
-                app.minWithdraw = parseFloat(appData.minWithdraw);
+                app.minWithdraw = parseFloat(appData.minWithdraw) || 0.3;  // 默认最小提现0.3元
 
                 const oldBalance = app.balance || 0;
                 const oldEarned = app.earned || 0;
@@ -821,8 +849,8 @@ class DataManager {
                 if (!phone.dailyTotalEarnedHistory) {
                     phone.dailyTotalEarnedHistory = {};
                 }
-                // 计算当前手机总赚取
-                const currentTotalEarned = phone.apps.reduce((sum, a) => sum + (a.earned || 0), 0);
+                // 计算当前手机总赚取（使用新的计算方式）
+                const currentTotalEarned = calculatePhoneTotalEarned(phone);
                 // 保存今天的最终总赚取（只有非第一次设置时才保存）
                 if (!isFirstTimeSetup) {
                     phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
@@ -1127,17 +1155,26 @@ class DataManager {
             return sum + (app.minWithdraw || 0);
         }, 0);
         
+        // 计算待支出金额（总提现 - 总支出）
+        const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
+        }, 0);
+        const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
+        const pendingExpense = totalWithdrawnAmount - totalExpenses; // 待支出金额
+        
         // 计算每个分期的目标
         const installmentGoals = activeInstallments.map(installment => {
             const dueDate = new Date(installment.dueDate);
             const daysRemaining = Math.max(0, Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)));
             
-            // 计算已提现金额
-        const totalWithdrawn = allApps.reduce((sum, app) => sum + (app.withdrawn || 0), 0);
+            // 待提现金额 = 分期金额 - 待支出
+            const pendingWithdrawal = Math.max(0, installment.amount - pendingExpense);
         
         // 计算每个软件的目标金额（平均分配待提现金额）
         const appGoals = allApps.map(app => {
-            const totalTarget = (installment.amount - totalWithdrawn) / allApps.length;
+            const totalTarget = pendingWithdrawal / allApps.length;
             const dailyTarget = totalTarget / (daysRemaining || 1);
             
             return {
@@ -1156,7 +1193,8 @@ class DataManager {
             return {
                 ...installment,
                 daysRemaining,
-                totalWithdrawn,
+                pendingExpense,      // 待支出金额
+                pendingWithdrawal,   // 待提现金额
                 appGoals,
                 totalProgress: appGoals.reduce((sum, goal) => sum + goal.progress, 0) / appGoals.length || 0
             };
@@ -1174,17 +1212,29 @@ class DataManager {
         const totalDaysRemaining = installmentGoals.length > 0 ? 
             Math.min(...installmentGoals.map(goal => goal.daysRemaining)) : 0;
         
-        // 计算已提现和待提现金额
-        const allApps = data.phones.flatMap(phone => phone.apps);
-        const totalWithdrawn = allApps.reduce((sum, app) => sum + (app.withdrawn || 0), 0);
-        const totalNeeded = Math.max(0, totalInstallmentAmount - totalWithdrawn);
+        // 计算待支出金额（总提现 - 总支出）
+        const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
+        }, 0);
+        const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
+        const pendingExpense = totalWithdrawnAmount - totalExpenses; // 待支出金额
+        
+        // 待提现金额 = 总还款金额 - 待支出余额
+        const pendingWithdrawal = Math.max(0, totalInstallmentAmount - pendingExpense);
+        
+        // 进度 = 待支出 / 总还款金额
+        // 表示已经准备好可以立即用于还款的金额比例
+        const overallProgress = totalInstallmentAmount > 0 ? 
+            Math.min(100, (pendingExpense / totalInstallmentAmount) * 100) : 0;
         
         return {
             totalInstallmentAmount,
             totalDaysRemaining,
-            totalWithdrawn,
-            totalNeeded,
-            overallProgress: totalInstallmentAmount > 0 ? Math.min(100, (totalWithdrawn / totalInstallmentAmount) * 100) : 0
+            pendingExpense,        // 待支出金额（原已提现金额）
+            pendingWithdrawal,     // 待提现金额
+            overallProgress        // 进度 = 待支出 / 待提现
         };
     }
 }
@@ -1195,6 +1245,150 @@ let currentAppId = null;
 let expandedPhones = {};
 let currentTodayEarnPhoneId = null;
 let currentTodayEarnTab = 'phone'; // 'phone' 或 'app'
+
+// 手机抽签历史记录存储键
+const PHONE_DRAW_HISTORY_KEY = 'phoneDrawHistory';
+
+// 获取手机抽签历史
+function getPhoneDrawHistory() {
+    const history = localStorage.getItem(PHONE_DRAW_HISTORY_KEY);
+    return history ? JSON.parse(history) : [];
+}
+
+// 保存手机抽签历史
+function savePhoneDrawHistory(history) {
+    localStorage.setItem(PHONE_DRAW_HISTORY_KEY, JSON.stringify(history));
+}
+
+// 打开手机抽签弹窗
+function openPhoneDrawModal() {
+    const modal = document.getElementById('phone-draw-modal');
+    modal.style.display = 'flex';
+    modal.classList.add('show');
+    renderPhoneDrawHistory();
+}
+
+// 关闭手机抽签弹窗
+function closePhoneDrawModal() {
+    const modal = document.getElementById('phone-draw-modal');
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.style.display = 'none';
+    }, 300);
+}
+
+// 显示手机抽签历史
+function showPhoneDrawHistory() {
+    openPhoneDrawModal();
+}
+
+// 开始手机抽签
+function startPhoneDraw() {
+    const data = DataManager.loadData();
+    
+    if (data.phones.length === 0) {
+        showToast('请先添加手机');
+        return;
+    }
+    
+    // 随机打乱手机顺序
+    const shuffledPhones = [...data.phones].sort(() => Math.random() - 0.5);
+    
+    // 为每个手机的软件也随机排序
+    const phoneDrawResult = shuffledPhones.map(phone => {
+        const shuffledApps = [...phone.apps].sort(() => Math.random() - 0.5);
+        return {
+            phoneId: phone.id,
+            phoneName: phone.name,
+            apps: shuffledApps.map(app => ({
+                appId: app.id,
+                appName: app.name,
+                minWithdraw: app.minWithdraw || 0.3
+            }))
+        };
+    });
+    
+    // 保存到历史记录
+    const now = new Date();
+    const historyEntry = {
+        id: Date.now().toString(),
+        date: now.toISOString(),
+        dateStr: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+        result: phoneDrawResult
+    };
+    
+    const history = getPhoneDrawHistory();
+    history.unshift(historyEntry); // 添加到开头
+    // 只保留最近30条记录
+    if (history.length > 30) {
+        history.pop();
+    }
+    savePhoneDrawHistory(history);
+    
+    // 显示结果
+    renderPhoneDrawResult(historyEntry);
+    
+    showToast('手机抽签完成！');
+}
+
+// 渲染手机抽签结果
+function renderPhoneDrawResult(entry) {
+    const dateEl = document.getElementById('phone-draw-date');
+    const listEl = document.getElementById('phone-draw-list');
+    
+    dateEl.textContent = entry.dateStr;
+    
+    listEl.innerHTML = entry.result.map((phone, phoneIndex) => `
+        <div class="draw-result-item" style="margin-bottom: 20px; border: 2px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px;">
+            <div class="draw-result-header" style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed var(--border-color);">
+                <span class="draw-result-rank" style="font-size: 24px; font-weight: bold; color: var(--primary-color);">${phoneIndex + 1}</span>
+                <span class="draw-result-name" style="font-size: 18px; font-weight: 600; color: var(--text-primary);">📱 ${phone.phoneName}</span>
+            </div>
+            <div class="draw-result-apps" style="padding-left: 36px;">
+                <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">软件顺序：</div>
+                ${phone.apps.length > 0 ? phone.apps.map((app, appIndex) => `
+                    <div class="draw-result-app-item" style="display: flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--text-primary);">
+                        <span style="color: var(--text-secondary); font-size: 12px;">${appIndex + 1}.</span>
+                        <span>${app.appName}</span>
+                        <span style="color: var(--text-secondary); font-size: 12px; margin-left: auto;">(最小提现: ¥${(app.minWithdraw || 0.3).toFixed(2)})</span>
+                    </div>
+                `).join('') : '<div style="color: var(--text-secondary); font-size: 14px;">暂无软件</div>'}
+            </div>
+        </div>
+    `).join('');
+}
+
+// 渲染手机抽签历史
+function renderPhoneDrawHistory() {
+    const history = getPhoneDrawHistory();
+    const listEl = document.getElementById('phone-draw-history-list');
+    
+    if (history.length === 0) {
+        listEl.innerHTML = '<div class="empty-state">暂无抽签历史</div>';
+        return;
+    }
+    
+    listEl.innerHTML = history.map((entry, index) => `
+        <div class="game-history-item" style="padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 8px; cursor: pointer;" onclick="showPhoneDrawResultById('${entry.id}')">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 500;">${entry.dateStr}</span>
+                <span style="color: var(--text-secondary); font-size: 14px;">${entry.result.length} 部手机</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                ${entry.result.map(p => p.phoneName).join('、')}
+            </div>
+        </div>
+    `).join('');
+}
+
+// 根据ID显示手机抽签结果
+function showPhoneDrawResultById(id) {
+    const history = getPhoneDrawHistory();
+    const entry = history.find(h => h.id === id);
+    if (entry) {
+        renderPhoneDrawResult(entry);
+    }
+}
 
 // 初始化
 function init() {
@@ -1555,7 +1749,8 @@ function renderPhoneEarnContent(phone, data) {
     // 计算今日数据
     const today = new Date().toISOString().split('T')[0];
     const phoneHistory = phone.dailyTotalEarnedHistory || {};
-    const currentTotalEarned = phone.apps.reduce((sum, a) => sum + (a.earned || 0), 0);
+    // 使用新的计算函数获取当前总已赚金额
+    const currentTotalEarned = calculatePhoneTotalEarned(phone);
     
     // 找到昨天结束时的总赚取作为今天开始的基准
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -1832,20 +2027,14 @@ function renderDashboard() {
         return sum + phone.apps.reduce((appSum, app) => appSum + (app.earned || 0), 0);
     }, 0);
     
-    // 计算待支出余额（剩余待支出金额）
-    const pendingExpenseBalance = data.phones.reduce((sum, phone) => {
+    // 计算待支出余额（总提现金额 - 总支出金额）
+    const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => {
-            // 使用 remainingWithdrawn（剩余待支出金额）
-            if (app.remainingWithdrawn !== undefined) {
-                return appSum + app.remainingWithdrawn;
-            } else {
-                // 兼容旧数据：计算剩余金额 = 总提现 - 已支出
-                const appWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-                const appExpenses = app.expenses ? app.expenses.reduce((eSum, e) => eSum + e.amount, 0) : 0;
-                return appSum + Math.max(0, appWithdrawn - appExpenses);
-            }
+            return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         }, 0);
     }, 0);
+    const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
+    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses;
     const readyApps = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
     }, 0);
@@ -1877,8 +2066,8 @@ function renderTodayApps(data) {
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
             const minWithdraw = Number(app.minWithdraw) || 0;
-            const balance = Number(app.balance) || 0;
-            const earned = Number(app.earned) || balance;
+            // 使用统一函数计算已赚金额
+            const earned = calculateAppEarned(app);
             const shouldHaveEarned = daysFromStart * minWithdraw;
             
             if (earned < shouldHaveEarned) {
@@ -1949,9 +2138,7 @@ function renderPhones() {
         const isExpanded = expandedPhones[phone.id];
         
         // 计算该手机的总赚取金额
-        const totalEarned = phone.apps.reduce((sum, app) => {
-            return sum + (app.earned || app.balance || 0);
-        }, 0);
+        const totalEarned = calculatePhoneTotalEarned(phone);
         
         // 计算该手机的总余额
         const totalBalance = phone.apps.reduce((sum, app) => {
@@ -1969,7 +2156,8 @@ function renderPhones() {
         // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
         const today = new Date().toISOString().split('T')[0];
         const history = phone.dailyTotalEarnedHistory || {};
-        const currentTotalEarned = phone.apps.reduce((sum, a) => sum + (a.earned || 0), 0);
+        // 使用新的计算函数获取当前总已赚金额
+        const currentTotalEarned = calculatePhoneTotalEarned(phone);
         
         // 找到昨天结束时的总赚取作为今天开始的基准
         const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -2087,19 +2275,25 @@ function renderAppList(phone) {
     const appDailyTarget = phoneDailyTarget / appCount;
 
     return phone.apps.map(app => {
-        const shouldHaveEarned = daysFromStart * app.minWithdraw;
-        // 已赚金额 = 累计 earned + 已提现金额，提现后不应减少
-        const earned = (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-        const daysIncome = Math.floor(earned / app.minWithdraw);
-        const nextPlayDate = calculateNextPlayDate(earned, app.minWithdraw);
+        // 确保 minWithdraw 有效，使用软件存储的值或默认值
+        let minWithdraw = parseFloat(app.minWithdraw);
+        if (!minWithdraw || minWithdraw <= 0 || isNaN(minWithdraw)) {
+            minWithdraw = 0.3; // 默认最小提现金额
+        }
+        
+        const shouldHaveEarned = daysFromStart * minWithdraw;
+        // 使用统一函数计算已赚金额
+        const earned = calculateAppEarned(app);
+        const daysIncome = Math.floor(earned / minWithdraw);
+        const nextPlayDate = calculateNextPlayDate(earned, minWithdraw);
         const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
 
         return `
             <div class="app-card">
                 <div class="app-header">
                     <span class="app-name">${app.name}</span>
-                    <span class="status-tag ${app.balance >= app.minWithdraw ? 'ready' : 'pending'}">
-                        ${app.balance >= app.minWithdraw ? '可提现' : '待赚取'}
+                    <span class="status-tag ${app.balance >= minWithdraw ? 'ready' : 'pending'}">
+                        ${app.balance >= minWithdraw ? '可提现' : '待赚取'}
                     </span>
                 </div>
                 <div class="app-core-info">
@@ -2107,7 +2301,7 @@ function renderAppList(phone) {
                     <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
                 </div>
                 <div class="app-info-row">
-                    <span>最小提现: ¥${(app.minWithdraw || 0).toFixed(2)}</span>
+                    <span>最小提现: ¥${minWithdraw.toFixed(2)}</span>
                     <span>已赚金额: ¥${earned.toFixed(2)}</span>
                 </div>
                 <div class="app-info-row">
@@ -2141,6 +2335,10 @@ function renderAppList(phone) {
 
 // 计算下次玩的日期
 function calculateNextPlayDate(earned, minWithdraw) {
+    // 防止除以0
+    if (!minWithdraw || minWithdraw <= 0) {
+        return '--';
+    }
     const startDate = new Date('2026-01-01');
     const daysEarned = Math.floor(earned / minWithdraw);
     const targetDate = new Date(startDate);
@@ -2504,8 +2702,8 @@ function renderStats() {
         });
     });
     
-    // 已赚金额应该是累计的 earned，不包括当前余额
-    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + (app.earned || 0), 0);
+    // 已赚金额使用统一函数计算
+    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + calculateAppEarned(app), 0);
     const totalWithdrawn = allAppsWithPhone.reduce((sum, app) => {
         return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     }, 0);
@@ -2535,8 +2733,8 @@ function renderStats() {
     }
     
     container.innerHTML = allAppsWithPhone.map(app => {
-        // 已赚金额是累计的 earned，提现后不应减少
-        const earned = (app.earned || 0) + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+        // 使用统一函数计算已赚金额
+        const earned = calculateAppEarned(app);
         const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const expenses = app.expenses && app.expenses.length > 0 ? 
             app.expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0;
@@ -2684,20 +2882,11 @@ function renderSettings() {
     }
     
     // 计算待支出余额（总提现金额 - 总支出金额）
-    // 使用 remainingWithdrawn（剩余待支出金额），如果为 undefined 则计算
-    let totalWithdrawn = 0;
+    // 总提现金额 = 所有软件的 withdrawn + historicalWithdrawn
+    let totalWithdrawnAmount = 0;
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
-            // remainingWithdrawn 是剩余待支出金额，优先使用它
-            // 如果 undefined，则计算：总提现 - 该软件已支出
-            if (app.remainingWithdrawn !== undefined) {
-                totalWithdrawn += app.remainingWithdrawn;
-            } else {
-                // 兼容旧数据：计算剩余金额
-                const appWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-                const appExpenses = app.expenses ? app.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
-                totalWithdrawn += Math.max(0, appWithdrawn - appExpenses);
-            }
+            totalWithdrawnAmount += (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         });
     });
     
@@ -2707,8 +2896,153 @@ function renderSettings() {
         totalExpenses = data.expenses.reduce((sum, expense) => sum + expense.amount, 0);
     }
     
-    const pendingExpenseBalance = totalWithdrawn - totalExpenses;
+    // 待支出金额 = 总提现金额 - 总支出金额
+    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses;
     document.getElementById('total-withdrawn').value = pendingExpenseBalance.toFixed(2);
+}
+
+// 批量添加手机
+function bulkAddPhones() {
+    const namesText = document.getElementById('bulk-phone-names').value.trim();
+    
+    if (!namesText) {
+        showToast('请输入手机名称');
+        return;
+    }
+    
+    // 解析手机名称列表
+    const phoneNames = namesText.split('\n')
+        .map(name => name.trim())
+        .filter(name => name.length > 0);
+    
+    if (phoneNames.length === 0) {
+        showToast('请输入有效的手机名称');
+        return;
+    }
+    
+    const data = DataManager.loadData();
+    let addedCount = 0;
+    let skippedCount = 0;
+    
+    phoneNames.forEach(phoneName => {
+        // 检查是否已存在同名手机（不区分大小写）
+        const exists = data.phones.some(phone => 
+            phone.name.toLowerCase() === phoneName.toLowerCase()
+        );
+        
+        if (exists) {
+            skippedCount++;
+        } else {
+            // 添加手机
+            const today = new Date().toISOString().split('T')[0];
+            const phone = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                name: phoneName,
+                apps: [],
+                createdAt: new Date().toISOString(),
+                dailyTotalEarnedHistory: {
+                    [today]: 0
+                }
+            };
+            data.phones.push(phone);
+            addedCount++;
+        }
+    });
+    
+    // 保存数据
+    DataManager.saveData(data);
+    
+    // 清空输入框
+    document.getElementById('bulk-phone-names').value = '';
+    
+    // 显示结果
+    if (addedCount > 0) {
+        showToast(`成功添加 ${addedCount} 个手机，跳过 ${skippedCount} 个已存在的手机`);
+        // 刷新手机列表
+        renderPhones();
+    } else {
+        showToast(`所有手机已存在，跳过 ${skippedCount} 个`);
+    }
+}
+
+// 批量添加软件到所有手机
+function bulkAddApps() {
+    const namesText = document.getElementById('bulk-app-names').value.trim();
+    const minWithdraw = parseFloat(document.getElementById('bulk-app-min-withdraw').value) || 0.3;
+    
+    if (!namesText) {
+        showToast('请输入软件名称');
+        return;
+    }
+    
+    // 解析软件名称列表
+    const appNames = namesText.split('\n')
+        .map(name => name.trim())
+        .filter(name => name.length > 0);
+    
+    if (appNames.length === 0) {
+        showToast('请输入有效的软件名称');
+        return;
+    }
+    
+    const data = DataManager.loadData();
+    
+    if (data.phones.length === 0) {
+        showToast('请先添加手机');
+        return;
+    }
+    
+    let addedCount = 0;
+    let skippedCount = 0;
+    
+    // 遍历所有手机
+    data.phones.forEach(phone => {
+        appNames.forEach(appName => {
+            // 检查手机中是否已存在同名软件（不区分大小写）
+            const exists = phone.apps.some(app => 
+                app.name.toLowerCase() === appName.toLowerCase()
+            );
+            
+            if (exists) {
+                skippedCount++;
+            } else {
+                // 添加软件
+                const today = new Date().toISOString().split('T')[0];
+                const app = {
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                    name: appName,
+                    minWithdraw: minWithdraw,
+                    balance: 0,
+                    initialBalance: 0,
+                    earned: 0,
+                    withdrawn: 0,
+                    remainingWithdrawn: 0,
+                    historicalWithdrawn: 0,
+                    expenses: [],
+                    withdrawals: [],
+                    lastUpdated: new Date().toISOString(),
+                    dailyEarnedHistory: {}
+                };
+                phone.apps.push(app);
+                addedCount++;
+            }
+        });
+    });
+    
+    // 保存数据
+    DataManager.saveData(data);
+    
+    // 清空输入框
+    document.getElementById('bulk-app-names').value = '';
+    
+    // 显示结果
+    if (addedCount > 0) {
+        showToast(`成功添加 ${addedCount} 个软件，跳过 ${skippedCount} 个已存在的软件`);
+        // 刷新手机列表
+        renderPhones();
+    } else {
+        showToast(`所有软件已存在，跳过 ${skippedCount} 个`);
+    }
 }
 
 // 添加支出
@@ -2867,8 +3201,8 @@ function renderInstallments() {
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
-    document.getElementById('installment-earned').textContent = `¥${summary.totalWithdrawn.toFixed(2)}`;
-    document.getElementById('installment-needed').textContent = `¥${summary.totalNeeded.toFixed(2)}`;
+    document.getElementById('installment-earned').textContent = `¥${summary.pendingExpense.toFixed(2)}`;  // 待支出金额
+    document.getElementById('installment-needed').textContent = `¥${summary.pendingWithdrawal.toFixed(2)}`;  // 待提现金额
     document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
     document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
     
@@ -2910,7 +3244,7 @@ function renderInstallments() {
                 <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
                 <div class="installment-details">
                     <span>剩余天数: ${installment.daysRemaining}天</span>
-                    <span>每日需要: ¥${((installment.amount - installment.totalWithdrawn) / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                    <span>每日需要: ¥${((installment.amount - installment.pendingExpense) / (installment.daysRemaining || 1)).toFixed(2)}</span>
                 </div>
                 <div class="installment-progress">
                     <div class="progress-header">
