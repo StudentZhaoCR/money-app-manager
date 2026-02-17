@@ -2044,7 +2044,10 @@ function renderAppEarnContent(phone, data) {
                     // 今天有编辑，计算从昨天结束到现在的总变化
                     displayEarned = Math.max(0, currentBalance - yesterdayBalance);
                 } else {
-                    // 今天没有编辑
+                    // 今天没有编辑，但自动保存今天的最终状态
+                    // 这样明天就能和今天比较
+                    const todayEarned = calculateAppEarned(app);
+                    history[today] = todayEarned;
                     displayEarned = 0;
                 }
                 
