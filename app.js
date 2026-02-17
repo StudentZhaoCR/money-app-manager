@@ -1200,19 +1200,33 @@ class DataManager {
 
     // ==================== 游戏管理功能 ====================
 
-    // 获取下载的游戏列表（过滤掉已删除的）
-    static getDownloadedGames() {
+    // 获取下载的游戏列表（过滤掉已删除的，可按手机ID筛选）
+    static getDownloadedGames(phoneId = null) {
         const games = localStorage.getItem(DOWNLOADED_GAMES_KEY);
         if (!games) return [];
         const allGames = JSON.parse(games);
         // 只返回未删除的游戏
-        return allGames.filter(g => !g.deleted);
+        let filteredGames = allGames.filter(g => !g.deleted);
+        // 如果指定了手机ID（包括空字符串），只返回该手机的游戏
+        // 将空字符串也视为 null（全部手机）
+        const effectivePhoneId = phoneId || null;
+        if (effectivePhoneId !== null) {
+            filteredGames = filteredGames.filter(g => g.phoneId === effectivePhoneId);
+        }
+        return filteredGames;
     }
     
     // 获取所有游戏（包括已删除的，用于判断是否是重新下载）
     static getAllGames() {
         const games = localStorage.getItem(DOWNLOADED_GAMES_KEY);
         return games ? JSON.parse(games) : [];
+    }
+    
+    // 获取有游戏的所有手机ID列表
+    static getPhonesWithGames() {
+        const games = this.getDownloadedGames();
+        const phoneIds = [...new Set(games.map(g => g.phoneId).filter(id => id !== null))];
+        return phoneIds;
     }
 
     // 保存下载的游戏列表
@@ -1221,14 +1235,16 @@ class DataManager {
     }
 
     // 添加新下载的游戏
-    static addDownloadedGame(gameName) {
+    static addDownloadedGame(gameName, phoneId = null) {
         const games = this.getDownloadedGames();
         const allGames = this.getAllGames();
         const today = new Date().toISOString().split('T')[0];
         
-        // 检查是否之前下载过这个游戏（已删除的）
+        // 检查是否之前下载过这个游戏（已删除的）- 需要匹配同一手机
         const deletedGame = allGames.find(g => 
-            g.name === gameName && g.deleted === true
+            g.name === gameName && 
+            g.deleted === true &&
+            g.phoneId === phoneId
         );
         
         // 如果是重新下载，只需要玩3天
@@ -1238,6 +1254,7 @@ class DataManager {
         const game = {
             id: Date.now().toString(),
             name: gameName,
+            phoneId: phoneId,  // 关联手机ID
             downloadDate: today,
             daysPlayed: 0,
             completed: false,
@@ -1308,9 +1325,9 @@ class DataManager {
         return games.filter(g => !g.deleted);
     }
 
-    // 获取今日要玩的游戏（抽签决定）
-    static getTodayGameToPlay() {
-        const games = this.getDownloadedGames();
+    // 获取今日要玩的游戏（抽签决定，可按手机ID筛选）
+    static getTodayGameToPlay(phoneId = null) {
+        const games = this.getDownloadedGames(phoneId);
         const today = new Date().toISOString().split('T')[0];
         
         // 过滤出未完成的游戏
@@ -1330,10 +1347,21 @@ class DataManager {
         // 保存抽签历史
         const targetDays = selectedGame.targetDays || 7;
         const drawHistory = this.getGameDrawHistory();
+        // 使用传入的 phoneId 参数，确保保存的是当前选中的手机ID
+        const savedPhoneId = phoneId || null;
+        
+        console.log('保存抽签历史:', {
+            date: today,
+            gameName: selectedGame.name,
+            phoneId: savedPhoneId,
+            daysPlayed: selectedGame.daysPlayed
+        });
+        
         drawHistory.unshift({
             date: today,
             gameId: selectedGame.id,
             gameName: selectedGame.name,
+            phoneId: savedPhoneId,
             daysPlayed: selectedGame.daysPlayed,
             remainingDays: targetDays - selectedGame.daysPlayed,
             targetDays: targetDays,
@@ -1346,6 +1374,7 @@ class DataManager {
         }
         
         this.saveGameDrawHistory(drawHistory);
+        console.log('保存后的历史记录:', drawHistory);
         
         return selectedGame;
     }
@@ -1353,17 +1382,21 @@ class DataManager {
     // 获取抽签历史
     static getGameDrawHistory() {
         const history = localStorage.getItem(GAME_DRAW_HISTORY_KEY);
+        console.log('从localStorage读取抽签历史:', history);
         return history ? JSON.parse(history) : [];
     }
 
     // 保存抽签历史
     static saveGameDrawHistory(history) {
-        localStorage.setItem(GAME_DRAW_HISTORY_KEY, JSON.stringify(history));
+        const jsonString = JSON.stringify(history);
+        console.log('保存到localStorage的抽签历史:', jsonString);
+        localStorage.setItem(GAME_DRAW_HISTORY_KEY, jsonString);
+        console.log('保存完成，key:', GAME_DRAW_HISTORY_KEY);
     }
 
-    // 获取游戏统计
-    static getGameStats() {
-        const games = this.getDownloadedGames();
+    // 获取游戏统计（可按手机ID筛选）
+    static getGameStats(phoneId = null) {
+        const games = this.getDownloadedGames(phoneId);
         const today = new Date().toISOString().split('T')[0];
         
         return {
@@ -1373,6 +1406,38 @@ class DataManager {
             canDeleteGames: games.filter(g => g.canDelete).length,
             todayGames: games.filter(g => g.lastPlayedDate === today).length
         };
+    }
+    
+    // 获取所有手机的游戏统计
+    static getAllPhonesGameStats() {
+        const data = this.loadData();
+        const phoneIds = this.getPhonesWithGames();
+        
+        const stats = [];
+        
+        // 为每个有游戏的手机生成统计
+        phoneIds.forEach(phoneId => {
+            const phone = data.phones.find(p => p.id === phoneId);
+            if (phone) {
+                stats.push({
+                    phoneId: phoneId,
+                    phoneName: phone.name,
+                    ...this.getGameStats(phoneId)
+                });
+            }
+        });
+        
+        // 添加未关联手机的游戏统计
+        const unlinkedStats = this.getGameStats(null);
+        if (unlinkedStats.totalGames > 0) {
+            stats.push({
+                phoneId: null,
+                phoneName: '未指定手机',
+                ...unlinkedStats
+            });
+        }
+        
+        return stats;
     }
 
     static withdraw(phoneId, appId, amount) {
@@ -1604,6 +1669,16 @@ class DataManager {
             }
         }
         keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        // 清除游戏管理相关的存储键
+        localStorage.removeItem(DOWNLOADED_GAMES_KEY);
+        localStorage.removeItem(GAME_DRAW_HISTORY_KEY);
+        
+        // 清除成就系统和游戏化相关的存储键
+        localStorage.removeItem(ACHIEVEMENTS_KEY);
+        localStorage.removeItem(DAILY_TASKS_KEY);
+        localStorage.removeItem(USER_LEVEL_KEY);
+        localStorage.removeItem(CHECKIN_KEY);
     }
     
     // 主题相关方法
@@ -4413,6 +4488,7 @@ function clearAllData() {
         renderPhones();
         renderStats();
         renderSettings();
+        renderGamesPage();
         showToast('数据已清空！');
     }
 }
@@ -4991,6 +5067,9 @@ document.getElementById('modal').addEventListener('click', function(e) {
 
 // ==================== 下载游戏管理功能 ====================
 
+// 当前选中的手机ID
+let currentGamePhoneId = null;
+
 // 渲染游戏管理页面
 function renderGamesPage() {
     // 更新日期
@@ -5000,6 +5079,12 @@ function renderGamesPage() {
     if (gamesDateEl) {
         gamesDateEl.textContent = dateStr;
     }
+    
+    // 渲染手机选择器
+    renderGamePhoneSelect();
+    
+    // 重置抽签区域
+    resetDrawArea();
     
     // 渲染游戏统计
     renderGameStats();
@@ -5011,19 +5096,109 @@ function renderGamesPage() {
     renderGameDrawHistoryList();
 }
 
+// 渲染手机选择器
+function renderGamePhoneSelect() {
+    const select = document.getElementById('game-phone-select');
+    if (!select) return;
+    
+    const data = DataManager.loadData();
+    const currentValue = select.value;
+    
+    let html = '<option value="">全部手机</option>';
+    data.phones.forEach(phone => {
+        html += `<option value="${phone.id}">${phone.name}</option>`;
+    });
+    
+    select.innerHTML = html;
+    select.value = currentValue;
+}
+
+// 手机选择变化
+function onGamePhoneChange() {
+    const select = document.getElementById('game-phone-select');
+    currentGamePhoneId = select.value || null;
+    
+    // 重置抽签区域
+    resetDrawArea();
+    
+    // 重新渲染统计和列表
+    renderGameStats();
+    renderGameDrawHistoryList();
+    renderGamesList();
+}
+
+// 重置抽签区域
+function resetDrawArea() {
+    const container = document.getElementById('today-game-result');
+    if (!container) return;
+    
+    // 检查今天是否已经抽签
+    const today = new Date().toISOString().split('T')[0];
+    const drawHistory = DataManager.getGameDrawHistory();
+    const currentPhoneId = currentGamePhoneId || null;
+    const todayDraw = drawHistory.find(h => {
+        const historyPhoneId = h.phoneId || null;
+        return h.date === today && historyPhoneId === currentPhoneId;
+    });
+    
+    if (todayDraw) {
+        // 今天已经抽签过了，显示抽签结果
+        showTodayDrawResult(todayDraw);
+    } else {
+        // 今天还没抽签，显示抽签按钮
+        container.innerHTML = `
+            <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
+            <button class="btn" onclick="drawTodayGame()" style="background: white; color: #667eea; font-weight: bold; font-size: 16px;">🎮 开始抽签</button>
+        `;
+    }
+}
+
 // 渲染游戏统计
 function renderGameStats() {
-    const stats = DataManager.getGameStats();
+    const container = document.getElementById('phone-game-stats');
+    if (!container) return;
     
-    document.getElementById('total-games-count').textContent = stats.totalGames;
-    document.getElementById('active-games-count').textContent = stats.activeGames;
-    document.getElementById('completed-games-count').textContent = stats.completedGames;
-    document.getElementById('can-delete-games-count').textContent = stats.canDeleteGames;
+    // 获取所有手机的游戏统计
+    const allStats = DataManager.getAllPhonesGameStats();
+    
+    if (allStats.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无游戏数据</div>';
+        return;
+    }
+    
+    // 如果选中了特定手机，只显示该手机的统计
+    const statsToShow = currentGamePhoneId 
+        ? allStats.filter(s => s.phoneId === currentGamePhoneId)
+        : allStats;
+    
+    container.innerHTML = statsToShow.map(stat => `
+        <div style="margin-bottom: 16px; padding: 12px; background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+            <div style="font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">${stat.phoneName}</div>
+            <div class="stats-row">
+                <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <span class="stat-label" style="color: white;">总游戏数</span>
+                    <span class="stat-value" style="color: white;">${stat.totalGames}</span>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                    <span class="stat-label" style="color: white;">进行中</span>
+                    <span class="stat-value" style="color: white;">${stat.activeGames}</span>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
+                    <span class="stat-label" style="color: white;">已完成</span>
+                    <span class="stat-value" style="color: white;">${stat.completedGames}</span>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <span class="stat-label" style="color: white;">可删除</span>
+                    <span class="stat-value" style="color: white;">${stat.canDeleteGames}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
 }
 
 // 渲染游戏列表
 function renderGamesList() {
-    const games = DataManager.getDownloadedGames();
+    const games = DataManager.getDownloadedGames(currentGamePhoneId);
     const container = document.getElementById('games-list');
     
     if (games.length === 0) {
@@ -5079,15 +5254,31 @@ function renderGamesList() {
 
 // 渲染抽签历史
 function renderGameDrawHistoryList() {
-    const history = DataManager.getGameDrawHistory();
+    // 直接读取 localStorage
+    const historyStr = localStorage.getItem('moneyApp_gameDrawHistory');
+    const history = historyStr ? JSON.parse(historyStr) : [];
     const container = document.getElementById('game-draw-history');
+    
+    console.log('渲染抽签历史，localStorage key:', 'moneyApp_gameDrawHistory');
+    console.log('渲染抽签历史，localStorage 原始数据:', historyStr);
+    console.log('渲染抽签历史，记录数:', history.length);
+    console.log('历史记录:', history);
     
     if (history.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无抽签记录</div>';
         return;
     }
     
-    container.innerHTML = history.map(record => `
+    // 获取手机名称映射
+    const data = DataManager.loadData();
+    const phoneMap = {};
+    data.phones.forEach(phone => {
+        phoneMap[phone.id] = phone.name;
+    });
+    
+    container.innerHTML = history.map(record => {
+        const phoneName = record.phoneId ? (phoneMap[record.phoneId] || '未知手机') : '未指定手机';
+        return `
         <div class="draw-history-item" style="padding: 12px; border-bottom: 1px solid var(--border-color);">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
@@ -5095,10 +5286,13 @@ function renderGameDrawHistoryList() {
                     <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
                         🎮 ${record.gameName}
                     </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                        📱 ${phoneName}
+                    </div>
                 </div>
                 <div style="text-align: right;">
                     <div style="font-size: 14px; color: var(--primary-color); font-weight: 600;">
-                        ${record.daysPlayed}/7天
+                        ${record.daysPlayed}/${record.targetDays || 7}天
                     </div>
                     <div style="font-size: 12px; color: var(--text-secondary);">
                         剩余${record.remainingDays}天
@@ -5106,7 +5300,7 @@ function renderGameDrawHistoryList() {
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // 添加新游戏
@@ -5119,7 +5313,8 @@ function addNewGame() {
         return;
     }
     
-    DataManager.addDownloadedGame(gameName);
+    // 使用当前选中的手机ID
+    DataManager.addDownloadedGame(gameName, currentGamePhoneId);
     nameInput.value = '';
     
     showToast('游戏添加成功！');
@@ -5139,10 +5334,22 @@ function deleteDownloadedGame(gameId) {
 function drawTodayGame() {
     const container = document.getElementById('today-game-result');
     
-    // 检查今天是否已经抽签
+    // 检查今天是否已经抽签（针对当前手机）
     const today = new Date().toISOString().split('T')[0];
     const drawHistory = DataManager.getGameDrawHistory();
-    const todayDraw = drawHistory.find(h => h.date === today);
+    
+    // 调试信息
+    console.log('当前手机ID:', currentGamePhoneId);
+    console.log('抽签历史:', drawHistory);
+    
+    // 将空字符串转换为null进行统一比较
+    const currentPhoneId = currentGamePhoneId || null;
+    const todayDraw = drawHistory.find(h => {
+        const historyPhoneId = h.phoneId || null;
+        const match = h.date === today && historyPhoneId === currentPhoneId;
+        console.log(`检查历史记录: date=${h.date}, phoneId=${h.phoneId}, match=${match}`);
+        return match;
+    });
     
     if (todayDraw) {
         // 今天已经抽签过了，显示今天的抽签结果
@@ -5151,8 +5358,9 @@ function drawTodayGame() {
         return;
     }
     
-    // 今天还没抽签，执行抽签
-    const result = DataManager.getTodayGameToPlay();
+    // 今天还没抽签，执行抽签（针对当前手机）
+    console.log('执行抽签，当前手机ID:', currentGamePhoneId);
+    const result = DataManager.getTodayGameToPlay(currentGamePhoneId);
     
     if (!result) {
         container.innerHTML = `
@@ -5162,6 +5370,8 @@ function drawTodayGame() {
         return;
     }
     
+    // 抽签历史已经在 DataManager.getTodayGameToPlay 中保存了
+    // 这里不需要重复保存
     const targetDays = result.targetDays || 7;
     const progressPercent = (result.daysPlayed / targetDays) * 100;
     const remainingDays = targetDays - result.daysPlayed;
@@ -5190,7 +5400,7 @@ function drawTodayGame() {
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">⏱️ 建议游玩时长</div>
                 <div style="font-size: 36px; font-weight: bold; color: #fff;">${playTimeText}</div>
                 <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">
-                    ${remainingDays <= 2 ? '即将完成，建议多玩一会' : remainingDays >= 5 ? '刚开始，适当体验即可' : '正常游玩'}
+                    ${remainingDays <= 1 ? '即将完成，建议多玩一会' : remainingDays >= 3 ? '刚开始，适当体验即可' : '正常游玩'}
                 </div>
             </div>
             
