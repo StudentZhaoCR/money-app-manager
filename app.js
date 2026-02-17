@@ -2022,10 +2022,13 @@ function renderAppEarnContent(phone, data) {
             let hasRealChange = false;
             
             if (date === today) {
-                // 对于今天，使用实时计算的值
+                // 对于今天，计算今日新增 = 当前总赚取 - 昨天结束时的总赚取
                 const currentEarned = calculateAppEarned(app);
-                displayEarned = Math.max(0, currentEarned - prevEarned);
-                // 检查今天是否有实际编辑记录（有历史记录且是今天）
+                // 昨天结束时的已赚金额（从历史记录或前一天的值获取）
+                const yesterdayEarned = getAppEarnedOnDate(app, prevDate);
+                displayEarned = Math.max(0, currentEarned - yesterdayEarned);
+                
+                // 检查今天是否有实际编辑记录
                 const history = app.dailyEarnedHistory || {};
                 hasRealChange = history[today] !== undefined && displayEarned > 0;
             } else {
