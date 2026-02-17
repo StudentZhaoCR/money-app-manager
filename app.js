@@ -2019,17 +2019,23 @@ function renderAppEarnContent(phone, data) {
             
             // 计算当日赚取 = 当天结束值 - 前一天结束值
             let displayEarned = 0;
+            let hasRealChange = false;
             
             if (date === today) {
                 // 对于今天，使用实时计算的值
                 const currentEarned = calculateAppEarned(app);
                 displayEarned = Math.max(0, currentEarned - prevEarned);
+                // 检查今天是否有实际编辑记录（有历史记录且是今天）
+                const history = app.dailyEarnedHistory || {};
+                hasRealChange = history[today] !== undefined && displayEarned > 0;
             } else {
                 // 对于历史日期
                 displayEarned = Math.max(0, dateEarned - prevEarned);
+                hasRealChange = displayEarned > 0;
             }
             
-            if (displayEarned > 0) {
+            // 只显示有实际赚取且今天有编辑记录的软件（对于今天）
+            if (displayEarned > 0 && (date !== today || hasRealChange)) {
                 hasEarnedOnThisDay = true;
                 dayTotalEarned += displayEarned;
                 const progress = appDailyTarget > 0 ? Math.min(100, Math.round((displayEarned / appDailyTarget) * 100)) : 0;
