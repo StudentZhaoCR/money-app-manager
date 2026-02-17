@@ -5,6 +5,12 @@ const INSTALLMENTS_KEY = 'moneyApp_installments';
 const EXPENSES_KEY = 'moneyApp_expenses';
 const SETTINGS_KEY = 'moneyApp_settings';
 
+// 成就系统和游戏化存储键
+const ACHIEVEMENTS_KEY = 'moneyApp_achievements';
+const DAILY_TASKS_KEY = 'moneyApp_dailyTasks';
+const USER_LEVEL_KEY = 'moneyApp_userLevel';
+const CHECKIN_KEY = 'moneyApp_checkin';
+
 // ==================== 通用计算函数 ====================
 
 // 计算软件的已赚金额（累计）
@@ -764,11 +770,7 @@ class DataManager {
 
     static calculateYearlyGoal() {
         const data = this.loadData();
-        // 如果用户已经手动设置了全年目标，不要自动覆盖
-        if (data.settings.yearlyGoal && data.settings.yearlyGoal > 0) {
-            return data.settings.yearlyGoal;
-        }
-        // 只有在没有设置目标时，才根据软件自动计算
+        // 根据当前所有软件自动计算全年目标
         const allApps = data.phones.flatMap(phone => phone.apps);
         const yearlyGoal = allApps.reduce((total, app) => {
             return total + ((app.minWithdraw || 0.3) * 365);
@@ -776,6 +778,299 @@ class DataManager {
         data.settings.yearlyGoal = yearlyGoal;
         this.saveData(data);
         return yearlyGoal;
+    }
+    
+    // 获取用户设置的全年目标（如果用户手动设置了，返回设置的值；否则返回自动计算的值）
+    static getYearlyGoal() {
+        const data = this.loadData();
+        return data.settings.yearlyGoal || 0;
+    }
+
+    // ==================== 成就系统 ====================
+
+    // 获取成就数据
+    static getAchievements() {
+        const achievements = localStorage.getItem(ACHIEVEMENTS_KEY);
+        return achievements ? JSON.parse(achievements) : {
+            unlocked: [],
+            firstWithdrawal: false,
+            totalEarned100: false,
+            totalEarned500: false,
+            totalEarned1000: false,
+            consecutiveCheckIn7: false,
+            consecutiveCheckIn30: false,
+            add10Apps: false,
+            add5Phones: false
+        };
+    }
+
+    // 保存成就数据
+    static saveAchievements(achievements) {
+        localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(achievements));
+    }
+
+    // 检查并解锁成就
+    static checkAchievements() {
+        const data = this.loadData();
+        const achievements = this.getAchievements();
+        const newAchievements = [];
+
+        // 计算总赚取金额
+        const totalEarned = data.phones.reduce((sum, phone) => {
+            return sum + calculatePhoneTotalEarned(phone);
+        }, 0);
+
+        // 检查首次提现成就
+        const totalWithdrawn = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
+        }, 0);
+        if (totalWithdrawn > 0 && !achievements.firstWithdrawal) {
+            achievements.firstWithdrawal = true;
+            newAchievements.push('🎉 首次提现');
+        }
+
+        // 检查累计赚取成就
+        if (totalEarned >= 100 && !achievements.totalEarned100) {
+            achievements.totalEarned100 = true;
+            newAchievements.push('💰 累计赚取100元');
+        }
+        if (totalEarned >= 500 && !achievements.totalEarned500) {
+            achievements.totalEarned500 = true;
+            newAchievements.push('💎 累计赚取500元');
+        }
+        if (totalEarned >= 1000 && !achievements.totalEarned1000) {
+            achievements.totalEarned1000 = true;
+            newAchievements.push('🏆 累计赚取1000元');
+        }
+
+        // 检查添加软件/手机成就
+        const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+        if (totalApps >= 10 && !achievements.add10Apps) {
+            achievements.add10Apps = true;
+            newAchievements.push('📱 添加10个软件');
+        }
+        if (data.phones.length >= 5 && !achievements.add5Phones) {
+            achievements.add5Phones = true;
+            newAchievements.push('📲 添加5部手机');
+        }
+
+        this.saveAchievements(achievements);
+        return newAchievements;
+    }
+
+    // ==================== 签到系统 ====================
+
+    // 获取签到数据
+    static getCheckInData() {
+        const checkIn = localStorage.getItem(CHECKIN_KEY);
+        return checkIn ? JSON.parse(checkIn) : {
+            lastCheckIn: null,
+            consecutiveDays: 0,
+            totalDays: 0,
+            history: []
+        };
+    }
+
+    // 保存签到数据
+    static saveCheckInData(checkIn) {
+        localStorage.setItem(CHECKIN_KEY, JSON.stringify(checkIn));
+    }
+
+    // 执行签到
+    static doCheckIn() {
+        const checkIn = this.getCheckInData();
+        const today = new Date().toISOString().split('T')[0];
+
+        // 检查今天是否已经签到
+        if (checkIn.lastCheckIn === today) {
+            return { success: false, message: '今天已经签到过了' };
+        }
+
+        // 检查是否是连续签到
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (checkIn.lastCheckIn === yesterdayStr) {
+            checkIn.consecutiveDays++;
+        } else {
+            checkIn.consecutiveDays = 1;
+        }
+
+        checkIn.lastCheckIn = today;
+        checkIn.totalDays++;
+        checkIn.history.push(today);
+
+        // 只保留最近30天的记录
+        if (checkIn.history.length > 30) {
+            checkIn.history.shift();
+        }
+
+        this.saveCheckInData(checkIn);
+
+        // 检查连续签到成就
+        const achievements = this.getAchievements();
+        let newAchievement = null;
+        if (checkIn.consecutiveDays >= 7 && !achievements.consecutiveCheckIn7) {
+            achievements.consecutiveCheckIn7 = true;
+            newAchievement = '🔥 连续签到7天';
+        }
+        if (checkIn.consecutiveDays >= 30 && !achievements.consecutiveCheckIn30) {
+            achievements.consecutiveCheckIn30 = true;
+            newAchievement = '⭐ 连续签到30天';
+        }
+        if (newAchievement) {
+            this.saveAchievements(achievements);
+        }
+
+        return {
+            success: true,
+            consecutiveDays: checkIn.consecutiveDays,
+            totalDays: checkIn.totalDays,
+            newAchievement
+        };
+    }
+
+    // ==================== 等级系统 ====================
+
+    // 获取用户等级数据
+    static getUserLevel() {
+        const level = localStorage.getItem(USER_LEVEL_KEY);
+        return level ? JSON.parse(level) : {
+            level: 1,
+            exp: 0,
+            totalExp: 0,
+            title: '新手'
+        };
+    }
+
+    // 保存用户等级数据
+    static saveUserLevel(level) {
+        localStorage.setItem(USER_LEVEL_KEY, JSON.stringify(level));
+    }
+
+    // 计算等级所需经验
+    static getExpForLevel(level) {
+        return Math.floor(100 * Math.pow(1.5, level - 1));
+    }
+
+    // 获取等级称号
+    static getLevelTitle(level) {
+        const titles = [
+            '新手', '学徒', '达人', '高手', '专家',
+            '大师', '宗师', '传说', '神话', '传奇'
+        ];
+        return titles[Math.min(level - 1, titles.length - 1)] || '传奇';
+    }
+
+    // 增加经验值
+    static addExp(amount) {
+        const level = this.getUserLevel();
+        level.exp += amount;
+        level.totalExp += amount;
+
+        // 检查升级
+        let leveledUp = false;
+        const expNeeded = this.getExpForLevel(level.level);
+        while (level.exp >= expNeeded) {
+            level.exp -= expNeeded;
+            level.level++;
+            level.title = this.getLevelTitle(level.level);
+            leveledUp = true;
+        }
+
+        this.saveUserLevel(level);
+        return { level, leveledUp };
+    }
+
+    // ==================== 每日任务 ====================
+
+    // 获取每日任务
+    static getDailyTasks() {
+        const tasks = localStorage.getItem(DAILY_TASKS_KEY);
+        const today = new Date().toISOString().split('T')[0];
+
+        if (!tasks) {
+            return this.generateDailyTasks(today);
+        }
+
+        const tasksData = JSON.parse(tasks);
+        // 检查是否是今天的任务
+        if (tasksData.date !== today) {
+            return this.generateDailyTasks(today);
+        }
+
+        return tasksData;
+    }
+
+    // 生成每日任务
+    static generateDailyTasks(date) {
+        const data = this.loadData();
+        const totalEarned = data.phones.reduce((sum, phone) => {
+            return sum + calculatePhoneTotalEarned(phone);
+        }, 0);
+
+        const tasks = {
+            date,
+            tasks: [
+                {
+                    id: 'checkin',
+                    name: '每日签到',
+                    description: '完成每日签到',
+                    target: 1,
+                    current: 0,
+                    completed: false,
+                    reward: 10
+                },
+                {
+                    id: 'edit_app',
+                    name: '更新软件余额',
+                    description: '更新任意软件的余额',
+                    target: 1,
+                    current: 0,
+                    completed: false,
+                    reward: 20
+                },
+                {
+                    id: 'earn_goal',
+                    name: '赚取目标金额',
+                    description: '今日赚取达到目标金额',
+                    target: 1,
+                    current: 0,
+                    completed: false,
+                    reward: 30
+                }
+            ]
+        };
+
+        localStorage.setItem(DAILY_TASKS_KEY, JSON.stringify(tasks));
+        return tasks;
+    }
+
+    // 更新任务进度
+    static updateTaskProgress(taskId, progress = 1) {
+        const tasks = this.getDailyTasks();
+        const task = tasks.tasks.find(t => t.id === taskId);
+
+        if (task && !task.completed) {
+            task.current += progress;
+            if (task.current >= task.target) {
+                task.completed = true;
+                task.current = task.target;
+                // 完成任务获得经验
+                this.addExp(task.reward);
+            }
+            localStorage.setItem(DAILY_TASKS_KEY, JSON.stringify(tasks));
+        }
+
+        return tasks;
+    }
+
+    // 保存每日任务
+    static saveDailyTasks(tasks) {
+        localStorage.setItem(DAILY_TASKS_KEY, JSON.stringify(tasks));
     }
 
     static addPhone(name) {
@@ -898,6 +1193,11 @@ class DataManager {
 
                 this.saveData(data);
                 this.calculateYearlyGoal();
+                
+                // 更新每日任务进度
+                if (!isFirstTimeSetup) {
+                    this.updateTaskProgress('edit_app');
+                }
             }
         }
         return data;
@@ -2148,6 +2448,99 @@ function renderDashboard() {
     
     // 渲染今日需要关注的软件
     renderTodayApps(data);
+    
+    // 更新用户等级和签到信息
+    renderUserLevelAndCheckIn();
+    
+    // 渲染每日任务
+    renderDailyTasks();
+    
+    // 检查成就
+    const newAchievements = DataManager.checkAchievements();
+    if (newAchievements.length > 0) {
+        newAchievements.forEach(achievement => {
+            showToast(`🎉 解锁成就: ${achievement}`);
+        });
+    }
+}
+
+// 渲染用户等级和签到信息
+function renderUserLevelAndCheckIn() {
+    const level = DataManager.getUserLevel();
+    const checkIn = DataManager.getCheckInData();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 更新等级信息
+    document.getElementById('user-level-title').textContent = `Lv.${level.level} ${level.title}`;
+    const expNeeded = DataManager.getExpForLevel(level.level);
+    document.getElementById('user-exp').textContent = `经验值: ${level.exp}/${expNeeded}`;
+    document.getElementById('exp-progress-bar').style.width = `${(level.exp / expNeeded) * 100}%`;
+    
+    // 更新签到信息
+    document.getElementById('consecutive-days').textContent = checkIn.consecutiveDays;
+    document.getElementById('total-checkin-days').textContent = checkIn.totalDays;
+    
+    // 更新签到按钮状态
+    const checkInBtn = document.getElementById('checkin-btn');
+    if (checkIn.lastCheckIn === today) {
+        checkInBtn.textContent = '已签到';
+        checkInBtn.disabled = true;
+        checkInBtn.style.opacity = '0.6';
+    } else {
+        checkInBtn.textContent = '每日签到';
+        checkInBtn.disabled = false;
+        checkInBtn.style.opacity = '1';
+    }
+}
+
+// 执行每日签到
+function doDailyCheckIn() {
+    const result = DataManager.doCheckIn();
+    
+    if (result.success) {
+        showToast(`✅ 签到成功！连续${result.consecutiveDays}天`);
+        
+        // 更新任务进度
+        DataManager.updateTaskProgress('checkin');
+        
+        // 如果有新成就
+        if (result.newAchievement) {
+            setTimeout(() => {
+                showToast(`🎉 解锁成就: ${result.newAchievement}`);
+            }, 1000);
+        }
+        
+        // 重新渲染
+        renderUserLevelAndCheckIn();
+        renderDailyTasks();
+    } else {
+        showToast(result.message);
+    }
+}
+
+// 渲染每日任务
+function renderDailyTasks() {
+    const tasksData = DataManager.getDailyTasks();
+    const container = document.getElementById('daily-tasks-list');
+    
+    if (tasksData.tasks.length === 0) {
+        container.innerHTML = '<div class="empty-state">今日无任务</div>';
+        return;
+    }
+    
+    container.innerHTML = tasksData.tasks.map(task => `
+        <div class="task-item" style="display: flex; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color); ${task.completed ? 'opacity: 0.6;' : ''}">
+            <div style="flex: 1;">
+                <div style="font-weight: 500; ${task.completed ? 'text-decoration: line-through;' : ''}">${task.name}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${task.description}</div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 14px; color: var(--primary-color); font-weight: 600;">+${task.reward}EXP</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${task.completed ? '已完成' : `${task.current}/${task.target}`}</div>
+            </div>
+            ${task.completed ? '<span style="color: #22c55e; margin-left: 8px;">✓</span>' : ''}
+        </div>
+    `).join('');
 }
 
 // 渲染今日需要关注的软件

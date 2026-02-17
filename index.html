@@ -63,6 +63,41 @@
                 </div>
             </div>
 
+            <!-- 用户等级和签到 -->
+            <div class="card mt-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div class="section-header">
+                    <div class="section-title" style="color: white;">🏆 我的成就</div>
+                    <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold;" id="user-level-title">Lv.1 新手</div>
+                        <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;" id="user-exp">经验值: 0/100</div>
+                    </div>
+                    <button class="btn" id="checkin-btn" onclick="doDailyCheckIn()" style="background: white; color: #667eea; font-weight: bold;">每日签到</button>
+                </div>
+                <div style="display: flex; gap: 16px; font-size: 14px;">
+                    <div>🔥 连续签到: <span id="consecutive-days">0</span>天</div>
+                    <div>📅 累计签到: <span id="total-checkin-days">0</span>天</div>
+                </div>
+                <div class="progress-item" style="margin-top: 12px;">
+                    <div class="progress-bar" style="background: rgba(255,255,255,0.3);">
+                        <div class="progress-fill" id="exp-progress-bar" style="width: 0%; background: white;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 每日任务 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📋 每日任务</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="daily-tasks-list">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </div>
+
             <!-- 今日需要关注的软件 -->
             <div class="section-title">今日需要关注的软件</div>
             <div class="app-list" id="today-apps-list">
