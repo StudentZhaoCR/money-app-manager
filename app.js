@@ -1113,8 +1113,7 @@ class DataManager {
                 withdrawals: [],
                 lastUpdated: new Date().toISOString(),
                 dailyEarnedHistory: {},  // 第一次添加，不创建历史记录
-                lastEditBalance: initialBalance,  // 上次编辑时的余额
-                lastEditDate: today  // 上次编辑日期
+                lastEditBalance: initialBalance  // 上次编辑时的余额（添加时不设置lastEditDate，第一次编辑时才设置）
             };
             phone.apps.push(app);
 
@@ -1157,21 +1156,16 @@ class DataManager {
                 const isFirstTimeSetup = (oldBalance === 0 && oldEarned === 0 && !hasEditedBefore);
                 
                 // 更新已赚金额：如果余额增加，earned也增加；如果余额减少，earned不变（因为可能是提现）
-                // 但第一次设置余额时不记录为收益
-                if (balanceChange > 0 && !isFirstTimeSetup) {
+                // 第一次设置余额时也记录收益（从0到X的变化）
+                if (balanceChange > 0) {
                     // 余额增加，说明有新收入
                     app.earned = oldEarned + balanceChange;
-                } else if (isFirstTimeSetup) {
-                    // 第一次设置余额，earned 设为 0（从0开始记录）
-                    app.earned = 0;
                 }
                 // 如果余额减少，可能是提现，earned保持不变
 
                 // 保存今天最终的已赚金额（使用新的计算方式）
-                // 只有非第一次设置时才保存历史记录
-                if (!isFirstTimeSetup) {
-                    app.dailyEarnedHistory[today] = calculateAppEarned(app);
-                }
+                // 无论是否是第一次设置，都保存历史记录
+                app.dailyEarnedHistory[today] = calculateAppEarned(app);
 
                 app.balance = formattedBalance;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
@@ -1187,18 +1181,14 @@ class DataManager {
                 }
                 // 计算当前手机总赚取（使用新的计算方式）
                 const currentTotalEarned = calculatePhoneTotalEarned(phone);
-                // 保存今天的最终总赚取（只有非第一次设置时才保存）
-                if (!isFirstTimeSetup) {
-                    phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
-                }
+                // 保存今天的最终总赚取（无论是否是第一次设置）
+                phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
 
                 this.saveData(data);
                 this.calculateYearlyGoal();
                 
-                // 更新每日任务进度
-                if (!isFirstTimeSetup) {
-                    this.updateTaskProgress('edit_app');
-                }
+                // 更新每日任务进度（无论是否是第一次设置）
+                this.updateTaskProgress('edit_app');
             }
         }
         return data;
