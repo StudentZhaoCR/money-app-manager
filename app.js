@@ -1955,13 +1955,14 @@ function getAppEarnedOnDate(app, date) {
         return history[date];
     }
     
-    // 找到该日期之前最近的历史记录
-    const dates = Object.keys(history).filter(d => d <= date).sort();
+    // 找到该日期之前（严格小于）的历史记录
+    const dates = Object.keys(history).filter(d => d < date).sort();
     if (dates.length > 0) {
         return history[dates[dates.length - 1]];
     }
     
-    // 如果没有历史记录，返回0
+    // 如果没有历史记录，说明该日期之前没有编辑过
+    // 返回初始状态（只有初始基准值，没有赚取）
     return 0;
 }
 
@@ -2022,11 +2023,17 @@ function renderAppEarnContent(phone, data) {
             let hasRealChange = false;
             
             if (date === today) {
-                // 对于今天，计算今日新增 = 当前总赚取 - 昨天结束时的总赚取
-                const currentEarned = calculateAppEarned(app);
-                // 昨天结束时的已赚金额（从历史记录或前一天的值获取）
+                // 对于今天，计算今日新增
+                // 方法：当前余额 - 昨天结束时的余额
+                const currentBalance = app.balance || 0;
+                
+                // 获取昨天结束时的余额
+                // 从历史记录中反推：已赚金额 = (余额 - 初始基准值) + 已提现
+                // 所以：余额 = 已赚金额 - 已提现 + 初始基准值
                 const yesterdayEarned = getAppEarnedOnDate(app, prevDate);
-                displayEarned = Math.max(0, currentEarned - yesterdayEarned);
+                const yesterdayBalance = yesterdayEarned - (app.withdrawn || 0) - (app.historicalWithdrawn || 0) + (app.initialBalance || 0);
+                
+                displayEarned = Math.max(0, currentBalance - yesterdayBalance);
                 
                 // 检查今天是否有实际编辑记录
                 const history = app.dailyEarnedHistory || {};
