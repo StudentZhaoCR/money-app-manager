@@ -817,7 +817,9 @@ class DataManager {
                 expenses: [],
                 withdrawals: [],
                 lastUpdated: new Date().toISOString(),
-                dailyEarnedHistory: {}  // 第一次添加，不创建历史记录
+                dailyEarnedHistory: {},  // 第一次添加，不创建历史记录
+                lastEditBalance: initialBalance,  // 上次编辑时的余额
+                lastEditDate: today  // 上次编辑日期
             };
             phone.apps.push(app);
 
@@ -878,6 +880,10 @@ class DataManager {
                 app.balance = formattedBalance;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
+                
+                // 保存上次编辑信息
+                app.lastEditBalance = formattedBalance;
+                app.lastEditDate = today;
 
                 // 更新手机的总赚取历史记录
                 if (!phone.dailyTotalEarnedHistory) {
@@ -2023,21 +2029,26 @@ function renderAppEarnContent(phone, data) {
             let hasRealChange = false;
             
             if (date === today) {
-                // 对于今天，计算今日新增
-                // 方法：当前余额 - 昨天结束时的余额
+                // 对于今天，计算今日新增 = 当前余额 - 昨天结束时的余额
                 const currentBalance = app.balance || 0;
                 
                 // 获取昨天结束时的余额
-                // 从历史记录中反推：已赚金额 = (余额 - 初始基准值) + 已提现
-                // 所以：余额 = 已赚金额 - 已提现 + 初始基准值
                 const yesterdayEarned = getAppEarnedOnDate(app, prevDate);
                 const yesterdayBalance = yesterdayEarned - (app.withdrawn || 0) - (app.historicalWithdrawn || 0) + (app.initialBalance || 0);
                 
-                displayEarned = Math.max(0, currentBalance - yesterdayBalance);
-                
-                // 检查今天是否有实际编辑记录
+                // 检查今天是否有编辑记录
                 const history = app.dailyEarnedHistory || {};
-                hasRealChange = history[today] !== undefined && displayEarned > 0;
+                const hasEditToday = history[today] !== undefined;
+                
+                if (hasEditToday) {
+                    // 今天有编辑，计算从昨天结束到现在的总变化
+                    displayEarned = Math.max(0, currentBalance - yesterdayBalance);
+                } else {
+                    // 今天没有编辑
+                    displayEarned = 0;
+                }
+                
+                hasRealChange = hasEditToday && displayEarned > 0;
             } else {
                 // 对于历史日期
                 displayEarned = Math.max(0, dateEarned - prevEarned);
