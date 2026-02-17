@@ -466,6 +466,23 @@
                         <div class="progress-fill" id="installment-progress-bar" style="width: 0%"></div>
                     </div>
                 </div>
+                
+                <!-- 阶段性每日目标 -->
+                <div class="phase-goals-summary mt-4" id="phase-goals-summary" style="display: none;">
+                    <div class="section-subtitle" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">📊 阶段性每日目标</div>
+                    <div class="stats-row">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #dcfce7, #bbf7d0); border: 2px solid #22c55e;">
+                            <span class="stat-label" style="color: #166534;">第一阶段每日需赚</span>
+                            <span class="stat-value" id="phase1-daily-target" style="color: #16a34a; font-size: 20px;">¥0.00</span>
+                            <span class="stat-label" id="phase1-date" style="color: #166534; font-size: 12px; margin-top: 4px;"></span>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #dbeafe, #bfdbfe); border: 2px solid #3b82f6;">
+                            <span class="stat-label" style="color: #1e40af;">第二阶段每日需赚</span>
+                            <span class="stat-value" id="phase2-daily-target" style="color: #2563eb; font-size: 20px;">¥0.00</span>
+                            <span class="stat-label" id="phase2-date" style="color: #1e40af; font-size: 12px; margin-top: 4px;"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 分期列表 -->

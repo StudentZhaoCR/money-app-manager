@@ -330,7 +330,7 @@ function calculateInstallmentGoalsGlobal() {
 
 function renderInstallments() {
     const summary = DataManager.getInstallmentSummary();
-    const installmentGoals = DataManager.calculateInstallmentGoals();
+    const { installments, phaseGoals } = DataManager.calculateInstallmentGoals();
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
@@ -340,8 +340,8 @@ function renderInstallments() {
     document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
     
     // 更新最近还款日期
-    if (installmentGoals.length > 0) {
-        const nearestInstallment = installmentGoals[0];
+    if (installments.length > 0) {
+        const nearestInstallment = installments[0];
         document.getElementById('nearest-due-date').textContent = `${nearestInstallment.dueDate} (${nearestInstallment.daysRemaining}天)`;
     } else {
         document.getElementById('nearest-due-date').textContent = '暂无';
@@ -349,12 +349,46 @@ function renderInstallments() {
     
     // 渲染分期列表
     const container = document.getElementById('installment-list');
-    if (installmentGoals.length === 0) {
+    if (installments.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无分期记录</div>';
         return;
     }
     
-    container.innerHTML = installmentGoals.map(installment => {
+    // 渲染阶段性目标概览
+    let phaseGoalsHtml = '';
+    if (phaseGoals.length > 0) {
+        phaseGoalsHtml = `
+            <div class="card mb-4" style="background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #f59e0b;">
+                <div class="section-header">
+                    <div class="section-title" style="color: #92400e;">📊 阶段性每日目标</div>
+                    <div class="section-divider" style="background: #f59e0b;"></div>
+                </div>
+                <div class="phase-goals-list">
+                    ${phaseGoals.map((phase, index) => `
+                        <div class="phase-goal-item" style="padding: 12px; margin-bottom: 8px; background: white; border-radius: 8px; border-left: 4px solid ${index === 0 ? '#22c55e' : '#3b82f6'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: 600; color: #1f2937;">${phase.phaseName}: ${phase.platform}</span>
+                                <span style="font-size: 12px; color: #6b7280;">${phase.dueDate}截止</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-size: 18px; font-weight: 700; color: ${index === 0 ? '#16a34a' : '#2563eb'};">
+                                        每日需赚: ¥${phase.dailyTarget.toFixed(2)}
+                                    </div>
+                                    <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+                                        剩余${phase.daysRemaining}天 | 还需¥${phase.remainingAmount.toFixed(2)}
+                                    </div>
+                                </div>
+                                ${index === 0 ? '<span style="background: #dcfce7; color: #16a34a; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">当前阶段</span>' : '<span style="background: #dbeafe; color: #2563eb; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">待开始</span>'}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = phaseGoalsHtml + installments.map(installment => {
         // 确定紧急程度
         let urgencyClass = 'normal';
         if (installment.daysRemaining <= 3) {
@@ -369,6 +403,7 @@ function renderInstallments() {
                     <div>
                         <h3 class="installment-platform">${installment.platform}</h3>
                         <p class="installment-date">还款日期: ${installment.dueDate}</p>
+                        <span style="display: inline-block; background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-top: 4px;">${installment.phaseName}</span>
                     </div>
                     <span class="status-tag ${installment.status === 'active' ? 'ready' : 'pending'}">
                         ${installment.status === 'active' ? '进行中' : '已完成'}
@@ -377,7 +412,7 @@ function renderInstallments() {
                 <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
                 <div class="installment-details">
                     <span>剩余天数: ${installment.daysRemaining}天</span>
-                    <span>每日需要: ¥${((installment.amount - installment.pendingExpense) / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                    <span>每日需要: ¥${installment.dailyTarget.toFixed(2)}</span>
                 </div>
                 <div class="installment-progress">
                     <div class="progress-header">
@@ -1147,12 +1182,8 @@ class DataManager {
         // 按还款日期排序
         activeInstallments.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
         
-        // 计算所有软件的总权重
+        // 计算所有软件
         const allApps = data.phones.flatMap(phone => phone.apps);
-        const totalWeight = allApps.reduce((sum, app) => {
-            // 权重基于最小提现金额
-            return sum + (app.minWithdraw || 0);
-        }, 0);
         
         // 计算待支出金额（总提现 - 总支出）
         const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
@@ -1163,53 +1194,105 @@ class DataManager {
         const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
         const pendingExpense = totalWithdrawnAmount - totalExpenses; // 待支出金额
         
-        // 计算每个分期的目标
-        const installmentGoals = activeInstallments.map(installment => {
+        // 计算阶段性目标
+        // 逻辑：每个阶段的每日目标 = 当前分期/当前分期天数 + 后续所有分期/各自总天数
+        const phaseGoals = [];
+        
+        activeInstallments.forEach((installment, index) => {
             const dueDate = new Date(installment.dueDate);
             const daysRemaining = Math.max(0, Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)));
             
-            // 待提现金额 = 分期金额 - 待支出
-            const pendingWithdrawal = Math.max(0, installment.amount - pendingExpense);
-        
-        // 计算每个软件的目标金额（平均分配待提现金额）
-        const appGoals = allApps.map(app => {
-            const totalTarget = pendingWithdrawal / allApps.length;
-            const dailyTarget = totalTarget / (daysRemaining || 1);
+            // 当前分期的每日目标
+            let dailyTarget = 0;
             
-            return {
-                appId: app.id,
-                appName: app.name,
-                phoneName: data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '',
-                weight: 1 / allApps.length,
+            // 加上当前分期的每日目标
+            const currentInstallmentDays = Math.max(0, Math.ceil((new Date(installment.dueDate) - new Date(installment.createdAt || now)) / (1000 * 60 * 60 * 24)));
+            dailyTarget += installment.amount / (currentInstallmentDays || daysRemaining || 1);
+            
+            // 加上后续每个分期的每日目标（按各自总天数平均）
+            for (let i = index + 1; i < activeInstallments.length; i++) {
+                const nextInstallment = activeInstallments[i];
+                const nextTotalDays = Math.max(0, Math.ceil((new Date(nextInstallment.dueDate) - new Date(nextInstallment.createdAt || now)) / (1000 * 60 * 60 * 24)));
+                dailyTarget += nextInstallment.amount / (nextTotalDays || 1);
+            }
+            
+            // 扣除待支出（按天数分摊）
+            if (index === 0 && pendingExpense > 0) {
+                dailyTarget = Math.max(0, dailyTarget - (pendingExpense / daysRemaining));
+            }
+            
+            // 计算该阶段需要准备的总金额
+            const remainingAmount = dailyTarget * daysRemaining;
+            
+            phaseGoals.push({
+                installmentId: installment.id,
+                platform: installment.platform,
+                dueDate: installment.dueDate,
+                daysRemaining,
+                remainingAmount,
                 dailyTarget,
-                totalTarget,
-                currentBalance: app.balance || 0,
-                currentWithdrawn: app.withdrawn || 0,
-                progress: totalTarget > 0 ? Math.min(100, ((app.withdrawn || 0) / (totalTarget + (app.withdrawn || 0))) * 100) : 100
-            };
+                phaseName: index === 0 ? '第一阶段' : `第${index + 1}阶段`
+            });
         });
+        
+        // 计算每个分期的详细目标
+        const installmentGoals = activeInstallments.map((installment, index) => {
+            const dueDate = new Date(installment.dueDate);
+            const daysRemaining = Math.max(0, Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)));
+            
+            // 该分期还需要赚取的金额
+            let amountBeforeThis = 0;
+            for (let i = 0; i < index; i++) {
+                amountBeforeThis += activeInstallments[i].amount;
+            }
+            const remainingAmount = Math.max(0, installment.amount - amountBeforeThis - pendingExpense);
+            
+            // 每日目标
+            const dailyTarget = daysRemaining > 0 ? remainingAmount / daysRemaining : 0;
+            
+            // 计算每个软件的目标金额
+            const appGoals = allApps.map(app => {
+                const appDailyTarget = dailyTarget / allApps.length;
+                const appTotalTarget = remainingAmount / allApps.length;
+                
+                return {
+                    appId: app.id,
+                    appName: app.name,
+                    phoneName: data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '',
+                    dailyTarget: appDailyTarget,
+                    totalTarget: appTotalTarget,
+                    currentBalance: app.balance || 0,
+                    currentWithdrawn: app.withdrawn || 0,
+                    progress: appTotalTarget > 0 ? Math.min(100, ((app.withdrawn || 0) / appTotalTarget) * 100) : 100
+                };
+            });
             
             return {
                 ...installment,
                 daysRemaining,
+                remainingAmount,     // 该分期还需赚取的金额
+                dailyTarget,         // 该分期的每日目标
                 pendingExpense,      // 待支出金额
-                pendingWithdrawal,   // 待提现金额
+                phaseName: index === 0 ? '第一阶段' : `第${index + 1}阶段`,
                 appGoals,
                 totalProgress: appGoals.reduce((sum, goal) => sum + goal.progress, 0) / appGoals.length || 0
             };
         });
         
-        return installmentGoals;
+        return {
+            installments: installmentGoals,
+            phaseGoals
+        };
     }
 
     static getInstallmentSummary() {
         const data = this.loadData();
-        const installmentGoals = this.calculateInstallmentGoals();
+        const { installments } = this.calculateInstallmentGoals();
         
         // 计算总体情况
-        const totalInstallmentAmount = installmentGoals.reduce((sum, goal) => sum + goal.amount, 0);
-        const totalDaysRemaining = installmentGoals.length > 0 ? 
-            Math.min(...installmentGoals.map(goal => goal.daysRemaining)) : 0;
+        const totalInstallmentAmount = installments.reduce((sum, goal) => sum + goal.amount, 0);
+        const totalDaysRemaining = installments.length > 0 ? 
+            Math.min(...installments.map(goal => goal.daysRemaining)) : 0;
         
         // 计算待支出金额（总提现 - 总支出）
         const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
@@ -3179,7 +3262,7 @@ function renderExpenseRecords() {
 // 渲染分期还款页面
 function renderInstallments() {
     const summary = DataManager.getInstallmentSummary();
-    const installmentGoals = DataManager.calculateInstallmentGoals();
+    const { installments: installmentGoals, phaseGoals } = DataManager.calculateInstallmentGoals();
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
@@ -3194,6 +3277,32 @@ function renderInstallments() {
         document.getElementById('nearest-due-date').textContent = `${nearestInstallment.dueDate} (${nearestInstallment.daysRemaining}天)`;
     } else {
         document.getElementById('nearest-due-date').textContent = '暂无';
+    }
+    
+    // 更新阶段性每日目标显示
+    const phaseGoalsSummary = document.getElementById('phase-goals-summary');
+    if (phaseGoals && phaseGoals.length > 0) {
+        phaseGoalsSummary.style.display = 'block';
+        // 第一阶段
+        if (phaseGoals[0]) {
+            document.getElementById('phase1-daily-target').textContent = `¥${phaseGoals[0].dailyTarget.toFixed(2)}`;
+            document.getElementById('phase1-date').textContent = `至 ${phaseGoals[0].dueDate} (${phaseGoals[0].daysRemaining}天)`;
+        }
+        // 第二阶段
+        if (phaseGoals[1]) {
+            document.getElementById('phase2-daily-target').textContent = `¥${phaseGoals[1].dailyTarget.toFixed(2)}`;
+            // 计算第二阶段的开始日期（第一阶段的第二天）
+            const phase1EndDate = new Date(phaseGoals[0].dueDate);
+            const phase2StartDate = new Date(phase1EndDate);
+            phase2StartDate.setDate(phase2StartDate.getDate() + 1);
+            const phase2StartStr = phase2StartDate.toISOString().split('T')[0];
+            document.getElementById('phase2-date').textContent = `${phase2StartStr} 至 ${phaseGoals[1].dueDate} (${phaseGoals[1].daysRemaining}天)`;
+        } else {
+            document.getElementById('phase2-daily-target').textContent = '¥0.00';
+            document.getElementById('phase2-date').textContent = '';
+        }
+    } else {
+        phaseGoalsSummary.style.display = 'none';
     }
     
     // 渲染分期列表
