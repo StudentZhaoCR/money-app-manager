@@ -223,6 +223,86 @@
             </div>
         </div>
 
+        <!-- 游戏管理页面 -->
+        <div class="page" id="page-games">
+            <div class="date-container">
+                <span class="current-date" id="games-current-date"></span>
+            </div>
+
+            <!-- 今日游戏抽签 -->
+            <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div class="section-header">
+                    <div class="section-title" style="color: white;">🎲 今日游戏抽签</div>
+                    <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
+                </div>
+                <div id="today-game-result" style="text-align: center; padding: 20px;">
+                    <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
+                    <button class="btn" onclick="drawTodayGame()" style="background: white; color: #667eea; font-weight: bold; font-size: 16px;">🎮 开始抽签</button>
+                </div>
+            </div>
+
+            <!-- 添加新游戏 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">➕ 添加新游戏</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">游戏名称</label>
+                    <input type="text" id="new-game-name" class="form-input" placeholder="输入游戏名称">
+                </div>
+                <button class="btn btn-primary w-full" onclick="addNewGame()">添加游戏</button>
+            </div>
+
+            <!-- 游戏统计 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📊 游戏统计</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="stats-row" id="game-stats">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <span class="stat-label" style="color: white;">总游戏数</span>
+                        <span class="stat-value" style="color: white;" id="total-games-count">0</span>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
+                        <span class="stat-label" style="color: white;">进行中</span>
+                        <span class="stat-value" style="color: white;" id="active-games-count">0</span>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
+                        <span class="stat-label" style="color: white;">已完成</span>
+                        <span class="stat-value" style="color: white;" id="completed-games-count">0</span>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        <span class="stat-label" style="color: white;">可删除</span>
+                        <span class="stat-value" style="color: white;" id="can-delete-games-count">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 游戏列表 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">🎮 游戏列表</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="games-list">
+                    <div class="empty-state">暂无游戏，请添加新游戏</div>
+                </div>
+            </div>
+
+            <!-- 抽签历史 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📜 抽签历史</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="game-draw-history">
+                    <div class="empty-state">暂无抽签记录</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 设置页面 -->
         <div class="page" id="page-settings">
             <div class="date-container">
@@ -549,6 +629,10 @@
         <div class="tab-item" data-page="forecast" onclick="showPage('forecast')">
             <span class="tab-icon">🎯</span>
             <span class="tab-text">提前计算</span>
+        </div>
+        <div class="tab-item" data-page="games" onclick="showPage('games')">
+            <span class="tab-icon">🎮</span>
+            <span class="tab-text">游戏管理</span>
         </div>
         <div class="tab-item" data-page="settings" onclick="showPage('settings')">
             <span class="tab-icon">⚙️</span>

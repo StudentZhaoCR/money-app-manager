@@ -11,6 +11,10 @@ const DAILY_TASKS_KEY = 'moneyApp_dailyTasks';
 const USER_LEVEL_KEY = 'moneyApp_userLevel';
 const CHECKIN_KEY = 'moneyApp_checkin';
 
+// 游戏管理存储键
+const DOWNLOADED_GAMES_KEY = 'moneyApp_downloadedGames';
+const GAME_DRAW_HISTORY_KEY = 'moneyApp_gameDrawHistory';
+
 // ==================== 通用计算函数 ====================
 
 // 计算软件的已赚金额（累计）
@@ -1194,6 +1198,183 @@ class DataManager {
         return data;
     }
 
+    // ==================== 游戏管理功能 ====================
+
+    // 获取下载的游戏列表（过滤掉已删除的）
+    static getDownloadedGames() {
+        const games = localStorage.getItem(DOWNLOADED_GAMES_KEY);
+        if (!games) return [];
+        const allGames = JSON.parse(games);
+        // 只返回未删除的游戏
+        return allGames.filter(g => !g.deleted);
+    }
+    
+    // 获取所有游戏（包括已删除的，用于判断是否是重新下载）
+    static getAllGames() {
+        const games = localStorage.getItem(DOWNLOADED_GAMES_KEY);
+        return games ? JSON.parse(games) : [];
+    }
+
+    // 保存下载的游戏列表
+    static saveDownloadedGames(games) {
+        localStorage.setItem(DOWNLOADED_GAMES_KEY, JSON.stringify(games));
+    }
+
+    // 添加新下载的游戏
+    static addDownloadedGame(gameName) {
+        const games = this.getDownloadedGames();
+        const allGames = this.getAllGames();
+        const today = new Date().toISOString().split('T')[0];
+        
+        // 检查是否之前下载过这个游戏（已删除的）
+        const deletedGame = allGames.find(g => 
+            g.name === gameName && g.deleted === true
+        );
+        
+        // 如果是重新下载，只需要玩3天
+        const isRedownload = !!deletedGame;
+        const targetDays = isRedownload ? 3 : 7;
+        
+        const game = {
+            id: Date.now().toString(),
+            name: gameName,
+            downloadDate: today,
+            daysPlayed: 0,
+            completed: false,
+            canDelete: false,
+            lastPlayedDate: null,
+            targetDays: targetDays,  // 目标天数（7天或3天）
+            isRedownload: isRedownload  // 是否是重新下载
+        };
+        
+        games.push(game);
+        this.saveDownloadedGames(games);
+        return game;
+    }
+
+    // 更新游戏游玩天数
+    static updateGamePlayDay(gameId) {
+        const games = this.getDownloadedGames();
+        const game = games.find(g => g.id === gameId);
+        
+        if (game && !game.completed) {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 检查今天是否已经记录过
+            if (game.lastPlayedDate !== today) {
+                game.daysPlayed++;
+                game.lastPlayedDate = today;
+                
+                // 使用目标天数（7天或3天）
+                const targetDays = game.targetDays || 7;
+                if (game.daysPlayed >= targetDays) {
+                    game.completed = true;
+                    game.canDelete = true;
+                }
+                
+                this.saveDownloadedGames(games);
+            }
+        }
+        
+        return game;
+    }
+
+    // 标记游戏为可删除
+    static markGameForDeletion(gameId) {
+        const games = this.getDownloadedGames();
+        const game = games.find(g => g.id === gameId);
+        
+        if (game) {
+            game.canDelete = true;
+            this.saveDownloadedGames(games);
+        }
+        
+        return game;
+    }
+
+    // 删除游戏（标记为已删除，保留记录用于判断是否是重新下载）
+    static deleteGame(gameId) {
+        const games = this.getDownloadedGames();
+        const game = games.find(g => g.id === gameId);
+        
+        if (game) {
+            // 标记为已删除，而不是真正删除
+            game.deleted = true;
+            game.deleteDate = new Date().toISOString().split('T')[0];
+            this.saveDownloadedGames(games);
+        }
+        
+        // 返回未删除的游戏列表（用于显示）
+        return games.filter(g => !g.deleted);
+    }
+
+    // 获取今日要玩的游戏（抽签决定）
+    static getTodayGameToPlay() {
+        const games = this.getDownloadedGames();
+        const today = new Date().toISOString().split('T')[0];
+        
+        // 过滤出未完成的游戏
+        const activeGames = games.filter(g => !g.completed);
+        
+        if (activeGames.length === 0) {
+            return null;
+        }
+        
+        // 如果有多个游戏，随机选择一个
+        const randomIndex = Math.floor(Math.random() * activeGames.length);
+        const selectedGame = activeGames[randomIndex];
+        
+        // 更新该游戏的游玩天数
+        this.updateGamePlayDay(selectedGame.id);
+        
+        // 保存抽签历史
+        const targetDays = selectedGame.targetDays || 7;
+        const drawHistory = this.getGameDrawHistory();
+        drawHistory.unshift({
+            date: today,
+            gameId: selectedGame.id,
+            gameName: selectedGame.name,
+            daysPlayed: selectedGame.daysPlayed,
+            remainingDays: targetDays - selectedGame.daysPlayed,
+            targetDays: targetDays,
+            isRedownload: selectedGame.isRedownload || false
+        });
+        
+        // 只保留最近30天的记录
+        if (drawHistory.length > 30) {
+            drawHistory.pop();
+        }
+        
+        this.saveGameDrawHistory(drawHistory);
+        
+        return selectedGame;
+    }
+
+    // 获取抽签历史
+    static getGameDrawHistory() {
+        const history = localStorage.getItem(GAME_DRAW_HISTORY_KEY);
+        return history ? JSON.parse(history) : [];
+    }
+
+    // 保存抽签历史
+    static saveGameDrawHistory(history) {
+        localStorage.setItem(GAME_DRAW_HISTORY_KEY, JSON.stringify(history));
+    }
+
+    // 获取游戏统计
+    static getGameStats() {
+        const games = this.getDownloadedGames();
+        const today = new Date().toISOString().split('T')[0];
+        
+        return {
+            totalGames: games.length,
+            activeGames: games.filter(g => !g.completed).length,
+            completedGames: games.filter(g => g.completed).length,
+            canDeleteGames: games.filter(g => g.canDelete).length,
+            todayGames: games.filter(g => g.lastPlayedDate === today).length
+        };
+    }
+
     static withdraw(phoneId, appId, amount) {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
@@ -2026,6 +2207,7 @@ function showPage(pageName) {
     if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
     if (pageName === 'today-earn') renderTodayEarnPage();
+    if (pageName === 'games') renderGamesPage();
     
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(page => {
@@ -4806,6 +4988,286 @@ document.getElementById('modal').addEventListener('click', function(e) {
         closeModal();
     }
 });
+
+// ==================== 下载游戏管理功能 ====================
+
+// 渲染游戏管理页面
+function renderGamesPage() {
+    // 更新日期
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+    const gamesDateEl = document.getElementById('games-current-date');
+    if (gamesDateEl) {
+        gamesDateEl.textContent = dateStr;
+    }
+    
+    // 渲染游戏统计
+    renderGameStats();
+    
+    // 渲染游戏列表
+    renderGamesList();
+    
+    // 渲染抽签历史
+    renderGameDrawHistoryList();
+}
+
+// 渲染游戏统计
+function renderGameStats() {
+    const stats = DataManager.getGameStats();
+    
+    document.getElementById('total-games-count').textContent = stats.totalGames;
+    document.getElementById('active-games-count').textContent = stats.activeGames;
+    document.getElementById('completed-games-count').textContent = stats.completedGames;
+    document.getElementById('can-delete-games-count').textContent = stats.canDeleteGames;
+}
+
+// 渲染游戏列表
+function renderGamesList() {
+    const games = DataManager.getDownloadedGames();
+    const container = document.getElementById('games-list');
+    
+    if (games.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无游戏，请添加新游戏</div>';
+        return;
+    }
+    
+    container.innerHTML = games.map(game => {
+        const targetDays = game.targetDays || 7;
+        const progressPercent = (game.daysPlayed / targetDays) * 100;
+        let statusColor = '#3b82f6'; // 蓝色-进行中
+        let statusText = `进行中 (${game.daysPlayed}/${targetDays}天)`;
+        
+        if (game.completed) {
+            statusColor = '#22c55e'; // 绿色-已完成
+            statusText = '已完成 ✓';
+        } else if (game.canDelete) {
+            statusColor = '#f59e0b'; // 橙色-可删除
+            statusText = '可删除 🗑️';
+        }
+        
+        return `
+            <div class="game-item" style="padding: 16px; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div>
+                        <div style="font-weight: 600; font-size: 16px;">${game.name}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            下载日期: ${game.downloadDate}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="color: ${statusColor}; font-weight: 600; font-size: 14px;">${statusText}</span>
+                    </div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-header">
+                        <span>游玩进度</span>
+                        <span class="font-semibold">${Math.round(progressPercent)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progressPercent}%; background: ${statusColor};"></div>
+                    </div>
+                </div>
+                ${game.canDelete ? `
+                    <div style="margin-top: 12px; text-align: right;">
+                        <button class="btn btn-error btn-sm" onclick="deleteDownloadedGame('${game.id}')">删除游戏</button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// 渲染抽签历史
+function renderGameDrawHistoryList() {
+    const history = DataManager.getGameDrawHistory();
+    const container = document.getElementById('game-draw-history');
+    
+    if (history.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无抽签记录</div>';
+        return;
+    }
+    
+    container.innerHTML = history.map(record => `
+        <div class="draw-history-item" style="padding: 12px; border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 500;">${record.date}</div>
+                    <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
+                        🎮 ${record.gameName}
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 14px; color: var(--primary-color); font-weight: 600;">
+                        ${record.daysPlayed}/7天
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">
+                        剩余${record.remainingDays}天
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 添加新游戏
+function addNewGame() {
+    const nameInput = document.getElementById('new-game-name');
+    const gameName = nameInput.value.trim();
+    
+    if (!gameName) {
+        showToast('请输入游戏名称');
+        return;
+    }
+    
+    DataManager.addDownloadedGame(gameName);
+    nameInput.value = '';
+    
+    showToast('游戏添加成功！');
+    renderGamesPage();
+}
+
+// 删除游戏
+function deleteDownloadedGame(gameId) {
+    if (confirm('确定要删除这个游戏吗？')) {
+        DataManager.deleteGame(gameId);
+        showToast('游戏已删除');
+        renderGamesPage();
+    }
+}
+
+// 今日游戏抽签
+function drawTodayGame() {
+    const container = document.getElementById('today-game-result');
+    
+    // 检查今天是否已经抽签
+    const today = new Date().toISOString().split('T')[0];
+    const drawHistory = DataManager.getGameDrawHistory();
+    const todayDraw = drawHistory.find(h => h.date === today);
+    
+    if (todayDraw) {
+        // 今天已经抽签过了，显示今天的抽签结果
+        showTodayDrawResult(todayDraw);
+        showToast('今天已经抽签过了，显示今日抽签结果');
+        return;
+    }
+    
+    // 今天还没抽签，执行抽签
+    const result = DataManager.getTodayGameToPlay();
+    
+    if (!result) {
+        container.innerHTML = `
+            <div style="font-size: 18px; margin-bottom: 16px;">暂无进行中的游戏</div>
+            <div style="font-size: 14px; opacity: 0.8;">请先添加新游戏</div>
+        `;
+        return;
+    }
+    
+    const targetDays = result.targetDays || 7;
+    const progressPercent = (result.daysPlayed / targetDays) * 100;
+    const remainingDays = targetDays - result.daysPlayed;
+    
+    // 计算建议游玩时长（根据剩余天数动态调整）
+    let playTime = 30; // 默认30分钟
+    let playTimeText = '30分钟';
+    
+    if (remainingDays <= 1) {
+        // 快完成了，多玩一会
+        playTime = 60;
+        playTimeText = '1小时';
+    } else if (remainingDays >= 3) {
+        // 刚开始，少玩一会
+        playTime = 20;
+        playTimeText = '20分钟';
+    }
+    
+    container.innerHTML = `
+        <div style="animation: fadeIn 0.5s ease;">
+            <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 抽签结果</div>
+            <div style="font-size: 32px; font-weight: bold; margin: 16px 0; color: #fff;">${result.name}</div>
+            
+            <!-- 建议游玩时长 -->
+            <div style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 16px; margin: 16px 0; border: 2px solid rgba(255,255,255,0.5);">
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">⏱️ 建议游玩时长</div>
+                <div style="font-size: 36px; font-weight: bold; color: #fff;">${playTimeText}</div>
+                <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">
+                    ${remainingDays <= 2 ? '即将完成，建议多玩一会' : remainingDays >= 5 ? '刚开始，适当体验即可' : '正常游玩'}
+                </div>
+            </div>
+            
+            <div style="font-size: 16px; margin-bottom: 16px; opacity: 0.9;">
+                今天第 ${result.daysPlayed} 天 / 共 ${targetDays} 天
+                ${result.isRedownload ? '<span style="font-size: 12px; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">重新下载</span>' : ''}
+            </div>
+            <div class="progress-bar" style="background: rgba(255,255,255,0.3); margin: 16px auto; max-width: 300px;">
+                <div class="progress-fill" style="width: ${progressPercent}%; background: #fff;"></div>
+            </div>
+            <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">
+                ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
+            </div>
+            <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
+                ✅ 今天已经抽签，明天再来吧
+            </div>
+        </div>
+    `;
+    
+    // 刷新游戏列表和统计
+    renderGamesList();
+    renderGameStats();
+    renderGameDrawHistoryList();
+    
+    showToast(`今天玩：${result.name}`);
+}
+
+// 显示今天的抽签结果（不重新抽签）
+function showTodayDrawResult(todayDraw) {
+    const container = document.getElementById('today-game-result');
+    const targetDays = todayDraw.targetDays || 7;
+    const progressPercent = (todayDraw.daysPlayed / targetDays) * 100;
+    const remainingDays = todayDraw.remainingDays;
+    
+    // 计算建议游玩时长
+    let playTimeText = '30分钟';
+    if (remainingDays <= 1) {
+        playTimeText = '1小时';
+    } else if (remainingDays >= 3) {
+        playTimeText = '20分钟';
+    }
+    
+    container.innerHTML = `
+        <div style="animation: fadeIn 0.5s ease;">
+            <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 今日抽签结果</div>
+            <div style="font-size: 32px; font-weight: bold; margin: 16px 0; color: #fff;">${todayDraw.gameName}</div>
+            
+            <!-- 建议游玩时长 -->
+            <div style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 16px; margin: 16px 0; border: 2px solid rgba(255,255,255,0.5);">
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">⏱️ 建议游玩时长</div>
+                <div style="font-size: 36px; font-weight: bold; color: #fff;">${playTimeText}</div>
+                <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">
+                    ${remainingDays <= 1 ? '即将完成，建议多玩一会' : remainingDays >= 3 ? '刚开始，适当体验即可' : '正常游玩'}
+                </div>
+            </div>
+            
+            <div style="font-size: 16px; margin-bottom: 16px; opacity: 0.9;">
+                今天第 ${todayDraw.daysPlayed} 天 / 共 ${targetDays} 天
+                ${todayDraw.isRedownload ? '<span style="font-size: 12px; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">重新下载</span>' : ''}
+            </div>
+            <div class="progress-bar" style="background: rgba(255,255,255,0.3); margin: 16px auto; max-width: 300px;">
+                <div class="progress-fill" style="width: ${progressPercent}%; background: #fff;"></div>
+            </div>
+            <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">
+                ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
+            </div>
+            <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
+                ✅ 今天已经抽签过了，明天再来吧
+            </div>
+        </div>
+    `;
+    
+    // 刷新游戏列表和统计
+    renderGamesList();
+    renderGameStats();
+    renderGameDrawHistoryList();
+}
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
