@@ -1151,9 +1151,10 @@ class DataManager {
                     app.dailyEarnedHistory = {};
                 }
                 
-                // 检查是否是第一次设置余额（oldBalance 为 0 且 oldEarned 为 0，且没有历史记录）
-                const hasHistory = Object.keys(app.dailyEarnedHistory).length > 0;
-                const isFirstTimeSetup = (oldBalance === 0 && oldEarned === 0 && !hasHistory);
+                // 检查是否是第一次设置余额（初始状态：balance为0，earned为0，且没有编辑过）
+                // 使用 lastEditDate 来判断是否编辑过
+                const hasEditedBefore = app.lastEditDate !== undefined;
+                const isFirstTimeSetup = (oldBalance === 0 && oldEarned === 0 && !hasEditedBefore);
                 
                 // 更新已赚金额：如果余额增加，earned也增加；如果余额减少，earned不变（因为可能是提现）
                 // 但第一次设置余额时不记录为收益
