@@ -2113,29 +2113,29 @@ function migrateOldData() {
     let hasChanges = false;
 
     data.phones.forEach(phone => {
-        // 如果没有历史记录，初始化并保存今天的总赚取
+        // 如果没有历史记录，初始化
         if (!phone.dailyTotalEarnedHistory) {
             phone.dailyTotalEarnedHistory = {};
         }
 
-        // 如果今天没有记录，保存当前总赚取
+        // 如果今天没有记录，且手机有实际赚取，才保存当前总赚取
         if (phone.dailyTotalEarnedHistory[today] === undefined) {
             const currentTotalEarned = calculatePhoneTotalEarned(phone);
-            phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
-            hasChanges = true;
-            console.log(`修复数据：手机 ${phone.name} 初始化今日历史记录 = ${currentTotalEarned}`);
+            // 只有有实际赚取的手机才初始化今天的记录
+            if (currentTotalEarned > 0) {
+                phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
+                hasChanges = true;
+                console.log(`修复数据：手机 ${phone.name} 初始化今日历史记录 = ${currentTotalEarned}`);
+            }
         }
 
-        // 为每个软件也初始化历史记录
+        // 为每个软件初始化历史记录（但不初始化今天的记录，避免所有软件都显示）
         phone.apps.forEach(app => {
             if (!app.dailyEarnedHistory) {
                 app.dailyEarnedHistory = {};
-            }
-            if (app.dailyEarnedHistory[today] === undefined) {
-                const appEarned = calculateAppEarned(app);
-                app.dailyEarnedHistory[today] = appEarned;
                 hasChanges = true;
             }
+            // 注意：不在这里初始化今天的记录，让软件每日赚取记录只显示今天实际编辑过的软件
         });
     });
 
@@ -2711,37 +2711,27 @@ function renderAppEarnContent(phone, data) {
             let hasRealChange = false;
             
             if (date === today) {
-                // 对于今天，计算今日新增 = 当前余额 - 昨天结束时的余额
-                const currentBalance = app.balance || 0;
-                
-                // 获取昨天结束时的余额
-                const yesterdayEarned = getAppEarnedOnDate(app, prevDate);
-                const yesterdayBalance = yesterdayEarned - (app.withdrawn || 0) - (app.historicalWithdrawn || 0) + (app.initialBalance || 0);
-                
-                // 检查今天是否有编辑记录
+                // 对于今天，只显示今天有编辑记录的软件
                 const history = app.dailyEarnedHistory || {};
                 const hasEditToday = history[today] !== undefined;
                 
                 if (hasEditToday) {
-                    // 今天有编辑，计算从昨天结束到现在的总变化
+                    // 今天有编辑，计算今日新增 = 当前余额 - 昨天结束时的余额
+                    const currentBalance = app.balance || 0;
+                    const yesterdayEarned = getAppEarnedOnDate(app, prevDate);
+                    const yesterdayBalance = yesterdayEarned - (app.withdrawn || 0) - (app.historicalWithdrawn || 0) + (app.initialBalance || 0);
                     displayEarned = Math.max(0, currentBalance - yesterdayBalance);
                 } else {
-                    // 今天没有编辑，但自动保存今天的最终状态
-                    // 这样明天就能和今天比较
-                    const todayEarned = calculateAppEarned(app);
-                    history[today] = todayEarned;
+                    // 今天没有编辑，不显示
                     displayEarned = 0;
                 }
-                
-                hasRealChange = hasEditToday && displayEarned > 0;
             } else {
-                // 对于历史日期
+                // 对于历史日期，显示当日有新增的软件
                 displayEarned = Math.max(0, dateEarned - prevEarned);
-                hasRealChange = displayEarned > 0;
             }
             
-            // 只显示有实际赚取且今天有编辑记录的软件（对于今天）
-            if (displayEarned > 0 && (date !== today || hasRealChange)) {
+            // 只显示当日有实际赚取的软件
+            if (displayEarned > 0) {
                 hasEarnedOnThisDay = true;
                 dayTotalEarned += displayEarned;
                 const progress = appDailyTarget > 0 ? Math.min(100, Math.round((displayEarned / appDailyTarget) * 100)) : 0;
