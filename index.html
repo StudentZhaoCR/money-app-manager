@@ -352,129 +352,121 @@
                         <div class="theme-preview theme-preview-warm-sunset"></div>
                         <span class="theme-name">温暖夕阳</span>
                     </div>
-                </div>
-            </div>
-
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">数据备份（JSON）</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="form-hint mb-4">导出JSON格式包含所有数据（手机、软件、提现记录、支出记录、分期还款），用于完整备份和恢复</div>
-                <div class="data-management-buttons flex gap-4">
-                    <button class="btn btn-primary flex-1" onclick="exportJSON()">导出JSON</button>
-                    <button class="btn btn-secondary flex-1" onclick="importJSON()">导入JSON</button>
-                </div>
-            </div>
-
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">数据导出（Excel）</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="form-hint mb-4">导出为Excel格式，支持在手机端查看和分享</div>
-                <div class="data-management-buttons">
-                    <button class="btn btn-primary w-full" onclick="exportData()">导出为Excel</button>
-                </div>
-            </div>
-
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">日期模拟测试</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="form-hint mb-4">模拟不同日期，验证每日赚取计算是否正确。设置模拟日期后，系统会按该日期计算每日赚取。</div>
-                <div class="form-group">
-                    <label class="form-label">模拟日期</label>
-                    <input type="date" id="simulated-date" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">当前状态</label>
-                    <div id="simulation-status" style="padding: 12px; background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-                        <span style="color: var(--text-secondary);">使用真实日期</span>
+                    <div class="theme-item" data-theme="minimal-dark" onclick="setTheme('minimal-dark')">
+                        <div class="theme-preview theme-preview-minimal-dark"></div>
+                        <span class="theme-name">极简黑白</span>
+                    </div>
+                    <div class="theme-item" data-theme="morandi" onclick="setTheme('morandi')">
+                        <div class="theme-preview theme-preview-morandi"></div>
+                        <span class="theme-name">莫兰迪色</span>
+                    </div>
+                    <div class="theme-item" data-theme="forest" onclick="setTheme('forest')">
+                        <div class="theme-preview theme-preview-forest"></div>
+                        <span class="theme-name">森林自然</span>
+                    </div>
+                    <div class="theme-item" data-theme="business" onclick="setTheme('business')">
+                        <div class="theme-preview theme-preview-business"></div>
+                        <span class="theme-name">极简商务风</span>
                     </div>
                 </div>
-                <div class="data-management-buttons flex gap-4">
-                    <button class="btn btn-primary flex-1" onclick="applyDateSimulation()">应用模拟日期</button>
-                    <button class="btn btn-secondary flex-1" onclick="resetDateSimulation()">重置为真实日期</button>
-                </div>
-                <div class="mt-4" id="simulation-preview" style="display: none;">
-                    <div style="font-weight: 600; margin-bottom: 8px;">模拟效果预览</div>
-                    <div id="simulation-preview-content" style="padding: 12px; background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 14px;"></div>
-                </div>
             </div>
 
             <div class="card mt-6">
                 <div class="section-header">
-                    <div class="section-title">数据管理</div>
+                    <div class="section-title">📊 数据管理中心</div>
                     <div class="section-divider"></div>
                 </div>
-                <div class="data-management-buttons">
-                    <button class="btn btn-error w-full" onclick="clearAllData()">清空所有数据</button>
+                
+                <!-- 数据备份与恢复 -->
+                <div class="data-section mb-6">
+                    <div class="section-subtitle" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600;">💾 数据备份与恢复</div>
+                    <div class="form-hint mb-3" style="font-size: 13px;">JSON格式包含所有数据，用于完整备份和恢复</div>
+                    <div class="data-management-buttons flex gap-3 mb-3">
+                        <button class="btn btn-primary flex-1" onclick="exportJSON()">📥 导出JSON</button>
+                        <button class="btn btn-secondary flex-1" onclick="importJSON()">📤 导入JSON</button>
+                    </div>
+                    <div class="data-management-buttons">
+                        <button class="btn btn-primary w-full" onclick="exportData()">📊 导出Excel</button>
+                    </div>
                 </div>
-            </div>
 
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">批量添加手机</div>
-                    <div class="section-divider"></div>
+                <!-- 日期模拟测试 -->
+                <div class="data-section mb-6" style="padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <div class="section-subtitle" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600;">📅 日期模拟测试</div>
+                    <div class="form-hint mb-3" style="font-size: 13px;">模拟不同日期，验证每日赚取计算是否正确</div>
+                    <div class="form-group mb-3">
+                        <label class="form-label" style="font-size: 13px;">模拟日期</label>
+                        <input type="date" id="simulated-date" class="form-input">
+                    </div>
+                    <div class="form-group mb-3">
+                        <label class="form-label" style="font-size: 13px;">当前状态</label>
+                        <div id="simulation-status" style="padding: 10px; background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 13px;">
+                            <span style="color: var(--text-secondary);">使用真实日期</span>
+                        </div>
+                    </div>
+                    <div class="data-management-buttons flex gap-3 mb-3">
+                        <button class="btn btn-primary flex-1" onclick="applyDateSimulation()">✅ 应用</button>
+                        <button class="btn btn-secondary flex-1" onclick="resetDateSimulation()">🔄 重置</button>
+                    </div>
+                    <div id="simulation-preview" style="display: none;">
+                        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">模拟效果预览</div>
+                        <div id="simulation-preview-content" style="padding: 10px; background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px;"></div>
+                    </div>
                 </div>
-                <div class="form-hint mb-4">将手机名称粘贴到下方，每行一个，点击按钮后会批量添加手机（已存在的手机会跳过）</div>
-                <div class="form-group">
-                    <label class="form-label">手机名称列表</label>
-                    <textarea id="bulk-phone-names" class="form-input" rows="6" placeholder="例如：&#10;手机1&#10;手机2&#10;手机3"></textarea>
-                </div>
-                <div class="data-management-buttons">
-                    <button class="btn btn-primary w-full" onclick="bulkAddPhones()">一键添加手机</button>
-                </div>
-            </div>
 
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">批量添加软件</div>
-                    <div class="section-divider"></div>
+                <!-- 批量操作 -->
+                <div class="data-section mb-6" style="padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <div class="section-subtitle" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600;">⚡ 批量操作</div>
+                    
+                    <!-- 批量添加手机 -->
+                    <div class="mb-4">
+                        <div class="form-hint mb-2" style="font-size: 13px;">批量添加手机（每行一个名称）</div>
+                        <textarea id="bulk-phone-names" class="form-input mb-2" rows="3" placeholder="手机1&#10;手机2&#10;手机3" style="font-size: 13px;"></textarea>
+                        <button class="btn btn-primary w-full" onclick="bulkAddPhones()">📱 批量添加手机</button>
+                    </div>
+                    
+                    <!-- 批量添加软件 -->
+                    <div style="padding-top: 12px; border-top: 1px dashed var(--border-color);">
+                        <div class="form-hint mb-2" style="font-size: 13px;">批量添加软件到所有手机</div>
+                        <textarea id="bulk-app-names" class="form-input mb-2" rows="3" placeholder="抖音极速版&#10;快手极速版&#10;百度极速版" style="font-size: 13px;"></textarea>
+                        <div class="form-group mb-2">
+                            <label class="form-label" style="font-size: 12px;">默认最小提现金额 (元)</label>
+                            <input type="number" id="bulk-app-min-withdraw" class="form-input" value="0.3" step="0.01" style="font-size: 13px;">
+                        </div>
+                        <button class="btn btn-primary w-full" onclick="bulkAddApps()">📲 批量添加软件</button>
+                    </div>
                 </div>
-                <div class="form-hint mb-4">将软件名称粘贴到下方，每行一个，点击按钮后会自动添加到所有手机中（已存在的软件会跳过）</div>
-                <div class="form-group">
-                    <label class="form-label">软件名称列表</label>
-                    <textarea id="bulk-app-names" class="form-input" rows="6" placeholder="例如：&#10;抖音极速版&#10;快手极速版&#10;百度极速版"></textarea>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">默认最小提现金额 (元)</label>
-                    <input type="number" id="bulk-app-min-withdraw" class="form-input" value="0.3" step="0.01" placeholder="默认0.3元">
-                </div>
-                <div class="data-management-buttons">
-                    <button class="btn btn-primary w-full" onclick="bulkAddApps()">一键添加到所有手机</button>
-                </div>
-            </div>
 
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">添加支出</div>
-                    <div class="section-divider"></div>
+                <!-- 支出管理 -->
+                <div class="data-section mb-6" style="padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <div class="section-subtitle" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600;">💰 支出管理</div>
+                    <div class="form-group mb-2">
+                        <label class="form-label" style="font-size: 12px;">待支出余额 (元)</label>
+                        <input type="text" id="total-withdrawn" class="form-input" disabled style="font-size: 13px;">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="form-label" style="font-size: 12px;">支出金额</label>
+                        <input type="number" id="expense-amount" class="form-input" placeholder="输入金额" step="0.01" style="font-size: 13px;">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="form-label" style="font-size: 12px;">支出用途</label>
+                        <input type="text" id="expense-purpose" class="form-input" placeholder="输入用途" style="font-size: 13px;">
+                    </div>
+                    <div class="form-group mb-3">
+                        <label class="form-label" style="font-size: 12px;">支出日期</label>
+                        <input type="date" id="expense-date" class="form-input" style="font-size: 13px;">
+                    </div>
+                    <div class="flex gap-3">
+                        <button class="btn btn-primary flex-1" onclick="addExpense()">💾 保存支出</button>
+                        <button class="btn btn-secondary flex-1" onclick="showPage('expense-records')">📋 记录</button>
+                    </div>
                 </div>
-                <div class="form-hint mb-4">从总提现金额中扣减支出</div>
-                <div class="form-group">
-                    <label class="form-label">待支出余额 (元)</label>
-                    <input type="text" id="total-withdrawn" class="form-input" disabled>
-                </div>
-                <div class="expense-form">
-                    <div class="form-group">
-                        <label class="form-label">支出金额</label>
-                        <input type="number" id="expense-amount" class="form-input" placeholder="输入支出金额（元）" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">支出用途</label>
-                        <input type="text" id="expense-purpose" class="form-input" placeholder="输入支出用途">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">支出日期</label>
-                        <input type="date" id="expense-date" class="form-input">
-                    </div>
-                    <div class="flex gap-4 mt-6">
-                        <button class="btn btn-primary flex-1" onclick="addExpense()">保存支出</button>
-                        <button class="btn btn-secondary flex-1" onclick="showPage('expense-records')">支出记录</button>
-                    </div>
+
+                <!-- 危险操作 -->
+                <div class="data-section" style="padding-top: 16px; border-top: 2px solid var(--error-color);">
+                    <div class="section-subtitle" style="font-size: 14px; color: var(--error-color); margin-bottom: 12px; font-weight: 600;">⚠️ 危险操作</div>
+                    <div class="form-hint mb-3" style="font-size: 13px; color: var(--error-color);">清空所有数据，此操作不可恢复！</div>
+                    <button class="btn btn-error w-full" onclick="clearAllData()">🗑️ 清空所有数据</button>
                 </div>
             </div>
         </div>
