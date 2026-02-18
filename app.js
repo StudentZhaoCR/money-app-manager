@@ -501,13 +501,15 @@ function updatePhoneCard(phoneId) {
     const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
     
     // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
     const history = phone.dailyTotalEarnedHistory || {};
     // 使用新的计算函数获取当前总已赚金额
     const currentTotalEarned = calculatePhoneTotalEarned(phone);
-    
+
     // 找到昨天结束时的总赚取作为今天开始的基准
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
     let yesterdayTotal = history[yesterday];
     
     if (yesterdayTotal === undefined) {
@@ -527,6 +529,15 @@ function updatePhoneCard(phoneId) {
     
     // 今日赚取 = 当前总赚取 - 昨天结束时的总赚取
     const todayEarned = Math.max(0, currentTotalEarned - yesterdayTotal);
+
+    console.log(`手机 ${phone.name} 计算今日赚取:`, {
+        today: today,
+        yesterday: yesterday,
+        currentTotalEarned: currentTotalEarned,
+        yesterdayTotal: yesterdayTotal,
+        todayEarned: todayEarned,
+        history: history
+    });
 
     const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
     
@@ -1149,7 +1160,7 @@ class DataManager {
                 const formattedBalance = parseFloat(newBalance.toFixed(2));
                 const balanceChange = formattedBalance - oldBalance;
 
-                const today = new Date().toISOString().split('T')[0];
+                const today = getCurrentDate();
                 if (!app.dailyEarnedHistory) {
                     app.dailyEarnedHistory = {};
                 }
@@ -2032,26 +2043,114 @@ function init() {
     if (savedExpanded) {
         expandedPhones = JSON.parse(savedExpanded);
     }
-    
+
     // 初始化主题
     initTheme();
-    
+
     // 设置默认日期
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     document.getElementById('target-date').value = dateStr;
     document.getElementById('expense-date').value = dateStr;
-    
+
+    // 自动保存昨天的最终状态（如果昨天没有记录）
+    autoSaveYesterdayHistory();
+
+    // 修复旧版本数据：为没有历史记录的手机初始化历史记录
+    migrateOldData();
+
     // 初始化所有页面
     updateAllDates();
     renderDashboard();
     renderPhones();
     renderStats();
     renderSettings();
-    
+
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
+}
+
+// 修复旧版本数据：为没有历史记录的手机初始化历史记录
+function migrateOldData() {
+    const data = DataManager.loadData();
+    const today = getCurrentDate();
+    let hasChanges = false;
+
+    data.phones.forEach(phone => {
+        // 如果没有历史记录，初始化并保存今天的总赚取
+        if (!phone.dailyTotalEarnedHistory) {
+            phone.dailyTotalEarnedHistory = {};
+        }
+
+        // 如果今天没有记录，保存当前总赚取
+        if (phone.dailyTotalEarnedHistory[today] === undefined) {
+            const currentTotalEarned = calculatePhoneTotalEarned(phone);
+            phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
+            hasChanges = true;
+            console.log(`修复数据：手机 ${phone.name} 初始化今日历史记录 = ${currentTotalEarned}`);
+        }
+
+        // 为每个软件也初始化历史记录
+        phone.apps.forEach(app => {
+            if (!app.dailyEarnedHistory) {
+                app.dailyEarnedHistory = {};
+            }
+            if (app.dailyEarnedHistory[today] === undefined) {
+                const appEarned = calculateAppEarned(app);
+                app.dailyEarnedHistory[today] = appEarned;
+                hasChanges = true;
+            }
+        });
+    });
+
+    if (hasChanges) {
+        DataManager.saveData(data);
+        console.log('数据修复完成：已为旧数据初始化历史记录');
+    }
+}
+
+// 自动保存昨天的最终状态
+function autoSaveYesterdayHistory() {
+    const data = DataManager.loadData();
+    const today = getCurrentDate();
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
+
+    let hasChanges = false;
+
+    data.phones.forEach(phone => {
+        if (!phone.dailyTotalEarnedHistory) {
+            phone.dailyTotalEarnedHistory = {};
+        }
+
+        // 如果昨天没有记录，保存昨天的最终状态
+        if (phone.dailyTotalEarnedHistory[yesterday] === undefined) {
+            // 找昨天之前最后一次记录
+            const datesBeforeYesterday = Object.keys(phone.dailyTotalEarnedHistory)
+                .filter(d => d < yesterday)
+                .sort();
+
+            let yesterdayTotal = 0;
+            if (datesBeforeYesterday.length > 0) {
+                // 使用昨天之前最后一次记录作为昨天的基准
+                const lastRecordedDate = datesBeforeYesterday[datesBeforeYesterday.length - 1];
+                yesterdayTotal = phone.dailyTotalEarnedHistory[lastRecordedDate];
+            }
+
+            // 保存昨天的最终状态
+            phone.dailyTotalEarnedHistory[yesterday] = yesterdayTotal;
+            hasChanges = true;
+
+            console.log(`自动保存手机 ${phone.name} 昨天的最终状态: ${yesterdayTotal}`);
+        }
+    });
+
+    if (hasChanges) {
+        DataManager.saveData(data);
+        console.log('已自动保存昨天的最终状态');
+    }
 }
 
 // 初始化主题
@@ -2890,13 +2989,15 @@ function renderPhones() {
         const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
         
         // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         const history = phone.dailyTotalEarnedHistory || {};
         // 使用新的计算函数获取当前总已赚金额
         const currentTotalEarned = calculatePhoneTotalEarned(phone);
-        
+
         // 找到昨天结束时的总赚取作为今天开始的基准
-        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const yesterdayDate = new Date(today);
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterday = yesterdayDate.toISOString().split('T')[0];
         let yesterdayTotal = history[yesterday];
         
         if (yesterdayTotal === undefined) {
@@ -3933,7 +4034,7 @@ function renderExpenseRecords() {
 // 渲染分期还款页面
 function renderInstallments() {
     const summary = DataManager.getInstallmentSummary();
-    const { installments: installmentGoals, phaseGoals } = DataManager.calculateInstallmentGoals();
+    const { installments: installmentGoals } = DataManager.calculateInstallmentGoals();
     
     // 更新总览数据
     document.getElementById('total-installment-amount').textContent = `¥${summary.totalInstallmentAmount.toFixed(2)}`;
@@ -3942,6 +4043,9 @@ function renderInstallments() {
     document.getElementById('installment-overall-progress').textContent = `${summary.overallProgress.toFixed(0)}%`;
     document.getElementById('installment-progress-bar').style.width = `${summary.overallProgress}%`;
     
+    // 计算每日需要赚取的金额
+    calculateDailyEarnNeeded();
+    
     // 更新最近还款日期
     if (installmentGoals.length > 0) {
         const nearestInstallment = installmentGoals[0];
@@ -3949,33 +4053,7 @@ function renderInstallments() {
     } else {
         document.getElementById('nearest-due-date').textContent = '暂无';
     }
-    
-    // 更新阶段性每日目标显示
-    const phaseGoalsSummary = document.getElementById('phase-goals-summary');
-    if (phaseGoals && phaseGoals.length > 0) {
-        phaseGoalsSummary.style.display = 'block';
-        // 第一阶段
-        if (phaseGoals[0]) {
-            document.getElementById('phase1-daily-target').textContent = `¥${phaseGoals[0].dailyTarget.toFixed(2)}`;
-            document.getElementById('phase1-date').textContent = `至 ${phaseGoals[0].dueDate} (${phaseGoals[0].daysRemaining}天)`;
-        }
-        // 第二阶段
-        if (phaseGoals[1]) {
-            document.getElementById('phase2-daily-target').textContent = `¥${phaseGoals[1].dailyTarget.toFixed(2)}`;
-            // 计算第二阶段的开始日期（第一阶段的第二天）
-            const phase1EndDate = new Date(phaseGoals[0].dueDate);
-            const phase2StartDate = new Date(phase1EndDate);
-            phase2StartDate.setDate(phase2StartDate.getDate() + 1);
-            const phase2StartStr = phase2StartDate.toISOString().split('T')[0];
-            document.getElementById('phase2-date').textContent = `${phase2StartStr} 至 ${phaseGoals[1].dueDate} (${phaseGoals[1].daysRemaining}天)`;
-        } else {
-            document.getElementById('phase2-daily-target').textContent = '¥0.00';
-            document.getElementById('phase2-date').textContent = '';
-        }
-    } else {
-        phaseGoalsSummary.style.display = 'none';
-    }
-    
+
     // 渲染分期列表
     const container = document.getElementById('installment-list');
     if (installmentGoals.length === 0) {
@@ -3983,7 +4061,45 @@ function renderInstallments() {
         return;
     }
     
-    container.innerHTML = installmentGoals.map(installment => {
+    // 为每个分期添加期数（如果没有的话）
+    installmentGoals.forEach((inst, index) => {
+        if (!inst.periodNumber) {
+            inst.periodNumber = index + 1;
+        }
+    });
+
+    // 找到当前期（期数最小且未完成的）
+    const currentPeriod = installmentGoals
+        .filter(inst => inst.status !== 'completed')
+        .sort((a, b) => a.periodNumber - b.periodNumber)[0];
+    const currentPeriodNumber = currentPeriod ? currentPeriod.periodNumber : null;
+
+    // 计算每期的实际天数（第1期：今天到还款日，第2期：第1期还款日到第2期还款日，以此类推）
+    const today = new Date().toISOString().split('T')[0];
+    const periodDaysMap = {};
+
+    // 按期数排序
+    const sortedInstallments = [...installmentGoals].sort((a, b) => a.periodNumber - b.periodNumber);
+
+    sortedInstallments.forEach((inst, index) => {
+        const periodNum = inst.periodNumber;
+        const dueDate = new Date(inst.dueDate);
+
+        if (index === 0) {
+            // 第1期：从今天到第1期还款日
+            const todayDate = new Date(today);
+            const days = Math.max(1, Math.ceil((dueDate - todayDate) / (1000 * 60 * 60 * 24)) + 1);
+            periodDaysMap[periodNum] = days;
+        } else {
+            // 其他期：从上一期还款日到本期还款日
+            const prevInst = sortedInstallments[index - 1];
+            const prevDueDate = new Date(prevInst.dueDate);
+            const days = Math.max(1, Math.ceil((dueDate - prevDueDate) / (1000 * 60 * 60 * 24)));
+            periodDaysMap[periodNum] = days;
+        }
+    });
+
+    container.innerHTML = installmentGoals.map((installment, index) => {
         // 确定紧急程度
         let urgencyClass = 'normal';
         if (installment.daysRemaining <= 3) {
@@ -3991,12 +4107,20 @@ function renderInstallments() {
         } else if (installment.daysRemaining <= 7) {
             urgencyClass = 'warning';
         }
-        
+
+        const periodInfo = `第${installment.periodNumber}/${installmentGoals.length}期`;
+        // 判断是否是当前期（期数最小的未完成期数）
+        const isCurrentPeriod = installment.periodNumber === currentPeriodNumber;
+        // 获取该期的实际天数
+        const actualDays = periodDaysMap[installment.periodNumber] || installment.daysRemaining;
+        // 计算该期的每日需要
+        const dailyNeed = ((installment.amount - installment.pendingExpense) / (actualDays || 1)).toFixed(2);
+
         return `
             <div class="installment-item ${urgencyClass}">
                 <div class="installment-header">
                     <div>
-                        <h3 class="installment-platform">${installment.platform}</h3>
+                        <h3 class="installment-platform">${installment.platform} ${periodInfo ? `<span style="font-size: 14px; color: var(--text-secondary);">(${periodInfo})</span>` : ''}</h3>
                         <p class="installment-date">还款日期: ${installment.dueDate}</p>
                     </div>
                     <span class="status-tag ${installment.status === 'active' ? 'ready' : 'pending'}">
@@ -4005,8 +4129,8 @@ function renderInstallments() {
                 </div>
                 <div class="installment-amount">¥${installment.amount.toFixed(2)}</div>
                 <div class="installment-details">
-                    <span>剩余天数: ${installment.daysRemaining}天</span>
-                    <span>每日需要: ¥${((installment.amount - installment.pendingExpense) / (installment.daysRemaining || 1)).toFixed(2)}</span>
+                    <span>还款周期: ${actualDays}天</span>
+                    <span>每日需要: ¥${dailyNeed}</span>
                 </div>
                 <div class="installment-progress">
                     <div class="progress-header">
@@ -4086,6 +4210,190 @@ function openAddInstallmentModal() {
             }
         }
     ], true);
+}
+
+// 计算每日需要赚取的金额（按期数顺序还款，每期单独计算）
+function calculateDailyEarnNeeded() {
+    const data = DataManager.loadData();
+    const today = new Date().toISOString().split('T')[0];
+
+    // 获取所有未完成的分期
+    const activeInstallments = data.installments.filter(inst => {
+        return inst.status !== 'completed' && inst.dueDate >= today;
+    });
+
+    if (activeInstallments.length === 0) {
+        document.getElementById('daily-earn-needed').textContent = '¥0.00';
+        document.getElementById('installment-days-left').textContent = '0天';
+        return;
+    }
+
+    // 按期数排序（先还期数小的）
+    activeInstallments.sort((a, b) => (a.periodNumber || 1) - (b.periodNumber || 1));
+
+    // 找到当前需要还的第一期（期数最小的）
+    const currentPeriod = activeInstallments[0];
+    const currentPeriodNumber = currentPeriod.periodNumber || 1;
+
+    // 计算当前期还需要还的金额
+    const remainingAmount = Math.max(0, currentPeriod.amount - (currentPeriod.pendingExpense || 0));
+
+    // 计算当前期剩余天数
+    const dueDate = new Date(currentPeriod.dueDate);
+    const todayDate = new Date(today);
+    const daysRemaining = Math.ceil((dueDate - todayDate) / (1000 * 60 * 60 * 24)) + 1; // +1 包含今天
+
+    // 计算每日需要赚取的金额 = 当前期剩余金额 / 当前期剩余天数
+    const dailyEarnNeeded = daysRemaining > 0 ? remainingAmount / daysRemaining : 0;
+
+    document.getElementById('daily-earn-needed').textContent = `¥${dailyEarnNeeded.toFixed(2)}`;
+    document.getElementById('installment-days-left').textContent = `第${currentPeriodNumber}期/${daysRemaining}天`;
+}
+
+// 打开批量添加分期模态框
+function openBatchAddInstallmentModal() {
+    const today = new Date().toISOString().split('T')[0];
+    
+    showModal('批量添加分期还款', `
+        <div class="form-group">
+            <label class="form-label">平台名称</label>
+            <input type="text" id="batch-installment-platform" class="form-input" placeholder="输入平台名称（如：花呗、京东白条）">
+        </div>
+        <div class="form-group">
+            <label class="form-label">总期数</label>
+            <input type="number" id="batch-installment-periods" class="form-input" placeholder="输入总期数（如：12）" min="1" max="36">
+        </div>
+        <div class="form-group">
+            <label class="form-label">每期还款金额 (元)</label>
+            <input type="number" id="batch-installment-amount" class="form-input" placeholder="输入每期还款金额" step="0.01">
+        </div>
+        <div class="form-group">
+            <label class="form-label">首次还款日期</label>
+            <input type="date" id="batch-installment-first-date" class="form-input" value="${today}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">还款周期</label>
+            <select id="batch-installment-cycle" class="form-input">
+                <option value="monthly">每月</option>
+                <option value="weekly">每周</option>
+                <option value="biweekly">每两周</option>
+            </select>
+        </div>
+        <div id="batch-installment-preview" style="margin-top: 16px; padding: 12px; background: var(--card-bg); border-radius: var(--radius-md); display: none;">
+            <div style="font-weight: 600; margin-bottom: 8px;">预览</div>
+            <div id="batch-preview-content"></div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { 
+            text: '预览', 
+            class: 'btn-secondary', 
+            action: () => previewBatchInstallments()
+        },
+        { 
+            text: '添加', 
+            class: 'btn-primary', 
+            action: () => addBatchInstallments()
+        }
+    ], true);
+}
+
+// 预览批量分期
+function previewBatchInstallments() {
+    const platform = document.getElementById('batch-installment-platform').value.trim();
+    const periods = parseInt(document.getElementById('batch-installment-periods').value);
+    const amount = parseFloat(document.getElementById('batch-installment-amount').value);
+    const firstDate = document.getElementById('batch-installment-first-date').value;
+    const cycle = document.getElementById('batch-installment-cycle').value;
+    
+    if (!platform || !periods || !amount || !firstDate) {
+        showToast('请填写完整信息');
+        return;
+    }
+    
+    const installments = calculateBatchInstallments(platform, periods, amount, firstDate, cycle);
+    const totalAmount = amount * periods;
+    
+    const previewDiv = document.getElementById('batch-installment-preview');
+    const contentDiv = document.getElementById('batch-preview-content');
+    
+    contentDiv.innerHTML = `
+        <div style="margin-bottom: 12px;">
+            <span style="color: var(--text-secondary);">总期数：</span>
+            <span style="font-weight: 600;">${periods}期</span>
+            <span style="color: var(--text-secondary); margin-left: 16px;">总金额：</span>
+            <span style="font-weight: 600; color: var(--primary-color);">¥${totalAmount.toFixed(2)}</span>
+        </div>
+        <div style="max-height: 200px; overflow-y: auto;">
+            ${installments.map((inst, index) => `
+                <div style="padding: 8px; border-bottom: 1px solid var(--border-color); font-size: 14px;">
+                    <span style="color: var(--text-secondary);">第${index + 1}期：</span>
+                    <span style="font-weight: 500;">${inst.dueDate}</span>
+                    <span style="float: right; color: var(--primary-color);">¥${inst.amount.toFixed(2)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    
+    previewDiv.style.display = 'block';
+}
+
+// 计算批量分期
+function calculateBatchInstallments(platform, periods, amount, firstDate, cycle) {
+    const installments = [];
+    let currentDate = new Date(firstDate);
+
+    for (let i = 0; i < periods; i++) {
+        installments.push({
+            platform: platform,
+            dueDate: currentDate.toISOString().split('T')[0],
+            amount: amount,
+            periodNumber: i + 1,  // 期数标记
+            totalPeriods: periods,  // 总期数
+            cycle: cycle  // 保存周期信息
+        });
+
+        // 根据周期计算下一期日期
+        switch (cycle) {
+            case 'weekly':
+                currentDate.setDate(currentDate.getDate() + 7);
+                break;
+            case 'biweekly':
+                currentDate.setDate(currentDate.getDate() + 14);
+                break;
+            case 'monthly':
+            default:
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                break;
+        }
+    }
+
+    return installments;
+}
+
+// 添加批量分期
+function addBatchInstallments() {
+    const platform = document.getElementById('batch-installment-platform').value.trim();
+    const periods = parseInt(document.getElementById('batch-installment-periods').value);
+    const amount = parseFloat(document.getElementById('batch-installment-amount').value);
+    const firstDate = document.getElementById('batch-installment-first-date').value;
+    const cycle = document.getElementById('batch-installment-cycle').value;
+    
+    if (!platform || !periods || !amount || !firstDate) {
+        showToast('请填写完整信息');
+        return;
+    }
+    
+    const installments = calculateBatchInstallments(platform, periods, amount, firstDate, cycle);
+    
+    // 添加所有分期
+    installments.forEach(inst => {
+        DataManager.addInstallment(inst);
+    });
+    
+    renderInstallments();
+    showToast(`成功添加 ${periods} 期分期还款！`);
+    closeModal();
 }
 
 // 打开编辑分期模态框
@@ -4491,6 +4799,150 @@ function clearAllData() {
         renderGamesPage();
         showToast('数据已清空！');
     }
+}
+
+// ==================== 日期模拟功能 ====================
+
+// 全局模拟日期变量
+let simulatedDate = null;
+
+// 获取当前使用的日期（模拟日期或真实日期）
+function getCurrentDate() {
+    return simulatedDate || new Date().toISOString().split('T')[0];
+}
+
+// 应用日期模拟
+function applyDateSimulation() {
+    const dateInput = document.getElementById('simulated-date');
+    const selectedDate = dateInput.value;
+
+    if (!selectedDate) {
+        showToast('请选择模拟日期');
+        return;
+    }
+
+    simulatedDate = selectedDate;
+
+    // 更新状态显示
+    document.getElementById('simulation-status').innerHTML = `
+        <span style="color: var(--primary-color); font-weight: 600;">模拟日期: ${selectedDate}</span>
+    `;
+
+    // 显示预览
+    showSimulationPreview();
+
+    // 自动保存昨天的最终状态（基于模拟日期）
+    autoSaveYesterdayHistory();
+
+    // 刷新所有页面
+    renderDashboard();
+    renderPhones();
+    renderStats();
+
+    showToast(`已切换到模拟日期: ${selectedDate}`);
+}
+
+// 重置日期模拟
+function resetDateSimulation() {
+    simulatedDate = null;
+
+    // 更新状态显示
+    document.getElementById('simulation-status').innerHTML = `
+        <span style="color: var(--text-secondary);">使用真实日期</span>
+    `;
+
+    // 隐藏预览
+    document.getElementById('simulation-preview').style.display = 'none';
+
+    // 清空输入
+    document.getElementById('simulated-date').value = '';
+
+    // 刷新所有页面
+    renderDashboard();
+    renderPhones();
+    renderStats();
+
+    showToast('已重置为真实日期');
+}
+
+// 显示模拟效果预览
+function showSimulationPreview() {
+    const previewDiv = document.getElementById('simulation-preview');
+    const contentDiv = document.getElementById('simulation-preview-content');
+
+    const data = DataManager.loadData();
+    const currentDate = getCurrentDate();
+
+    // 计算每个手机的每日赚取
+    let previewHtml = `<div style="margin-bottom: 8px;"><strong>模拟日期:</strong> ${currentDate}</div>`;
+
+    data.phones.forEach(phone => {
+        const todayEarned = calculatePhoneDailyEarned(phone, currentDate);
+        previewHtml += `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                <strong>${phone.name}</strong>: 今日赚取 ¥${todayEarned.toFixed(2)}
+            </div>
+        `;
+
+        // 显示每个软件的今日赚取
+        phone.apps.forEach(app => {
+            const appDailyEarned = calculateAppDailyEarned(app, currentDate);
+            if (appDailyEarned > 0) {
+                previewHtml += `
+                    <div style="margin-left: 16px; font-size: 12px; color: var(--text-secondary);">
+                        - ${app.name}: ¥${appDailyEarned.toFixed(2)}
+                    </div>
+                `;
+            }
+        });
+    });
+
+    contentDiv.innerHTML = previewHtml;
+    previewDiv.style.display = 'block';
+}
+
+// 计算手机在指定日期的每日赚取
+function calculatePhoneDailyEarned(phone, date) {
+    if (!phone.dailyTotalEarnedHistory) {
+        return 0;
+    }
+
+    // 获取指定日期的总赚取
+    const dateTotal = phone.dailyTotalEarnedHistory[date];
+    if (dateTotal === undefined) {
+        return 0;
+    }
+
+    // 获取前一天的日期
+    const prevDate = new Date(date);
+    prevDate.setDate(prevDate.getDate() - 1);
+    const prevDateStr = prevDate.toISOString().split('T')[0];
+
+    // 获取前一天的总赚取
+    const prevDateTotal = phone.dailyTotalEarnedHistory[prevDateStr];
+
+    if (prevDateTotal === undefined) {
+        // 如果前一天没有记录，查找更早的记录
+        const dates = Object.keys(phone.dailyTotalEarnedHistory).sort();
+        const earlierDates = dates.filter(d => d < date);
+        if (earlierDates.length > 0) {
+            const lastRecordedDate = earlierDates[earlierDates.length - 1];
+            return dateTotal - phone.dailyTotalEarnedHistory[lastRecordedDate];
+        }
+        return dateTotal;
+    }
+
+    return dateTotal - prevDateTotal;
+}
+
+// 计算软件在指定日期的每日赚取
+function calculateAppDailyEarned(app, date) {
+    if (!app.dailyEarnedHistory) {
+        return 0;
+    }
+
+    // 获取指定日期的赚取
+    return app.dailyEarnedHistory[date] || 0;
 }
 
 // 卡通风格日历组件
