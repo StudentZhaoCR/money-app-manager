@@ -6488,7 +6488,7 @@ function renderGameList() {
 
 // 添加游戏
 function addGame() {
-    const input = document.getElementById('new-game-name');
+    const input = document.getElementById('draw-game-name');
     const gameName = input.value.trim();
     
     if (!gameName) {
