@@ -1188,6 +1188,9 @@ class DataManager {
                 const hasEditedBefore = app.lastEditDate !== undefined;
                 const isFirstTimeSetup = (oldBalance === 0 && oldEarned === 0 && !hasEditedBefore);
                 
+                // 先更新余额（必须在计算已赚金额之前）
+                app.balance = formattedBalance;
+
                 // 更新已赚金额：如果余额增加，earned也增加；如果余额减少，earned不变（因为可能是提现）
                 // 第一次设置余额时也记录收益（从0到X的变化）
                 if (balanceChange > 0) {
@@ -1197,10 +1200,8 @@ class DataManager {
                 // 如果余额减少，可能是提现，earned保持不变
 
                 // 保存今天最终的已赚金额（使用新的计算方式）
-                // 无论是否是第一次设置，都保存历史记录
+                // 注意：calculateAppEarned 会使用更新后的 app.balance
                 app.dailyEarnedHistory[today] = calculateAppEarned(app);
-
-                app.balance = formattedBalance;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
                 
@@ -2118,6 +2119,28 @@ function migrateOldData() {
             phone.dailyTotalEarnedHistory = {};
         }
 
+        // 为每个软件迁移和修复历史记录
+        phone.apps.forEach(app => {
+            // 初始化 dailyEarnedHistory
+            if (!app.dailyEarnedHistory) {
+                app.dailyEarnedHistory = {};
+                hasChanges = true;
+            }
+
+            // 如果软件有已赚金额但没有历史记录，需要重建历史记录
+            const currentEarned = calculateAppEarned(app);
+            const historyDates = Object.keys(app.dailyEarnedHistory);
+
+            if (currentEarned > 0 && historyDates.length === 0) {
+                // 旧版本数据：有已赚金额但没有历史记录
+                // 策略：将累计已赚金额作为今天的记录
+                // 这样明天就能正确计算今日新增
+                app.dailyEarnedHistory[today] = currentEarned;
+                hasChanges = true;
+                console.log(`迁移数据：软件 ${app.name} 初始化今日历史记录 = ${currentEarned}`);
+            }
+        });
+
         // 如果今天没有记录，且手机有实际赚取，才保存当前总赚取
         if (phone.dailyTotalEarnedHistory[today] === undefined) {
             const currentTotalEarned = calculatePhoneTotalEarned(phone);
@@ -2128,15 +2151,6 @@ function migrateOldData() {
                 console.log(`修复数据：手机 ${phone.name} 初始化今日历史记录 = ${currentTotalEarned}`);
             }
         }
-
-        // 为每个软件初始化历史记录（但不初始化今天的记录，避免所有软件都显示）
-        phone.apps.forEach(app => {
-            if (!app.dailyEarnedHistory) {
-                app.dailyEarnedHistory = {};
-                hasChanges = true;
-            }
-            // 注意：不在这里初始化今天的记录，让软件每日赚取记录只显示今天实际编辑过的软件
-        });
     });
 
     if (hasChanges) {
@@ -2156,30 +2170,49 @@ function autoSaveYesterdayHistory() {
     let hasChanges = false;
 
     data.phones.forEach(phone => {
+        // 保存手机昨天的最终状态
         if (!phone.dailyTotalEarnedHistory) {
             phone.dailyTotalEarnedHistory = {};
         }
 
-        // 如果昨天没有记录，保存昨天的最终状态
         if (phone.dailyTotalEarnedHistory[yesterday] === undefined) {
-            // 找昨天之前最后一次记录
             const datesBeforeYesterday = Object.keys(phone.dailyTotalEarnedHistory)
                 .filter(d => d < yesterday)
                 .sort();
 
             let yesterdayTotal = 0;
             if (datesBeforeYesterday.length > 0) {
-                // 使用昨天之前最后一次记录作为昨天的基准
                 const lastRecordedDate = datesBeforeYesterday[datesBeforeYesterday.length - 1];
                 yesterdayTotal = phone.dailyTotalEarnedHistory[lastRecordedDate];
             }
 
-            // 保存昨天的最终状态
             phone.dailyTotalEarnedHistory[yesterday] = yesterdayTotal;
             hasChanges = true;
-
             console.log(`自动保存手机 ${phone.name} 昨天的最终状态: ${yesterdayTotal}`);
         }
+
+        // 保存每个软件昨天的最终状态
+        phone.apps.forEach(app => {
+            if (!app.dailyEarnedHistory) {
+                app.dailyEarnedHistory = {};
+            }
+
+            if (app.dailyEarnedHistory[yesterday] === undefined) {
+                const datesBeforeYesterday = Object.keys(app.dailyEarnedHistory)
+                    .filter(d => d < yesterday)
+                    .sort();
+
+                let yesterdayEarned = 0;
+                if (datesBeforeYesterday.length > 0) {
+                    const lastRecordedDate = datesBeforeYesterday[datesBeforeYesterday.length - 1];
+                    yesterdayEarned = app.dailyEarnedHistory[lastRecordedDate];
+                }
+
+                app.dailyEarnedHistory[yesterday] = yesterdayEarned;
+                hasChanges = true;
+                console.log(`自动保存软件 ${app.name} 昨天的最终状态: ${yesterdayEarned}`);
+            }
+        });
     });
 
     if (hasChanges) {
@@ -2670,7 +2703,7 @@ function renderAppEarnContent(phone, data) {
     
     // 收集所有日期
     const allDates = new Set();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate(); // 使用模拟日期（如果设置了）
     
     phone.apps.forEach(app => {
         const history = app.dailyEarnedHistory || {};
@@ -2715,12 +2748,18 @@ function renderAppEarnContent(phone, data) {
                 const history = app.dailyEarnedHistory || {};
                 const hasEditToday = history[today] !== undefined;
                 
+                // 调试信息
+                console.log(`软件 ${app.name}: hasEditToday=${hasEditToday}`);
+                console.log(`  history keys: ${Object.keys(history).join(', ')}`);
+                console.log(`  history[${today}]=${history[today]}, history[${prevDate}]=${history[prevDate]}`);
+                
                 if (hasEditToday) {
-                    // 今天有编辑，计算今日新增 = 当前余额 - 昨天结束时的余额
-                    const currentBalance = app.balance || 0;
+                    // 今天有编辑，计算今日新增
+                    // 方法：比较今天和昨天的累计已赚金额
+                    const todayEarned = getAppEarnedOnDate(app, today);
                     const yesterdayEarned = getAppEarnedOnDate(app, prevDate);
-                    const yesterdayBalance = yesterdayEarned - (app.withdrawn || 0) - (app.historicalWithdrawn || 0) + (app.initialBalance || 0);
-                    displayEarned = Math.max(0, currentBalance - yesterdayBalance);
+                    displayEarned = Math.max(0, todayEarned - yesterdayEarned);
+                    console.log(`  -> 今日新增: ${displayEarned} (todayEarned=${todayEarned}, yesterdayEarned=${yesterdayEarned})`);
                 } else {
                     // 今天没有编辑，不显示
                     displayEarned = 0;
@@ -3068,7 +3107,7 @@ function renderIncomePrediction() {
     
     card.style.display = 'block';
     content.innerHTML = `
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
+        <div class="prediction-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
             <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
                 <div style="font-size: 24px; margin-bottom: 8px;">📈</div>
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">日均收入</div>
