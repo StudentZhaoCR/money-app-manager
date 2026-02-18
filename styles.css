@@ -474,6 +474,48 @@
     --theme-name: '极简商务风';
 }
 
+/* 暗黑模式主题 */
+[data-theme="dark"] {
+    --primary-color: #6366f1;
+    --primary-light: #818cf8;
+    --primary-dark: #4f46e5;
+
+    --secondary-color: #ec4899;
+    --secondary-light: #f472b6;
+    --accent-color: #22d3ee;
+    --accent-light: #67e8f9;
+
+    --success-color: #34d399;
+    --warning-color: #fbbf24;
+    --error-color: #f87171;
+    --info-color: #60a5fa;
+
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-cream: #334155;
+
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+
+    --border-color: #334155;
+    --shadow-card: 0 4px 15px rgba(0, 0, 0, 0.3);
+    --shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.4);
+
+    /* 主题特定渐变 */
+    --gradient-navbar: linear-gradient(135deg, #1e293b, #0f172a);
+    --gradient-phone-header: linear-gradient(135deg, #334155, #1e293b);
+    --gradient-body: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    --shadow-navbar: 0 4px 20px rgba(0, 0, 0, 0.5);
+
+    /* 字体 */
+    --font-primary: 'Inter', -apple-system, sans-serif;
+    --font-display: 'Inter', -apple-system, sans-serif;
+    --font-secondary: 'Inter', -apple-system, sans-serif;
+
+    --theme-name: '暗黑模式';
+}
+
 /* 全局样式 */
 * {
     margin: 0;
@@ -969,12 +1011,52 @@ body {
 .empty-state {
     text-align: center;
     color: var(--text-muted);
-    padding: 40px 20px;
-    background: rgba(255, 255, 255, 0.6);
+    padding: 48px 24px;
+    background: var(--bg-secondary);
     border-radius: var(--radius-lg);
     border: 3px dashed var(--border-color);
     font-size: 14px;
     font-family: var(--font-secondary);
+}
+
+/* 增强空状态样式 */
+.empty-state-illustration {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.6;
+}
+
+.empty-state-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.empty-state-description {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.empty-state-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--gradient-primary);
+    color: white;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-card);
+}
+
+.empty-state-action:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
 }
 
 /* 按钮 - 卡通风格 */
@@ -3062,6 +3144,10 @@ body {
 
 .theme-preview-business {
     background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 50%, #1e3a5f 100%);
+}
+
+.theme-preview-dark {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
 }
 
 /* 主题切换动画 */

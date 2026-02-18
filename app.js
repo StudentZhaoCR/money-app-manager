@@ -15,6 +15,10 @@ const CHECKIN_KEY = 'moneyApp_checkin';
 const DOWNLOADED_GAMES_KEY = 'moneyApp_downloadedGames';
 const GAME_DRAW_HISTORY_KEY = 'moneyApp_gameDrawHistory';
 
+// 自动备份存储键
+const AUTO_BACKUP_SETTINGS_KEY = 'moneyApp_autoBackupSettings';
+const BACKUP_HISTORY_KEY = 'moneyApp_backupHistory';
+
 // ==================== 通用计算函数 ====================
 
 // 计算软件的已赚金额（累计）
@@ -873,6 +877,20 @@ class DataManager {
 
         this.saveAchievements(achievements);
         return newAchievements;
+    }
+
+    // 获取所有成就列表
+    static getAllAchievements() {
+        const achievements = this.getAchievements();
+        const allAchievements = [
+            { id: 'first_withdrawal', name: '🎉 首次提现', desc: '完成第一次提现', unlocked: achievements.includes('🎉 首次提现') },
+            { id: 'earn_100', name: '💰 累计赚取100元', desc: '累计赚取达到100元', unlocked: achievements.includes('💰 累计赚取100元') },
+            { id: 'earn_500', name: '💎 累计赚取500元', desc: '累计赚取达到500元', unlocked: achievements.includes('💎 累计赚取500元') },
+            { id: 'earn_1000', name: '🏆 累计赚取1000元', desc: '累计赚取达到1000元', unlocked: achievements.includes('🏆 累计赚取1000元') },
+            { id: 'add_10_apps', name: '📱 添加10个软件', desc: '添加10个赚钱软件', unlocked: achievements.includes('📱 添加10个软件') },
+            { id: 'add_5_phones', name: '📲 添加5部手机', desc: '添加5部手机', unlocked: achievements.includes('📲 添加5部手机') }
+        ];
+        return allAchievements;
     }
 
     // ==================== 签到系统 ====================
@@ -2038,6 +2056,17 @@ function showPhoneDrawResultById(id) {
 
 // 初始化
 function init() {
+    // 注册Service Worker（PWA支持）
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(function(registration) {
+                console.log('Service Worker registered:', registration);
+            })
+            .catch(function(error) {
+                console.log('Service Worker registration failed:', error);
+            });
+    }
+
     // 加载展开状态
     const savedExpanded = localStorage.getItem('expandedPhones');
     if (savedExpanded) {
@@ -2069,6 +2098,12 @@ function init() {
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
+    
+    // 检查自动备份
+    checkAutoBackup();
+    
+    // 加载自动备份设置
+    loadAutoBackupSettings();
 }
 
 // 修复旧版本数据：为没有历史记录的手机初始化历史记录
@@ -2807,7 +2842,1179 @@ function renderDashboard() {
     if (newAchievements.length > 0) {
         newAchievements.forEach(achievement => {
             showToast(`🎉 解锁成就: ${achievement}`);
+            // 显示成就分享弹窗
+            setTimeout(() => showAchievementShare(achievement), 1000);
         });
+    }
+    
+    // 渲染收入趋势图表
+    renderIncomeChart('week');
+    
+    // 渲染收入日历
+    renderIncomeCalendar();
+    
+    // 渲染智能建议
+    renderSmartSuggestions();
+    
+    // 渲染收入预测
+    renderIncomePrediction();
+    
+    // 渲染软件收益排行
+    renderAppRanking();
+}
+
+// 全局图表实例
+let incomeChart = null;
+
+// ==================== 智能建议助手 ====================
+
+// 渲染智能建议
+function renderSmartSuggestions() {
+    const card = document.getElementById('smart-suggestions-card');
+    const content = document.getElementById('smart-suggestions-content');
+    if (!card || !content) return;
+    
+    const data = DataManager.loadData();
+    const suggestions = generateSmartSuggestions(data);
+    
+    if (suggestions.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    content.innerHTML = suggestions.map((suggestion, index) => `
+        <div class="suggestion-item" style="
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            background: ${suggestion.type === 'urgent' ? '#fef2f2' : suggestion.type === 'tip' ? '#eff6ff' : '#f0fdf4'};
+            border-left: 4px solid ${suggestion.type === 'urgent' ? '#ef4444' : suggestion.type === 'tip' ? '#3b82f6' : '#22c55e'};
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            animation: slideIn 0.3s ease ${index * 0.1}s both;
+        ">
+            <span style="font-size: 24px;">${suggestion.icon}</span>
+            <div style="flex: 1;">
+                <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${suggestion.title}</div>
+                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">${suggestion.description}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 生成智能建议
+function generateSmartSuggestions(data) {
+    const suggestions = [];
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 1. 检查是否有即将到期的分期还款
+    if (data.installments && data.installments.length > 0) {
+        const upcomingInstallments = data.installments.filter(inst => {
+            if (inst.status === 'completed') return false;
+            const daysRemaining = Math.ceil((new Date(inst.dueDate) - new Date(today)) / (1000 * 60 * 60 * 24));
+            return daysRemaining <= 3 && daysRemaining >= 0;
+        });
+        
+        if (upcomingInstallments.length > 0) {
+            suggestions.push({
+                type: 'urgent',
+                icon: '⚠️',
+                title: '即将到期的还款',
+                description: `你有 ${upcomingInstallments.length} 笔分期还款将在3天内到期，请确保资金充足。`
+            });
+        }
+    }
+    
+    // 2. 检查是否有可提现的软件
+    const readyToWithdraw = [];
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if ((app.balance || 0) >= (app.minWithdraw || 0.3)) {
+                readyToWithdraw.push({
+                    phone: phone.name,
+                    app: app.name,
+                    balance: app.balance
+                });
+            }
+        });
+    });
+    
+    if (readyToWithdraw.length > 0) {
+        const topApp = readyToWithdraw.sort((a, b) => b.balance - a.balance)[0];
+        suggestions.push({
+            type: 'tip',
+            icon: '💰',
+            title: '可以提现了！',
+            description: `${topApp.phone} 的 ${topApp.app} 已达到提现门槛（¥${topApp.balance.toFixed(2)}），建议尽快提现。`
+        });
+    }
+    
+    // 3. 分析收入趋势
+    let todayEarning = 0;
+    let yesterdayEarning = 0;
+    
+    data.phones.forEach(phone => {
+        if (phone.dailyTotalEarnedHistory) {
+            const todayTotal = phone.dailyTotalEarnedHistory[today] || 0;
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+            const yesterdayTotal = phone.dailyTotalEarnedHistory[yesterdayStr] || 0;
+            
+            todayEarning += todayTotal;
+            yesterdayEarning += yesterdayTotal;
+        }
+    });
+    
+    if (todayEarning < yesterdayEarning && yesterdayEarning > 0) {
+        suggestions.push({
+            type: 'tip',
+            icon: '📉',
+            title: '今日收入下降',
+            description: '今日收入比昨日有所下降，建议检查软件运行状态或增加玩机时间。'
+        });
+    }
+    
+    // 4. 检查长时间未更新的软件
+    const inactiveApps = [];
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (app.dailyEarnedHistory) {
+                const dates = Object.keys(app.dailyEarnedHistory);
+                if (dates.length > 0) {
+                    const lastDate = dates.sort().pop();
+                    const daysSinceLastUpdate = Math.ceil((new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24));
+                    if (daysSinceLastUpdate > 3) {
+                        inactiveApps.push({
+                            phone: phone.name,
+                            app: app.name,
+                            days: daysSinceLastUpdate
+                        });
+                    }
+                }
+            }
+        });
+    });
+    
+    if (inactiveApps.length > 0) {
+        const inactiveApp = inactiveApps[0];
+        suggestions.push({
+            type: 'tip',
+            icon: '⏰',
+            title: '有软件需要关注',
+            description: `${inactiveApp.phone} 的 ${inactiveApp.app} 已经 ${inactiveApp.days} 天没有更新余额了，建议检查一下。`
+        });
+    }
+    
+    // 5. 目标完成度提醒
+    const yearlyGoal = DataManager.getYearlyGoal();
+    if (yearlyGoal > 0) {
+        const totalEarned = data.phones.reduce((sum, phone) => sum + calculatePhoneTotalEarned(phone), 0);
+        const progress = (totalEarned / yearlyGoal) * 100;
+        
+        if (progress >= 50 && progress < 55) {
+            suggestions.push({
+                type: 'success',
+                icon: '🎉',
+                title: '目标达成50%！',
+                description: '恭喜你已完成年度目标的50%，继续保持这个势头！'
+            });
+        } else if (progress >= 80 && progress < 85) {
+            suggestions.push({
+                type: 'success',
+                icon: '🏆',
+                title: '目标即将完成！',
+                description: '你已经完成了年度目标的80%，最后冲刺阶段加油！'
+            });
+        }
+    }
+    
+    // 6. 最佳软件推荐
+    if (data.phones.length > 0) {
+        let bestApp = null;
+        let bestEarning = 0;
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                const earned = calculateAppEarned(app);
+                if (earned > bestEarning) {
+                    bestEarning = earned;
+                    bestApp = { phone: phone.name, app: app.name, earned };
+                }
+            });
+        });
+        
+        if (bestApp && bestEarning > 0) {
+            suggestions.push({
+                type: 'success',
+                icon: '⭐',
+                title: '最赚钱的软件',
+                description: `${bestApp.phone} 的 ${bestApp.app} 是你的最佳收入来源（累计 ¥${bestEarning.toFixed(2)}），建议优先使用。`
+            });
+        }
+    }
+    
+    // 最多显示3条建议
+    return suggestions.slice(0, 3);
+}
+
+// ==================== 收入预测功能 ====================
+
+// 渲染收入预测
+function renderIncomePrediction() {
+    const card = document.getElementById('income-prediction-card');
+    const content = document.getElementById('income-prediction-content');
+    if (!card || !content) return;
+    
+    const data = DataManager.loadData();
+    const prediction = calculateIncomePrediction(data);
+    
+    if (!prediction || prediction.dailyAverage <= 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    content.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
+            <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
+                <div style="font-size: 24px; margin-bottom: 8px;">📈</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">日均收入</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--success-color);">¥${prediction.dailyAverage.toFixed(2)}</div>
+            </div>
+            <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
+                <div style="font-size: 24px; margin-bottom: 8px;">🎯</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预计本月</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${prediction.monthlyEstimate.toFixed(2)}</div>
+            </div>
+            <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
+                <div style="font-size: 24px; margin-bottom: 8px;">🏆</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预计全年</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--accent-color);">¥${prediction.yearlyEstimate.toFixed(2)}</div>
+            </div>
+        </div>
+        <div style="margin-top: 16px; padding: 12px; background: var(--bg-cream); border-radius: var(--radius-md); font-size: 13px; color: var(--text-secondary); text-align: center;">
+            💡 基于最近7天的平均收入计算，仅供参考
+        </div>
+    `;
+}
+
+// 计算收入预测
+function calculateIncomePrediction(data) {
+    const today = new Date();
+    let totalEarning = 0;
+    let daysWithData = 0;
+    
+    // 计算最近7天的平均收入
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        let dayEarning = 0;
+        data.phones.forEach(phone => {
+            if (phone.dailyTotalEarnedHistory && phone.dailyTotalEarnedHistory[dateStr]) {
+                const currentTotal = phone.dailyTotalEarnedHistory[dateStr];
+                const prevDate = new Date(date);
+                prevDate.setDate(prevDate.getDate() - 1);
+                const prevDateStr = prevDate.toISOString().split('T')[0];
+                let prevTotal = 0;
+                
+                if (phone.dailyTotalEarnedHistory[prevDateStr]) {
+                    prevTotal = phone.dailyTotalEarnedHistory[prevDateStr];
+                } else {
+                    const dates = Object.keys(phone.dailyTotalEarnedHistory).sort();
+                    const earlierDates = dates.filter(d => d < dateStr);
+                    if (earlierDates.length > 0) {
+                        prevTotal = phone.dailyTotalEarnedHistory[earlierDates[earlierDates.length - 1]];
+                    }
+                }
+                
+                dayEarning += Math.max(0, currentTotal - prevTotal);
+            }
+        });
+        
+        if (dayEarning > 0) {
+            totalEarning += dayEarning;
+            daysWithData++;
+        }
+    }
+    
+    if (daysWithData === 0) return null;
+    
+    const dailyAverage = totalEarning / daysWithData;
+    const monthlyEstimate = dailyAverage * 30;
+    const yearlyEstimate = dailyAverage * 365;
+    
+    return { dailyAverage, monthlyEstimate, yearlyEstimate };
+}
+
+// ==================== 软件收益排行功能 ====================
+
+// 渲染软件收益排行
+function renderAppRanking() {
+    const card = document.getElementById('app-ranking-card');
+    const content = document.getElementById('app-ranking-content');
+    if (!card || !content) return;
+    
+    const data = DataManager.loadData();
+    const rankings = calculateAppRankings(data);
+    
+    if (rankings.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    
+    // 只显示前5名
+    const top5 = rankings.slice(0, 5);
+    const maxEarning = top5[0].earned;
+    
+    content.innerHTML = top5.map((app, index) => {
+        const percentage = (app.earned / maxEarning) * 100;
+        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+        return `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                <span style="font-size: 24px; width: 32px; text-align: center;">${medals[index]}</span>
+                <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-weight: 600; color: var(--text-primary);">${app.appName}</span>
+                        <span style="font-weight: 700; color: var(--success-color);">¥${app.earned.toFixed(2)}</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${app.phoneName}</div>
+                    <div style="height: 6px; background: var(--bg-cream); border-radius: 3px; overflow: hidden;">
+                        <div style="height: 100%; width: ${percentage}%; background: linear-gradient(90deg, var(--primary-color), var(--primary-light)); border-radius: 3px; transition: width 0.5s ease;"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 计算软件收益排行
+function calculateAppRankings(data) {
+    const rankings = [];
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            const earned = calculateAppEarned(app);
+            if (earned > 0) {
+                rankings.push({
+                    phoneName: phone.name,
+                    appName: app.name,
+                    earned: earned,
+                    balance: app.balance || 0,
+                    withdrawn: app.withdrawalHistory ? app.withdrawalHistory.reduce((sum, w) => sum + w.amount, 0) : 0
+                });
+            }
+        });
+    });
+    
+    // 按收益排序
+    return rankings.sort((a, b) => b.earned - a.earned);
+}
+
+// ==================== 成就分享功能 ====================
+
+// 显示成就分享弹窗
+function showAchievementShare(achievementName) {
+    const data = DataManager.loadData();
+    const totalEarned = data.phones.reduce((sum, phone) => sum + calculatePhoneTotalEarned(phone), 0);
+    const totalPhones = data.phones.length;
+    const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+
+    const content = `
+        <div style="text-align: center; padding: 20px;">
+            <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--primary-color); margin-bottom: 8px;">解锁新成就</div>
+            <div style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; padding: 12px 24px; background: linear-gradient(135deg, var(--primary-light), var(--primary-color)); color: white; border-radius: var(--radius-lg); display: inline-block;">${achievementName}</div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0;">
+                <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
+                    <div style="font-size: 20px; font-weight: 700; color: var(--success-color);">¥${totalEarned.toFixed(2)}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">累计赚取</div>
+                </div>
+                <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
+                    <div style="font-size: 20px; font-weight: 700; color: var(--primary-color);">${totalPhones}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">手机数量</div>
+                </div>
+                <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
+                    <div style="font-size: 20px; font-weight: 700; color: var(--accent-color);">${totalApps}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">软件数量</div>
+                </div>
+            </div>
+
+            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px;">
+                📅 ${new Date().toLocaleDateString('zh-CN')} | 赚钱软件管理系统
+            </div>
+        </div>
+    `;
+
+    showModal('🎉 成就解锁', content, [
+        { text: '分享', class: 'btn-primary', action: () => shareAchievement(achievementName, totalEarned, totalPhones, totalApps) },
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 分享成就
+function shareAchievement(achievementName, totalEarned, totalPhones, totalApps) {
+    const shareText = `🎉 我在【赚钱软件管理系统】解锁了成就：${achievementName}\n\n💰 累计赚取：¥${totalEarned.toFixed(2)}\n📱 管理手机：${totalPhones} 部\n📲 安装软件：${totalApps} 个\n\n一起来赚钱吧！`;
+
+    if (navigator.share) {
+        navigator.share({
+            title: '解锁新成就！',
+            text: shareText
+        }).catch(() => {
+            // 用户取消分享
+        });
+    } else {
+        // 复制到剪贴板
+        navigator.clipboard.writeText(shareText).then(() => {
+            showToast('✅ 分享内容已复制到剪贴板');
+        }).catch(() => {
+            showToast('❌ 复制失败，请手动复制');
+        });
+    }
+
+    closeModal();
+}
+
+// 渲染收入趋势图表
+function renderIncomeChart(period = 'week') {
+    const ctx = document.getElementById('incomeChart');
+    if (!ctx) return;
+    
+    const data = DataManager.loadData();
+    const dates = [];
+    const earnings = [];
+    
+    // 计算日期范围
+    const today = new Date();
+    let days = 7;
+    if (period === 'month') days = 30;
+    if (period === 'year') days = 365;
+    
+    // 收集每日收入数据
+    for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // 计算这一天的总收入
+        let dayEarning = 0;
+        data.phones.forEach(phone => {
+            if (phone.dailyTotalEarnedHistory && phone.dailyTotalEarnedHistory[dateStr]) {
+                const currentTotal = phone.dailyTotalEarnedHistory[dateStr];
+                // 获取前一天的总额
+                const prevDate = new Date(date);
+                prevDate.setDate(prevDate.getDate() - 1);
+                const prevDateStr = prevDate.toISOString().split('T')[0];
+                let prevTotal = 0;
+                
+                if (phone.dailyTotalEarnedHistory[prevDateStr]) {
+                    prevTotal = phone.dailyTotalEarnedHistory[prevDateStr];
+                } else {
+                    // 找更早的记录
+                    const dates = Object.keys(phone.dailyTotalEarnedHistory).sort();
+                    const earlierDates = dates.filter(d => d < dateStr);
+                    if (earlierDates.length > 0) {
+                        prevTotal = phone.dailyTotalEarnedHistory[earlierDates[earlierDates.length - 1]];
+                    }
+                }
+                
+                dayEarning += Math.max(0, currentTotal - prevTotal);
+            }
+        });
+        
+        dates.push(dateStr.slice(5)); // 只显示 MM-DD
+        earnings.push(dayEarning);
+    }
+    
+    // 销毁旧图表
+    if (incomeChart) {
+        incomeChart.destroy();
+    }
+    
+    // 创建新图表
+    incomeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{
+                label: '每日收入 (元)',
+                data: earnings,
+                borderColor: '#8b5cf6',
+                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#8b5cf6',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(context) {
+                            return `收入: ¥${context.parsed.y.toFixed(2)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return '¥' + value.toFixed(1);
+                        }
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+// 更新图表周期
+function updateChartPeriod(period) {
+    renderIncomeChart(period);
+}
+
+// ==================== 收入日历功能 ====================
+
+// 当前日历显示的月份
+let currentCalendarDate = new Date();
+
+// 渲染收入日历
+function renderIncomeCalendar() {
+    const calendarGrid = document.getElementById('income-calendar');
+    const monthYearLabel = document.getElementById('calendar-month-year');
+    if (!calendarGrid || !monthYearLabel) return;
+    
+    const data = DataManager.loadData();
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    
+    // 更新月份标签
+    monthYearLabel.textContent = `${year}年${month + 1}月`;
+    
+    // 获取当月第一天和最后一天
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay(); // 0 = 周日
+    
+    // 星期标题
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    let html = weekDays.map(day => `
+        <div style="text-align: center; font-weight: 600; padding: 8px; color: var(--text-secondary); font-size: 12px;">${day}</div>
+    `).join('');
+    
+    // 空白格子（上月）
+    for (let i = 0; i < startDayOfWeek; i++) {
+        html += `<div style="padding: 8px;"></div>`;
+    }
+    
+    // 日期格子
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayData = getDayData(dateStr, data);
+        
+        // 判断是否有数据
+        const hasIncome = dayData.income > 0;
+        const hasExpense = dayData.expense > 0;
+        const hasWithdrawal = dayData.withdrawal > 0;
+        const hasInstallment = dayData.installment;
+        
+        // 构建背景色
+        let backgroundColor = 'var(--bg-secondary)';
+        let borderColor = 'var(--border-color)';
+        if (hasIncome && hasExpense) {
+            backgroundColor = '#fef3c7'; // 黄色 - 收入和支出都有
+        } else if (hasIncome) {
+            backgroundColor = '#dcfce7'; // 绿色 - 有收入
+        } else if (hasExpense) {
+            backgroundColor = '#fee2e2'; // 红色 - 有支出
+        } else if (hasWithdrawal) {
+            backgroundColor = '#dbeafe'; // 蓝色 - 有提现
+        } else if (hasInstallment) {
+            backgroundColor = '#fef3c7'; // 黄色 - 还款日
+        }
+        
+        // 判断是否是今天
+        const today = new Date().toISOString().split('T')[0];
+        const isToday = dateStr === today;
+        if (isToday) {
+            borderColor = 'var(--primary-color)';
+        }
+        
+        // 显示金额（只显示收入）
+        const displayAmount = dayData.income > 0 ? `¥${dayData.income.toFixed(0)}` : '';
+        
+        html += `
+            <div style="
+                aspect-ratio: 1;
+                background: ${backgroundColor};
+                border: 2px solid ${borderColor};
+                border-radius: var(--radius-md);
+                padding: 4px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-size: 11px;
+            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"
+               onclick="showDayDetail('${dateStr}')">
+                <span style="font-weight: ${isToday ? '700' : '600'}; color: ${isToday ? 'var(--primary-color)' : 'var(--text-primary)'};">${day}</span>
+                ${displayAmount ? `<span style="font-size: 9px; color: var(--success-color); margin-top: 2px;">${displayAmount}</span>` : ''}
+            </div>
+        `;
+    }
+    
+    calendarGrid.innerHTML = html;
+}
+
+// 获取某一天的数据
+function getDayData(dateStr, data) {
+    let income = 0;
+    let expense = 0;
+    let withdrawal = 0;
+    let installment = false;
+    
+    // 计算收入
+    data.phones.forEach(phone => {
+        if (phone.dailyTotalEarnedHistory && phone.dailyTotalEarnedHistory[dateStr]) {
+            const currentTotal = phone.dailyTotalEarnedHistory[dateStr];
+            const prevDate = new Date(dateStr);
+            prevDate.setDate(prevDate.getDate() - 1);
+            const prevDateStr = prevDate.toISOString().split('T')[0];
+            let prevTotal = 0;
+            
+            if (phone.dailyTotalEarnedHistory[prevDateStr]) {
+                prevTotal = phone.dailyTotalEarnedHistory[prevDateStr];
+            } else {
+                const dates = Object.keys(phone.dailyTotalEarnedHistory).sort();
+                const earlierDates = dates.filter(d => d < dateStr);
+                if (earlierDates.length > 0) {
+                    prevTotal = phone.dailyTotalEarnedHistory[earlierDates[earlierDates.length - 1]];
+                }
+            }
+            
+            income += Math.max(0, currentTotal - prevTotal);
+        }
+    });
+    
+    // 计算支出
+    if (data.expenses) {
+        data.expenses.forEach(e => {
+            if (e.date === dateStr) {
+                expense += e.amount;
+            }
+        });
+    }
+    
+    // 检查是否有提现
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (app.withdrawalHistory) {
+                app.withdrawalHistory.forEach(w => {
+                    if (w.date === dateStr) {
+                        withdrawal += w.amount;
+                    }
+                });
+            }
+        });
+    });
+    
+    // 检查是否是还款日
+    if (data.installments) {
+        installment = data.installments.some(inst => inst.dueDate === dateStr);
+    }
+    
+    return { income, expense, withdrawal, installment };
+}
+
+// 切换日历月份
+function changeCalendarMonth(delta) {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+    renderIncomeCalendar();
+}
+
+// 显示某天详情
+function showDayDetail(dateStr) {
+    const data = DataManager.loadData();
+    const dayData = getDayData(dateStr, data);
+    
+    let content = `<div style="padding: 16px;">`;
+    content += `<div style="font-weight: 600; margin-bottom: 12px; font-size: 16px;">${dateStr}</div>`;
+    
+    if (dayData.income > 0) {
+        content += `<div style="margin-bottom: 8px; color: var(--success-color);">💰 收入: ¥${dayData.income.toFixed(2)}</div>`;
+    }
+    if (dayData.expense > 0) {
+        content += `<div style="margin-bottom: 8px; color: var(--error-color);">💸 支出: ¥${dayData.expense.toFixed(2)}</div>`;
+    }
+    if (dayData.withdrawal > 0) {
+        content += `<div style="margin-bottom: 8px; color: var(--info-color);">🏧 提现: ¥${dayData.withdrawal.toFixed(2)}</div>`;
+    }
+    if (dayData.installment) {
+        content += `<div style="margin-bottom: 8px; color: var(--warning-color);">📅 有分期还款</div>`;
+    }
+    
+    if (dayData.income === 0 && dayData.expense === 0 && dayData.withdrawal === 0 && !dayData.installment) {
+        content += `<div style="color: var(--text-muted);">暂无记录</div>`;
+    }
+    
+    content += `</div>`;
+    
+    showModal('日期详情', content, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 全局搜索功能
+function performSearch(query) {
+    const resultsContainer = document.getElementById('search-results');
+    
+    if (!query || query.trim() === '') {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+    
+    query = query.toLowerCase().trim();
+    const data = DataManager.loadData();
+    const results = [];
+    
+    // 搜索手机
+    data.phones.forEach(phone => {
+        if (phone.name.toLowerCase().includes(query)) {
+            results.push({
+                type: 'phone',
+                name: phone.name,
+                id: phone.id,
+                subtitle: `${phone.apps.length} 个软件`
+            });
+        }
+        
+        // 搜索软件
+        phone.apps.forEach(app => {
+            if (app.name.toLowerCase().includes(query)) {
+                results.push({
+                    type: 'app',
+                    name: app.name,
+                    phoneName: phone.name,
+                    phoneId: phone.id,
+                    appId: app.id,
+                    subtitle: `余额: ¥${(app.balance || 0).toFixed(2)}`
+                });
+            }
+        });
+    });
+    
+    // 渲染搜索结果
+    if (results.length === 0) {
+        resultsContainer.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--text-muted);">未找到匹配结果</div>';
+    } else {
+        resultsContainer.innerHTML = results.map(result => `
+            <div class="search-result-item" onclick="handleSearchResult('${result.type}', '${result.phoneId || result.id}', '${result.appId || ''}')" 
+                 style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color); transition: background 0.2s;"
+                 onmouseover="this.style.background='var(--bg-cream)'" 
+                 onmouseout="this.style.background='transparent'">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 20px;">${result.type === 'phone' ? '📱' : '📲'}</span>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; color: var(--text-primary);">${result.name}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">${result.phoneName ? result.phoneName + ' · ' : ''}${result.subtitle}</div>
+                    </div>
+                    <span style="font-size: 12px; color: var(--primary-color); padding: 4px 8px; background: var(--bg-cream); border-radius: var(--radius-sm);">${result.type === 'phone' ? '手机' : '软件'}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    resultsContainer.style.display = 'block';
+}
+
+// 处理搜索结果点击
+function handleSearchResult(type, phoneId, appId) {
+    // 先跳转到手机管理页面
+    showPage('phones');
+    
+    if (type === 'phone') {
+        // 展开手机详情
+        expandedPhones[phoneId] = true;
+        saveExpandedState();
+        renderPhones();
+        // 滚动到该手机
+        setTimeout(() => {
+            const phoneElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
+            if (phoneElement) {
+                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                phoneElement.style.animation = 'highlight 1s ease';
+                // 添加高亮边框
+                phoneElement.style.border = '3px solid var(--primary-color)';
+                setTimeout(() => {
+                    phoneElement.style.border = '';
+                }, 3000);
+            }
+        }, 300);
+    } else if (type === 'app') {
+        // 展开手机并高亮软件
+        expandedPhones[phoneId] = true;
+        saveExpandedState();
+        renderPhones();
+        // 滚动并高亮
+        setTimeout(() => {
+            const phoneElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
+            const appElement = document.querySelector(`[data-app-id="${appId}"]`);
+            if (appElement) {
+                appElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                appElement.style.background = 'var(--accent-light)';
+                appElement.style.borderRadius = 'var(--radius-md)';
+                setTimeout(() => {
+                    appElement.style.background = '';
+                }, 3000);
+            } else if (phoneElement) {
+                // 如果找不到软件，至少滚动到手机
+                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
+    }
+    
+    // 清除搜索
+    clearSearch();
+}
+
+// 清除搜索
+function clearSearch() {
+    const searchInput = document.getElementById('global-search');
+    const resultsContainer = document.getElementById('search-results');
+    if (searchInput) searchInput.value = '';
+    if (resultsContainer) resultsContainer.style.display = 'none';
+}
+
+// 点击外部关闭搜索结果
+document.addEventListener('click', function(e) {
+    const searchContainer = document.querySelector('.search-container');
+    const resultsContainer = document.getElementById('search-results');
+    if (searchContainer && resultsContainer && !searchContainer.contains(e.target)) {
+        resultsContainer.style.display = 'none';
+    }
+});
+
+// ==================== 自动备份功能 ====================
+
+// 获取自动备份设置
+function getAutoBackupSettings() {
+    const settings = localStorage.getItem(AUTO_BACKUP_SETTINGS_KEY);
+    return settings ? JSON.parse(settings) : {
+        frequency: 'never',
+        keepCount: 5,
+        lastBackup: null
+    };
+}
+
+// 保存自动备份设置
+function saveAutoBackupSettings() {
+    const frequency = document.getElementById('auto-backup-frequency')?.value || 'never';
+    const keepCount = parseInt(document.getElementById('auto-backup-keep')?.value || '5');
+    
+    const settings = getAutoBackupSettings();
+    settings.frequency = frequency;
+    settings.keepCount = keepCount;
+    
+    localStorage.setItem(AUTO_BACKUP_SETTINGS_KEY, JSON.stringify(settings));
+    showToast('备份设置已保存');
+}
+
+// 加载自动备份设置到UI
+function loadAutoBackupSettings() {
+    const settings = getAutoBackupSettings();
+    
+    const frequencySelect = document.getElementById('auto-backup-frequency');
+    const keepSelect = document.getElementById('auto-backup-keep');
+    const lastBackupDiv = document.getElementById('last-backup-time');
+    
+    if (frequencySelect) frequencySelect.value = settings.frequency;
+    if (keepSelect) keepSelect.value = settings.keepCount.toString();
+    if (lastBackupDiv) {
+        if (settings.lastBackup) {
+            const date = new Date(settings.lastBackup);
+            lastBackupDiv.textContent = date.toLocaleString('zh-CN');
+        } else {
+            lastBackupDiv.textContent = '从未备份';
+        }
+    }
+}
+
+// 执行备份
+function performBackup() {
+    const data = DataManager.loadData();
+    const backupData = {
+        data: data,
+        timestamp: new Date().toISOString(),
+        version: '1.0'
+    };
+    
+    // 保存到备份历史
+    let backupHistory = JSON.parse(localStorage.getItem(BACKUP_HISTORY_KEY) || '[]');
+    backupHistory.unshift({
+        id: Date.now().toString(),
+        timestamp: backupData.timestamp,
+        size: JSON.stringify(backupData).length
+    });
+    
+    // 限制备份数量
+    const settings = getAutoBackupSettings();
+    if (backupHistory.length > settings.keepCount) {
+        backupHistory = backupHistory.slice(0, settings.keepCount);
+    }
+    
+    localStorage.setItem(BACKUP_HISTORY_KEY, JSON.stringify(backupHistory));
+    localStorage.setItem(`moneyApp_backup_${backupHistory[0].id}`, JSON.stringify(backupData));
+    
+    // 更新上次备份时间
+    settings.lastBackup = backupData.timestamp;
+    localStorage.setItem(AUTO_BACKUP_SETTINGS_KEY, JSON.stringify(settings));
+    
+    return backupHistory[0];
+}
+
+// 手动备份
+function manualBackup() {
+    try {
+        const backup = performBackup();
+        loadAutoBackupSettings();
+        showToast(`✅ 备份成功！备份ID: ${backup.id.slice(-6)}`);
+    } catch (error) {
+        showToast('❌ 备份失败: ' + error.message);
+    }
+}
+
+// ==================== 空状态组件 ====================
+
+// 生成空状态HTML
+function generateEmptyState(type, options = {}) {
+    const emptyStates = {
+        phones: {
+            icon: '📱',
+            title: '还没有添加手机',
+            description: '添加你的第一台手机，开始记录赚钱之旅',
+            action: '添加手机',
+            actionFn: 'openAddPhoneModal()'
+        },
+        apps: {
+            icon: '📲',
+            title: '还没有添加软件',
+            description: '为手机添加赚钱软件，追踪每个软件的收入',
+            action: '添加软件',
+            actionFn: 'openAddAppModal()'
+        },
+        installments: {
+            icon: '💳',
+            title: '还没有分期还款',
+            description: '添加分期还款计划，合理安排还款资金',
+            action: '添加分期',
+            actionFn: 'openAddInstallmentModal()'
+        },
+        expenses: {
+            icon: '💸',
+            title: '还没有支出记录',
+            description: '记录你的支出，更好地管理资金',
+            action: '添加支出',
+            actionFn: 'addExpense()'
+        },
+        games: {
+            icon: '🎮',
+            title: '还没有添加游戏',
+            description: '添加下载的游戏，追踪游戏进度',
+            action: '添加游戏',
+            actionFn: 'openAddGameModal()'
+        },
+        todayApps: {
+            icon: '📋',
+            title: '今天没有需要关注的软件',
+            description: '所有软件都运行良好，继续保持！',
+            action: '',
+            actionFn: ''
+        },
+        search: {
+            icon: '🔍',
+            title: '未找到匹配结果',
+            description: '尝试使用其他关键词搜索',
+            action: '',
+            actionFn: ''
+        },
+        data: {
+            icon: '📊',
+            title: '暂无数据',
+            description: '开始记录你的第一笔收入吧',
+            action: '去记录',
+            actionFn: 'showPage("phones")'
+        }
+    };
+    
+    const config = emptyStates[type] || emptyStates.data;
+    
+    // 合并自定义选项
+    if (options.title) config.title = options.title;
+    if (options.description) config.description = options.description;
+    if (options.action) config.action = options.action;
+    if (options.actionFn) config.actionFn = options.actionFn;
+    
+    let html = `
+        <div class="empty-state">
+            <div class="empty-state-illustration">${config.icon}</div>
+            <div class="empty-state-title">${config.title}</div>
+            <div class="empty-state-description">${config.description}</div>
+    `;
+    
+    if (config.action && config.actionFn) {
+        html += `<div class="empty-state-action" onclick="${config.actionFn}">${config.action}</div>`;
+    }
+    
+    html += `</div>`;
+    
+    return html;
+}
+
+// 检查是否需要自动备份
+function checkAutoBackup() {
+    const settings = getAutoBackupSettings();
+    if (settings.frequency === 'never') return;
+    
+    if (!settings.lastBackup) {
+        performBackup();
+        return;
+    }
+    
+    const lastBackup = new Date(settings.lastBackup);
+    const now = new Date();
+    const diffDays = (now - lastBackup) / (1000 * 60 * 60 * 24);
+    
+    let shouldBackup = false;
+    switch (settings.frequency) {
+        case 'daily':
+            shouldBackup = diffDays >= 1;
+            break;
+        case 'weekly':
+            shouldBackup = diffDays >= 7;
+            break;
+        case 'monthly':
+            shouldBackup = diffDays >= 30;
+            break;
+    }
+    
+    if (shouldBackup) {
+        performBackup();
+        console.log('自动备份已完成');
+    }
+}
+
+// 显示备份历史
+function showBackupHistory() {
+    const backupHistory = JSON.parse(localStorage.getItem(BACKUP_HISTORY_KEY) || '[]');
+    
+    if (backupHistory.length === 0) {
+        showModal('备份历史', '<div style="text-align: center; padding: 20px;">暂无备份记录</div>', [
+            { text: '关闭', class: 'btn-secondary', action: closeModal }
+        ]);
+        return;
+    }
+    
+    const content = `
+        <div style="max-height: 400px; overflow-y: auto;">
+            ${backupHistory.map((backup, index) => {
+                const date = new Date(backup.timestamp);
+                const size = (backup.size / 1024).toFixed(2);
+                return `
+                    <div style="padding: 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600;">备份 #${index + 1}</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">${date.toLocaleString('zh-CN')}</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">${size} KB</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="restoreBackup('${backup.id}')">恢复</button>
+                            <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="downloadBackup('${backup.id}')">下载</button>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+    
+    showModal('备份历史', content, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 恢复备份
+function restoreBackup(backupId) {
+    if (!confirm('确定要恢复此备份吗？当前数据将被覆盖！')) return;
+    
+    try {
+        const backupData = JSON.parse(localStorage.getItem(`moneyApp_backup_${backupId}`));
+        if (!backupData || !backupData.data) {
+            showToast('❌ 备份数据损坏');
+            return;
+        }
+        
+        DataManager.saveData(backupData.data);
+        showToast('✅ 备份恢复成功！页面将刷新...');
+        setTimeout(() => location.reload(), 1500);
+    } catch (error) {
+        showToast('❌ 恢复失败: ' + error.message);
+    }
+}
+
+// 下载备份
+function downloadBackup(backupId) {
+    try {
+        const backupData = localStorage.getItem(`moneyApp_backup_${backupId}`);
+        if (!backupData) {
+            showToast('❌ 备份不存在');
+            return;
+        }
+        
+        const blob = new Blob([backupData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `moneyApp_backup_${backupId}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('✅ 备份下载成功');
+    } catch (error) {
+        showToast('❌ 下载失败: ' + error.message);
     }
 }
 
@@ -2922,7 +4129,7 @@ function renderTodayApps(data) {
     
     const container = document.getElementById('today-apps-list');
     if (todayApps.length === 0) {
-        container.innerHTML = '<div class="empty-state">今天没有需要关注的软件</div>';
+        container.innerHTML = generateEmptyState('todayApps');
         return;
     }
     
@@ -2958,7 +4165,7 @@ function renderPhones() {
     const container = document.getElementById('phone-grid');
     
     if (data.phones.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无手机，请添加手机</div>';
+        container.innerHTML = generateEmptyState('phones');
         return;
     }
     
