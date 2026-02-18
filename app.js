@@ -1371,8 +1371,11 @@ class DataManager {
         const randomIndex = Math.floor(Math.random() * activeGames.length);
         const selectedGame = activeGames[randomIndex];
         
-        // 更新该游戏的游玩天数
-        this.updateGamePlayDay(selectedGame.id);
+        // 更新该游戏的游玩天数，并获取更新后的游戏对象
+        const updatedGame = this.updateGamePlayDay(selectedGame.id);
+        
+        // 使用更新后的天数
+        const daysPlayed = updatedGame ? updatedGame.daysPlayed : selectedGame.daysPlayed;
         
         // 保存抽签历史
         const targetDays = selectedGame.targetDays || 7;
@@ -1384,7 +1387,7 @@ class DataManager {
             date: today,
             gameName: selectedGame.name,
             phoneId: savedPhoneId,
-            daysPlayed: selectedGame.daysPlayed
+            daysPlayed: daysPlayed
         });
         
         drawHistory.unshift({
@@ -1392,8 +1395,8 @@ class DataManager {
             gameId: selectedGame.id,
             gameName: selectedGame.name,
             phoneId: savedPhoneId,
-            daysPlayed: selectedGame.daysPlayed,
-            remainingDays: targetDays - selectedGame.daysPlayed,
+            daysPlayed: daysPlayed,
+            remainingDays: targetDays - daysPlayed,
             targetDays: targetDays,
             isRedownload: selectedGame.isRedownload || false
         });
@@ -6910,24 +6913,24 @@ function renderGamesList() {
         
         return `
             <div class="game-item" style="padding: 16px; border-bottom: 1px solid var(--border-color);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <div>
-                        <div style="font-weight: 600; font-size: 16px;">${game.name}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                <div class="game-info" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div class="game-details">
+                        <div class="game-name" style="font-weight: 600; font-size: 16px;">${game.name}</div>
+                        <div class="game-date" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
                             下载日期: ${game.downloadDate}
                         </div>
                     </div>
-                    <div style="text-align: right;">
+                    <div class="game-status" style="text-align: right;">
                         <span style="color: ${statusColor}; font-weight: 600; font-size: 14px;">${statusText}</span>
                     </div>
                 </div>
                 <div class="progress-item">
-                    <div class="progress-header">
+                    <div class="progress-header" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span>游玩进度</span>
                         <span class="font-semibold">${Math.round(progressPercent)}%</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progressPercent}%; background: ${statusColor};"></div>
+                    <div class="progress-bar" style="height: 8px; background: var(--bg-cream); border-radius: 4px; overflow: hidden;">
+                        <div class="progress-fill" style="width: ${progressPercent}%; height: 100%; background: ${statusColor}; border-radius: 4px; transition: width 0.3s ease;"></div>
                     </div>
                 </div>
                 ${game.canDelete ? `
@@ -6964,10 +6967,13 @@ function renderGameDrawHistoryList() {
         phoneMap[phone.id] = phone.name;
     });
     
-    container.innerHTML = history.map(record => {
+    container.innerHTML = history.map((record, index) => {
         const phoneName = record.phoneId ? (phoneMap[record.phoneId] || '未知手机') : '未指定手机';
+        const isCompleted = record.daysPlayed >= (record.targetDays || 7);
+        const isMarked = record.marked === true;
+        
         return `
-        <div class="draw-history-item" style="padding: 12px; border-bottom: 1px solid var(--border-color);">
+        <div class="draw-history-item ${isMarked ? 'marked' : ''}" style="padding: 12px; border-bottom: 1px solid var(--border-color); ${isMarked ? 'background: var(--success-light);' : ''}">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <div style="font-weight: 500;">${record.date}</div>
@@ -6979,16 +6985,36 @@ function renderGameDrawHistoryList() {
                     </div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="font-size: 14px; color: var(--primary-color); font-weight: 600;">
-                        ${record.daysPlayed}/${record.targetDays || 7}天
+                    <div style="font-size: 14px; color: ${isCompleted ? 'var(--success-color)' : 'var(--primary-color)'}; font-weight: 600;">
+                        ${isCompleted ? '✅ 已完成' : `${record.daysPlayed}/${record.targetDays || 7}天`}
                     </div>
                     <div style="font-size: 12px; color: var(--text-secondary);">
-                        剩余${record.remainingDays}天
+                        ${isCompleted ? '' : `剩余${record.remainingDays}天`}
                     </div>
+                    ${isCompleted ? `
+                    <button class="btn btn-sm ${isMarked ? 'btn-secondary' : 'btn-success'}" 
+                            onclick="toggleMarkDrawHistory(${index})" 
+                            style="margin-top: 8px; padding: 4px 12px; font-size: 12px;">
+                        ${isMarked ? '取消标记' : '标记完成'}
+                    </button>
+                    ` : ''}
                 </div>
             </div>
         </div>
     `}).join('');
+}
+
+// 切换抽签历史标记状态
+function toggleMarkDrawHistory(index) {
+    const historyStr = localStorage.getItem('moneyApp_gameDrawHistory');
+    const history = historyStr ? JSON.parse(historyStr) : [];
+    
+    if (index >= 0 && index < history.length) {
+        history[index].marked = !history[index].marked;
+        localStorage.setItem('moneyApp_gameDrawHistory', JSON.stringify(history));
+        renderGameDrawHistoryList();
+        showToast(history[index].marked ? '已标记完成' : '已取消标记');
+    }
 }
 
 // 添加新游戏

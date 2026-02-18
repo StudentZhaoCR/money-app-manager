@@ -3214,6 +3214,30 @@ body {
         align-items: flex-start !important;
         gap: 8px !important;
     }
+    
+    /* 游戏列表适配 */
+    .game-item {
+        padding: 12px !important;
+    }
+    
+    .game-item > div:first-child {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px !important;
+    }
+    
+    .game-item .game-name {
+        font-size: 14px !important;
+    }
+    
+    .game-item .progress-header {
+        flex-direction: column !important;
+        gap: 4px !important;
+    }
+    
+    .game-item .progress-bar {
+        height: 6px !important;
+    }
 }
 
 /* 今日赚取页面样式 */
