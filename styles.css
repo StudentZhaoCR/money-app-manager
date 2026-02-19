@@ -779,20 +779,33 @@
     color: var(--text-secondary);
 }
 
-/* 暗黑模式下的主题选择器 - 使用html选择器确保最高优先级 */
-html[data-theme="dark"] .theme-item,
-[data-theme="dark"] .theme-item {
+/* 主题选择器 - 暗黑模式主题项特殊样式（仅在默认主题下生效） */
+:root .theme-item[data-theme="dark"] {
+    background: #1e293b;
+    border-color: #334155;
+    color: white;
+}
+
+:root .theme-item[data-theme="dark"]:hover {
+    background: #334155;
+}
+
+:root .theme-item[data-theme="dark"].active {
+    background: #334155;
+    border-color: #6366f1;
+}
+
+/* 当整个页面是暗黑模式时，所有主题项都使用深色背景 */
+html[data-theme="dark"] .theme-item {
     background: #1e293b !important;
     border-color: #334155 !important;
 }
 
-html[data-theme="dark"] .theme-item:hover,
-[data-theme="dark"] .theme-item:hover {
+html[data-theme="dark"] .theme-item:hover {
     background: #334155 !important;
 }
 
-html[data-theme="dark"] .theme-item.active,
-[data-theme="dark"] .theme-item.active {
+html[data-theme="dark"] .theme-item.active {
     background: #334155 !important;
     border-color: #6366f1 !important;
 }
@@ -4829,6 +4842,5 @@ body {
     .history-game-time {
         font-size: 11px;
     }
-}
 
 
