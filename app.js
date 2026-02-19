@@ -1305,7 +1305,7 @@ class DataManager {
         const game = games.find(g => g.id === gameId);
         
         if (game && !game.completed) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getCurrentDate();
             
             // 检查今天是否已经记录过
             if (game.lastPlayedDate !== today) {
@@ -1371,11 +1371,9 @@ class DataManager {
         const randomIndex = Math.floor(Math.random() * activeGames.length);
         const selectedGame = activeGames[randomIndex];
         
-        // 更新该游戏的游玩天数，并获取更新后的游戏对象
-        const updatedGame = this.updateGamePlayDay(selectedGame.id);
-        
-        // 使用更新后的天数
-        const daysPlayed = updatedGame ? updatedGame.daysPlayed : selectedGame.daysPlayed;
+        // 不再自动更新天数，天数在点击完成时更新
+        // 使用当前天数（未增加）
+        const daysPlayed = selectedGame.daysPlayed;
         
         // 保存抽签历史
         const targetDays = selectedGame.targetDays || 7;
@@ -1672,7 +1670,7 @@ class DataManager {
         return data;
     }
     
-    static getGameDrawHistory(phoneId) {
+    static getPhoneGameDrawHistory(phoneId) {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
         return phone ? (phone.gameDrawHistory || []) : [];
@@ -2442,7 +2440,14 @@ function updateAllDates() {
 }
 
 // 页面切换
+// 页面状态存储
+let pageStates = {};
+let currentPage = 'dashboard';
+
 function showPage(pageName) {
+    // 保存当前页面状态
+    saveCurrentPageState();
+    
     // 先刷新页面数据，再显示页面，避免内容加载导致的弹跳
     if (pageName === 'dashboard') renderDashboard();
     if (pageName === 'phones') renderPhones();
@@ -2462,6 +2467,9 @@ function showPage(pageName) {
     // 显示目标页面
     document.getElementById(`page-${pageName}`).classList.add('active');
     
+    // 恢复页面状态
+    restorePageState(pageName);
+    
     // 更新底部导航
     document.querySelectorAll('.tab-item').forEach(item => {
         item.classList.remove('active');
@@ -2469,6 +2477,58 @@ function showPage(pageName) {
             item.classList.add('active');
         }
     });
+    
+    currentPage = pageName;
+}
+
+// 保存当前页面状态
+function saveCurrentPageState() {
+    const pageElement = document.getElementById(`page-${currentPage}`);
+    if (pageElement) {
+        pageStates[currentPage] = {
+            scrollTop: pageElement.scrollTop,
+            expandedSections: getExpandedSections(currentPage),
+            currentGamePhoneId: currentGamePhoneId // 保存游戏页面选中的手机
+        };
+    }
+}
+
+// 获取展开的区域
+function getExpandedSections(pageName) {
+    const expanded = [];
+    if (pageName === 'phones') {
+        // 保存展开的手机ID
+        document.querySelectorAll('.phone-item.expanded').forEach(item => {
+            expanded.push(item.dataset.phoneId);
+        });
+    }
+    return expanded;
+}
+
+// 恢复页面状态
+function restorePageState(pageName) {
+    const state = pageStates[pageName];
+    if (!state) return;
+    
+    const pageElement = document.getElementById(`page-${pageName}`);
+    if (pageElement && state.scrollTop) {
+        pageElement.scrollTop = state.scrollTop;
+    }
+    
+    // 恢复展开的区域
+    if (state.expandedSections) {
+        state.expandedSections.forEach(id => {
+            const element = document.querySelector(`[data-phone-id="${id}"]`);
+            if (element) {
+                element.classList.add('expanded');
+            }
+        });
+    }
+    
+    // 恢复游戏页面选中的手机
+    if (pageName === 'games' && state.currentGamePhoneId !== undefined) {
+        currentGamePhoneId = state.currentGamePhoneId;
+    }
 }
 
 // 显示今日赚取页面
@@ -2916,10 +2976,9 @@ function renderSmartSuggestions() {
     
     card.style.display = 'block';
     content.innerHTML = suggestions.map((suggestion, index) => `
-        <div class="suggestion-item" style="
+        <div class="suggestion-item ${suggestion.type === 'urgent' ? 'warning' : suggestion.type === 'tip' ? 'info' : 'success'}" style="
             padding: 12px 16px;
             margin-bottom: 8px;
-            background: ${suggestion.type === 'urgent' ? '#fef2f2' : suggestion.type === 'tip' ? '#eff6ff' : '#f0fdf4'};
             border-left: 4px solid ${suggestion.type === 'urgent' ? '#ef4444' : suggestion.type === 'tip' ? '#3b82f6' : '#22c55e'};
             border-radius: var(--radius-md);
             display: flex;
@@ -3481,19 +3540,25 @@ function renderIncomeCalendar() {
         const hasWithdrawal = dayData.withdrawal > 0;
         const hasInstallment = dayData.installment;
         
-        // 构建背景色
+        // 构建背景色（使用CSS变量支持暗黑模式）
         let backgroundColor = 'var(--bg-secondary)';
         let borderColor = 'var(--border-color)';
+        let textColor = 'var(--text-primary)';
         if (hasIncome && hasExpense) {
-            backgroundColor = '#fef3c7'; // 黄色 - 收入和支出都有
+            backgroundColor = 'rgba(251, 191, 36, 0.2)'; // 黄色 - 收入和支出都有
+            textColor = 'var(--warning-color)';
         } else if (hasIncome) {
-            backgroundColor = '#dcfce7'; // 绿色 - 有收入
+            backgroundColor = 'rgba(52, 211, 153, 0.2)'; // 绿色 - 有收入
+            textColor = 'var(--success-color)';
         } else if (hasExpense) {
-            backgroundColor = '#fee2e2'; // 红色 - 有支出
+            backgroundColor = 'rgba(248, 113, 113, 0.2)'; // 红色 - 有支出
+            textColor = 'var(--error-color)';
         } else if (hasWithdrawal) {
-            backgroundColor = '#dbeafe'; // 蓝色 - 有提现
+            backgroundColor = 'rgba(96, 165, 250, 0.2)'; // 蓝色 - 有提现
+            textColor = 'var(--info-color)';
         } else if (hasInstallment) {
-            backgroundColor = '#fef3c7'; // 黄色 - 还款日
+            backgroundColor = 'rgba(251, 191, 36, 0.2)'; // 黄色 - 还款日
+            textColor = 'var(--warning-color)';
         }
         
         // 判断是否是今天
@@ -3522,8 +3587,8 @@ function renderIncomeCalendar() {
                 font-size: 11px;
             " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"
                onclick="showDayDetail('${dateStr}')">
-                <span style="font-weight: ${isToday ? '700' : '600'}; color: ${isToday ? 'var(--primary-color)' : 'var(--text-primary)'};">${day}</span>
-                ${displayAmount ? `<span style="font-size: 9px; color: var(--success-color); margin-top: 2px;">${displayAmount}</span>` : ''}
+                <span style="font-weight: ${isToday ? '700' : '600'}; color: ${isToday ? 'var(--primary-color)' : textColor};">${day}</span>
+                ${displayAmount ? `<span style="font-size: 9px; color: ${textColor}; margin-top: 2px;">${displayAmount}</span>` : ''}
             </div>
         `;
     }
@@ -3694,14 +3759,14 @@ function performSearch(query) {
 
 // 处理搜索结果点击
 function handleSearchResult(type, phoneId, appId) {
-    // 先跳转到手机管理页面
-    showPage('phones');
-    
     if (type === 'phone') {
-        // 展开手机详情
+        // 先设置展开状态
         expandedPhones[phoneId] = true;
-        saveExpandedState();
-        renderPhones();
+        localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
+        
+        // 跳转到手机管理页面
+        showPage('phones');
+        
         // 滚动到该手机
         setTimeout(() => {
             const phoneElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
@@ -3714,28 +3779,51 @@ function handleSearchResult(type, phoneId, appId) {
                     phoneElement.style.border = '';
                 }, 3000);
             }
-        }, 300);
+        }, 500);
     } else if (type === 'app') {
-        // 展开手机并高亮软件
+        // 先设置展开状态
         expandedPhones[phoneId] = true;
-        saveExpandedState();
-        renderPhones();
-        // 滚动并高亮
+        localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
+        
+        // 跳转到手机管理页面
+        showPage('phones');
+        
+        // 滚动并高亮（增加延迟确保手机展开和软件渲染完成）
         setTimeout(() => {
             const phoneElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
             const appElement = document.querySelector(`[data-app-id="${appId}"]`);
+            
+            console.log('搜索软件 - phoneId:', phoneId, 'appId:', appId);
+            console.log('搜索软件 - phoneElement:', phoneElement);
+            console.log('搜索软件 - appElement:', appElement);
+            
             if (appElement) {
+                // 滚动到软件元素
                 appElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                appElement.style.background = 'var(--accent-light)';
+                
+                // 添加明显的高亮效果
+                appElement.style.background = 'linear-gradient(135deg, var(--accent-light), var(--accent-color))';
                 appElement.style.borderRadius = 'var(--radius-md)';
+                appElement.style.boxShadow = '0 0 20px rgba(34, 211, 238, 0.5)';
+                appElement.style.transform = 'scale(1.02)';
+                appElement.style.transition = 'all 0.3s ease';
+                appElement.style.zIndex = '10';
+                
+                // 3秒后移除高亮
                 setTimeout(() => {
                     appElement.style.background = '';
+                    appElement.style.boxShadow = '';
+                    appElement.style.transform = '';
+                    appElement.style.zIndex = '';
                 }, 3000);
             } else if (phoneElement) {
                 // 如果找不到软件，至少滚动到手机
+                console.log('未找到软件元素，滚动到手机');
                 phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                console.log('未找到手机和软件元素');
             }
-        }, 300);
+        }, 800); // 增加延迟确保渲染完成
     }
     
     // 清除搜索
@@ -4365,7 +4453,7 @@ function renderAppList(phone) {
         const progressPercentage = shouldHaveEarned > 0 ? Math.min(100, Math.round((earned / shouldHaveEarned) * 100)) : 0;
 
         return `
-            <div class="app-card">
+            <div class="app-card" data-app-id="${app.id}">
                 <div class="app-header">
                     <span class="app-name">${app.name}</span>
                     <span class="status-tag ${app.balance >= minWithdraw ? 'ready' : 'pending'}">
@@ -4817,7 +4905,7 @@ function renderStats() {
         const appWithdrawRate = earned > 0 ? (withdrawn / earned) * 100 : 0;
         
         return `
-            <div class="app-item">
+            <div class="app-item" data-app-id="${app.id}">
                 <div class="app-header">
                     <span class="app-name">${app.phoneName} - ${app.name}</span>
                     <div class="app-status">
@@ -6647,7 +6735,7 @@ function toggleGameCompleted(historyId, gameIndex) {
 
 // 渲染历史记录
 function renderGameHistory() {
-    const history = DataManager.getGameDrawHistory(currentGameDrawPhoneId);
+    const history = DataManager.getPhoneGameDrawHistory(currentGameDrawPhoneId);
     const container = document.getElementById('game-history-list');
     
     if (history.length === 0) {
@@ -6771,8 +6859,14 @@ function renderGamesPage() {
         gamesDateEl.textContent = dateStr;
     }
     
-    // 渲染手机选择器
+    // 渲染手机选择器（保持当前选中的手机）
     renderGamePhoneSelect();
+    
+    // 确保 currentGamePhoneId 与选择器同步
+    const select = document.getElementById('game-phone-select');
+    if (select && select.value !== (currentGamePhoneId || '')) {
+        select.value = currentGamePhoneId || '';
+    }
     
     // 重置抽签区域
     resetDrawArea();
@@ -6793,7 +6887,6 @@ function renderGamePhoneSelect() {
     if (!select) return;
     
     const data = DataManager.loadData();
-    const currentValue = select.value;
     
     let html = '<option value="">全部手机</option>';
     data.phones.forEach(phone => {
@@ -6801,7 +6894,9 @@ function renderGamePhoneSelect() {
     });
     
     select.innerHTML = html;
-    select.value = currentValue;
+    
+    // 使用 currentGamePhoneId 作为选中值
+    select.value = currentGamePhoneId || '';
 }
 
 // 手机选择变化
@@ -6823,14 +6918,23 @@ function resetDrawArea() {
     const container = document.getElementById('today-game-result');
     if (!container) return;
     
-    // 检查今天是否已经抽签
-    const today = new Date().toISOString().split('T')[0];
+    // 检查今天是否已经抽签（使用模拟日期）
+    const today = getCurrentDate();
     const drawHistory = DataManager.getGameDrawHistory();
     const currentPhoneId = currentGamePhoneId || null;
+    
+    console.log('resetDrawArea - today:', today);
+    console.log('resetDrawArea - currentPhoneId:', currentPhoneId);
+    console.log('resetDrawArea - drawHistory:', drawHistory);
+    
     const todayDraw = drawHistory.find(h => {
         const historyPhoneId = h.phoneId || null;
-        return h.date === today && historyPhoneId === currentPhoneId;
+        const match = h.date === today && historyPhoneId === currentPhoneId;
+        console.log(`检查记录: date=${h.date}, phoneId=${h.phoneId}, match=${match}`);
+        return match;
     });
+    
+    console.log('resetDrawArea - todayDraw:', todayDraw);
     
     if (todayDraw) {
         // 今天已经抽签过了，显示抽签结果
@@ -6967,16 +7071,19 @@ function renderGameDrawHistoryList() {
         phoneMap[phone.id] = phone.name;
     });
     
+    const today = getCurrentDate();
+    
     container.innerHTML = history.map((record, index) => {
         const phoneName = record.phoneId ? (phoneMap[record.phoneId] || '未知手机') : '未指定手机';
-        const isCompleted = record.daysPlayed >= (record.targetDays || 7);
-        const isMarked = record.marked === true;
+        const isGameCompleted = record.daysPlayed >= (record.targetDays || 7);
+        const isTodayCompleted = record.completedToday === record.date;
+        const isToday = record.date === today;
         
         return `
-        <div class="draw-history-item ${isMarked ? 'marked' : ''}" style="padding: 12px; border-bottom: 1px solid var(--border-color); ${isMarked ? 'background: var(--success-light);' : ''}">
+        <div class="draw-history-item ${isTodayCompleted ? 'completed-today' : ''}" style="padding: 12px; border-bottom: 1px solid var(--border-color); ${isTodayCompleted ? 'background: rgba(52, 211, 153, 0.1);' : ''}">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <div style="font-weight: 500;">${record.date}</div>
+                    <div style="font-weight: 500;">${record.date} ${isToday ? '<span style="font-size: 11px; background: var(--primary-color); color: white; padding: 2px 6px; border-radius: 10px;">今天</span>' : ''}</div>
                     <div style="font-size: 14px; color: var(--text-secondary); margin-top: 4px;">
                         🎮 ${record.gameName}
                     </div>
@@ -6985,17 +7092,17 @@ function renderGameDrawHistoryList() {
                     </div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="font-size: 14px; color: ${isCompleted ? 'var(--success-color)' : 'var(--primary-color)'}; font-weight: 600;">
-                        ${isCompleted ? '✅ 已完成' : `${record.daysPlayed}/${record.targetDays || 7}天`}
+                    <div style="font-size: 14px; color: ${isGameCompleted ? 'var(--success-color)' : 'var(--primary-color)'}; font-weight: 600;">
+                        ${isGameCompleted ? '✅ 游戏已完成' : `${record.daysPlayed}/${record.targetDays || 7}天`}
                     </div>
                     <div style="font-size: 12px; color: var(--text-secondary);">
-                        ${isCompleted ? '' : `剩余${record.remainingDays}天`}
+                        ${isGameCompleted ? '' : `剩余${record.remainingDays}天`}
                     </div>
-                    ${isCompleted ? `
-                    <button class="btn btn-sm ${isMarked ? 'btn-secondary' : 'btn-success'}" 
-                            onclick="toggleMarkDrawHistory(${index})" 
+                    ${isToday ? `
+                    <button class="btn btn-sm ${isTodayCompleted ? 'btn-secondary' : 'btn-success'}" 
+                            onclick="completeDrawHistoryItem(${index})" 
                             style="margin-top: 8px; padding: 4px 12px; font-size: 12px;">
-                        ${isMarked ? '取消标记' : '标记完成'}
+                        ${isTodayCompleted ? '✅ 今日已完成' : '标记今日完成'}
                     </button>
                     ` : ''}
                 </div>
@@ -7004,16 +7111,62 @@ function renderGameDrawHistoryList() {
     `}).join('');
 }
 
-// 切换抽签历史标记状态
-function toggleMarkDrawHistory(index) {
+// 标记抽签历史今日完成
+function completeDrawHistoryItem(index) {
     const historyStr = localStorage.getItem('moneyApp_gameDrawHistory');
     const history = historyStr ? JSON.parse(historyStr) : [];
     
     if (index >= 0 && index < history.length) {
-        history[index].marked = !history[index].marked;
+        const record = history[index];
+        const today = getCurrentDate();
+        
+        // 只能标记今天的记录
+        if (record.date !== today) {
+            showToast('只能标记今天的记录', 'warning');
+            return;
+        }
+        
+        // 检查今天是否已经完成过
+        if (record.completedToday === today) {
+            showToast('今天已经标记完成了');
+            return;
+        }
+        
+        // 标记为已完成
+        record.completedToday = today;
+        
+        // 更新游戏的天数
+        const games = DataManager.getDownloadedGames();
+        const game = games.find(g => g.id === record.gameId);
+        if (game && !game.completed) {
+            game.daysPlayed++;
+            game.lastPlayedDate = today;
+            
+            // 检查是否完成全部天数
+            const targetDays = game.targetDays || 7;
+            if (game.daysPlayed >= targetDays) {
+                game.completed = true;
+                game.canDelete = true;
+            }
+            
+            DataManager.saveDownloadedGames(games);
+            
+            // 更新抽签记录中的天数
+            record.daysPlayed = game.daysPlayed;
+            record.remainingDays = targetDays - game.daysPlayed;
+        }
+        
+        showToast('🎉 恭喜完成今日游戏任务！');
+        
         localStorage.setItem('moneyApp_gameDrawHistory', JSON.stringify(history));
         renderGameDrawHistoryList();
-        showToast(history[index].marked ? '已标记完成' : '已取消标记');
+        
+        // 同时更新今日抽签区域的显示
+        resetDrawArea();
+        
+        // 刷新游戏列表和统计
+        renderGamesList();
+        renderGameStats();
     }
 }
 
@@ -7048,8 +7201,8 @@ function deleteDownloadedGame(gameId) {
 function drawTodayGame() {
     const container = document.getElementById('today-game-result');
     
-    // 检查今天是否已经抽签（针对当前手机）
-    const today = new Date().toISOString().split('T')[0];
+    // 检查今天是否已经抽签（针对当前手机，使用模拟日期）
+    const today = getCurrentDate();
     const drawHistory = DataManager.getGameDrawHistory();
     
     // 调试信息
@@ -7157,6 +7310,10 @@ function showTodayDrawResult(todayDraw) {
         playTimeText = '20分钟';
     }
     
+    // 检查今天是否已完成
+    const today = getCurrentDate();
+    const isCompletedToday = todayDraw.completedToday === today;
+    
     container.innerHTML = `
         <div style="animation: fadeIn 0.5s ease;">
             <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 今日抽签结果</div>
@@ -7181,8 +7338,20 @@ function showTodayDrawResult(todayDraw) {
             <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">
                 ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
             </div>
+            
+            <!-- 完成按钮 -->
+            ${!isCompletedToday ? `
+            <button class="btn" onclick="completeTodayGame()" style="background: rgba(255,255,255,0.9); color: #667eea; font-weight: bold; font-size: 16px; margin-top: 16px; padding: 12px 32px; border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                ✅ 标记今日已完成
+            </button>
+            ` : `
+            <div style="font-size: 16px; color: #fff; font-weight: bold; margin-top: 16px; padding: 12px 24px; background: rgba(255,255,255,0.3); border-radius: 25px; display: inline-block;">
+                ✅ 今日已完成
+            </div>
+            `}
+            
             <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
-                ✅ 今天已经抽签过了，明天再来吧
+                ${isCompletedToday ? '明天再来抽签吧' : '玩够了就点击完成按钮'}
             </div>
         </div>
     `;
@@ -7191,6 +7360,68 @@ function showTodayDrawResult(todayDraw) {
     renderGamesList();
     renderGameStats();
     renderGameDrawHistoryList();
+}
+
+// 标记今日游戏已完成
+function completeTodayGame() {
+    const today = getCurrentDate();
+    const drawHistory = DataManager.getGameDrawHistory();
+    const currentPhoneId = currentGamePhoneId || null;
+    
+    // 找到今天的抽签记录
+    const todayDrawIndex = drawHistory.findIndex(h => {
+        const historyPhoneId = h.phoneId || null;
+        return h.date === today && historyPhoneId === currentPhoneId;
+    });
+    
+    if (todayDrawIndex >= 0) {
+        const record = drawHistory[todayDrawIndex];
+        
+        // 检查今天是否已经完成过
+        if (record.completedToday === today) {
+            showToast('今天已经标记完成了');
+            return;
+        }
+        
+        // 标记为已完成
+        record.completedToday = today;
+        
+        // 更新游戏的天数
+        const games = DataManager.getDownloadedGames();
+        const game = games.find(g => g.id === record.gameId);
+        if (game && !game.completed) {
+            game.daysPlayed++;
+            game.lastPlayedDate = today;
+            
+            // 检查是否完成全部天数
+            const targetDays = game.targetDays || 7;
+            if (game.daysPlayed >= targetDays) {
+                game.completed = true;
+                game.canDelete = true;
+            }
+            
+            DataManager.saveDownloadedGames(games);
+            
+            // 更新抽签记录中的天数
+            record.daysPlayed = game.daysPlayed;
+            record.remainingDays = targetDays - game.daysPlayed;
+        }
+        
+        DataManager.saveGameDrawHistory(drawHistory);
+        
+        // 显示完成动画
+        showToast('🎉 恭喜完成今日游戏任务！');
+        
+        // 重新渲染抽签结果
+        showTodayDrawResult(record);
+        
+        // 刷新游戏列表和统计
+        renderGamesList();
+        renderGameStats();
+        
+        // 刷新抽签历史
+        renderGameDrawHistoryList();
+    }
 }
 
 // 页面加载完成后初始化

@@ -516,6 +516,471 @@
     --theme-name: '暗黑模式';
 }
 
+/* 暗黑模式下的按钮样式 */
+[data-theme="dark"] .btn-secondary {
+    background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+    color: var(--text-primary);
+    border: 2px solid var(--border-color);
+}
+
+[data-theme="dark"] .btn-secondary:hover {
+    background: linear-gradient(135deg, #475569 0%, #334155 100%);
+}
+
+/* 暗黑模式下的底部导航栏 */
+[data-theme="dark"] .tab-bar {
+    background: rgba(30, 41, 59, 0.9);
+    border: 2px solid rgba(51, 65, 85, 0.8);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .tab-item {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .tab-item.active {
+    color: var(--primary-light);
+    background: rgba(99, 102, 241, 0.2);
+}
+
+/* 暗黑模式下的表单输入 */
+[data-theme="dark"] .form-input:disabled {
+    background: #334155;
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .form-input {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .form-input:focus {
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+}
+
+/* 暗黑模式下的选择框 */
+[data-theme="dark"] select.form-input {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] select.form-input option {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* 暗黑模式下的卡片 */
+[data-theme="dark"] .card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的手机项 */
+[data-theme="dark"] .phone-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .phone-header {
+    background: var(--gradient-phone-header);
+}
+
+/* 暗黑模式下的软件卡片 */
+[data-theme="dark"] .app-card {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .app-item {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的空状态 */
+[data-theme="dark"] .empty-state {
+    background: var(--bg-cream);
+    color: var(--text-secondary);
+}
+
+/* 暗黑模式下的统计卡片 */
+[data-theme="dark"] .stat-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的进度条背景 */
+[data-theme="dark"] .progress-bar {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的表格 */
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .data-table td {
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .data-table th {
+    background: var(--bg-cream);
+}
+
+[data-theme="dark"] .data-table tr:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的模态框 */
+[data-theme="dark"] .modal-content {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal-header {
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的下拉菜单 */
+[data-theme="dark"] .dropdown-menu {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .dropdown-item:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的标签页 */
+[data-theme="dark"] .tab-content {
+    background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .tab-button {
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .tab-button.active {
+    color: var(--primary-light);
+    background: rgba(99, 102, 241, 0.2);
+}
+
+/* 暗黑模式下的分割线 */
+[data-theme="dark"] .divider {
+    background: var(--border-color);
+}
+
+/* 暗黑模式下的提示框 */
+[data-theme="dark"] .toast {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* 暗黑模式下的搜索框 */
+[data-theme="dark"] .search-box {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .search-box:focus {
+    background: var(--bg-primary);
+}
+
+/* 暗黑模式下的列表项 */
+[data-theme="dark"] .list-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .list-item:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的日历 */
+[data-theme="dark"] .calendar-day:hover {
+    background: var(--bg-cream);
+}
+
+[data-theme="dark"] .calendar-day.selected {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* 暗黑模式下的文件上传 */
+[data-theme="dark"] .file-upload {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .file-upload:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的智能建议 */
+[data-theme="dark"] .suggestion-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .suggestion-item.warning {
+    background: rgba(251, 191, 36, 0.1);
+    border-left-color: var(--warning-color);
+}
+
+[data-theme="dark"] .suggestion-item.success {
+    background: rgba(52, 211, 153, 0.1);
+    border-left-color: var(--success-color);
+}
+
+[data-theme="dark"] .suggestion-item.info {
+    background: rgba(96, 165, 250, 0.1);
+    border-left-color: var(--info-color);
+}
+
+/* 暗黑模式下的目标卡片 */
+[data-theme="dark"] .goal-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .goal-progress-bar {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的日历 */
+[data-theme="dark"] .calendar-day {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .calendar-day.has-income {
+    background: rgba(52, 211, 153, 0.2);
+    color: var(--success-color);
+}
+
+[data-theme="dark"] .calendar-day.has-expense {
+    background: rgba(248, 113, 113, 0.2);
+    color: var(--error-color);
+}
+
+[data-theme="dark"] .calendar-day.has-withdrawal {
+    background: rgba(96, 165, 250, 0.2);
+    color: var(--info-color);
+}
+
+[data-theme="dark"] .calendar-day.is-today {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* 暗黑模式下的折叠提示 */
+[data-theme="dark"] .collapsed-hint {
+    background: var(--bg-cream);
+    color: var(--text-secondary);
+}
+
+/* 暗黑模式下的主题选择器 - 使用html选择器确保最高优先级 */
+html[data-theme="dark"] .theme-item,
+[data-theme="dark"] .theme-item {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .theme-item:hover,
+[data-theme="dark"] .theme-item:hover {
+    background: #334155 !important;
+}
+
+html[data-theme="dark"] .theme-item.active,
+[data-theme="dark"] .theme-item.active {
+    background: #334155 !important;
+    border-color: #6366f1 !important;
+}
+
+/* 暗黑模式下的预测卡片 */
+[data-theme="dark"] .prediction-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的排行项 */
+[data-theme="dark"] .ranking-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .ranking-item:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的历史记录项 */
+[data-theme="dark"] .history-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .history-item:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的游戏卡片 */
+[data-theme="dark"] .game-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的抽签结果 */
+[data-theme="dark"] .draw-result-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的设置项 */
+[data-theme="dark"] .setting-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+/* 暗黑模式下的通知项 */
+[data-theme="dark"] .notification-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .notification-item:hover {
+    background: var(--bg-cream);
+}
+
+/* 暗黑模式下的标签 */
+[data-theme="dark"] .tag {
+    background: var(--bg-cream);
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .tag.primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+[data-theme="dark"] .tag.success {
+    background: var(--success-color);
+    color: white;
+}
+
+[data-theme="dark"] .tag.warning {
+    background: var(--warning-color);
+    color: #1e293b;
+}
+
+[data-theme="dark"] .tag.error {
+    background: var(--error-color);
+    color: white;
+}
+
+/* 暗黑模式下的成就卡片 */
+[data-theme="dark"] .card[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"] {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border: 2px solid var(--border-color);
+}
+
+[data-theme="dark"] .card[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"] .section-title {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .card[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"] .section-divider {
+    background: var(--border-color) !important;
+}
+
+[data-theme="dark"] .card[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"] .btn {
+    background: var(--primary-color) !important;
+    color: white !important;
+}
+
+[data-theme="dark"] .card[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"] .progress-bar {
+    background: var(--bg-cream) !important;
+}
+
+[data-theme="dark"] .card[style*="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"] .progress-fill {
+    background: var(--primary-color) !important;
+}
+
+/* 设置页面卡片样式 */
+.settings-card {
+    padding: 20px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-card);
+    transition: all var(--transition-normal);
+}
+
+.settings-card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+}
+
+.settings-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.settings-icon {
+    font-size: 20px;
+}
+
+.settings-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-subsection {
+    padding: 16px;
+    background: var(--bg-cream);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.settings-subsection:not(:last-child) {
+    margin-bottom: 12px;
+}
+
+.settings-subtitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.settings-card-danger {
+    border-color: var(--error-color);
+    background: rgba(248, 113, 113, 0.05);
+}
+
+.settings-card-danger .settings-card-header {
+    border-bottom-color: var(--error-color);
+}
+
+/* 暗黑模式下的设置卡片 */
+[data-theme="dark"] .settings-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .settings-subsection {
+    background: var(--bg-cream);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .settings-card-danger {
+    background: rgba(248, 113, 113, 0.1);
+}
+
 /* 全局样式 */
 * {
     margin: 0;
