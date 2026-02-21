@@ -438,31 +438,44 @@ function renderInstallments() {
                     </div>
                 </div>
                 <div class="installment-app-goals">
-                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 ${(() => {
-                        const completedCount = installment.appGoals.filter(goal => {
-                            const todayEarned = getAppTodayEarned(goal.appId);
-                            return todayEarned >= goal.dailyTarget;
-                        }).length;
-                        return `<span style="font-size: 12px; color: var(--success-color);">(${completedCount}/${installment.appGoals.length}个已完成)</span>`;
-                    })()}</div>
-                    ${installment.appGoals.map(goal => {
-                        const todayEarned = getAppTodayEarned(goal.appId);
-                        const isCompleted = todayEarned >= goal.dailyTarget;
+                    ${(() => {
+                        // 计算待支出金额可以覆盖的软件
+                        const pendingExpense = installment.pendingExpense || 0;
+                        // 按目标金额从小到大排序
+                        const sortedGoals = [...installment.appGoals].sort((a, b) => a.totalTarget - b.totalTarget);
+                        let remainingAmount = pendingExpense;
+                        let coveredCount = 0;
+                        const coveredAppIds = [];
+                        
+                        for (const goal of sortedGoals) {
+                            if (remainingAmount >= goal.totalTarget) {
+                                remainingAmount -= goal.totalTarget;
+                                coveredCount++;
+                                coveredAppIds.push(goal.appId);
+                            } else {
+                                break;
+                            }
+                        }
+                        
                         return `
-                        <div class="installment-app-goal-item ${isCompleted ? 'app-goal-completed' : ''}" style="${isCompleted ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 <span style="font-size: 12px; color: var(--success-color);">(${coveredCount}/${installment.appGoals.length}个可覆盖)</span></div>
+                    ${installment.appGoals.map(goal => {
+                        const isCovered = coveredAppIds.includes(goal.appId);
+                        return `
+                        <div class="installment-app-goal-item ${isCovered ? 'app-goal-completed' : ''}" style="${isCovered ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
                             <div class="installment-app-goal-header">
-                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCompleted ? '✅' : ''}</span>
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCovered ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-details">
                                 <span>每日目标: ¥${goal.dailyTarget.toFixed(2)}</span>
-                                <span style="color: ${isCompleted ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: ${isCompleted ? '600' : 'normal'};">今日: ¥${todayEarned.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
-                    `}).join('')}
+                    `}).join('')}`;
+                    })()}
                 </div>
                 <div class="installment-action-buttons">
                     <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
@@ -5543,31 +5556,44 @@ function renderInstallments() {
                     </div>
                 </div>
                 <div class="installment-app-goals">
-                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 ${(() => {
-                        const completedCount = installment.appGoals.filter(goal => {
-                            const todayEarned = getAppTodayEarned(goal.appId);
-                            return todayEarned >= goal.dailyTarget;
-                        }).length;
-                        return `<span style="font-size: 12px; color: var(--success-color);">(${completedCount}/${installment.appGoals.length}个已完成)</span>`;
-                    })()}</div>
-                    ${installment.appGoals.map(goal => {
-                        const todayEarned = getAppTodayEarned(goal.appId);
-                        const isCompleted = todayEarned >= goal.dailyTarget;
+                    ${(() => {
+                        // 计算待支出金额可以覆盖的软件
+                        const pendingExpense = installment.pendingExpense || 0;
+                        // 按目标金额从小到大排序
+                        const sortedGoals = [...installment.appGoals].sort((a, b) => a.totalTarget - b.totalTarget);
+                        let remainingAmount = pendingExpense;
+                        let coveredCount = 0;
+                        const coveredAppIds = [];
+                        
+                        for (const goal of sortedGoals) {
+                            if (remainingAmount >= goal.totalTarget) {
+                                remainingAmount -= goal.totalTarget;
+                                coveredCount++;
+                                coveredAppIds.push(goal.appId);
+                            } else {
+                                break;
+                            }
+                        }
+                        
                         return `
-                        <div class="installment-app-goal-item ${isCompleted ? 'app-goal-completed' : ''}" style="${isCompleted ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 <span style="font-size: 12px; color: var(--success-color);">(${coveredCount}/${installment.appGoals.length}个可覆盖)</span></div>
+                    ${installment.appGoals.map(goal => {
+                        const isCovered = coveredAppIds.includes(goal.appId);
+                        return `
+                        <div class="installment-app-goal-item ${isCovered ? 'app-goal-completed' : ''}" style="${isCovered ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
                             <div class="installment-app-goal-header">
-                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCompleted ? '✅' : ''}</span>
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCovered ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-details">
                                 <span>每日目标: ¥${goal.dailyTarget.toFixed(2)}</span>
-                                <span style="color: ${isCompleted ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: ${isCompleted ? '600' : 'normal'};">今日: ¥${todayEarned.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
-                    `}).join('')}
+                    `}).join('')}`;
+                    })()}
                 </div>
                 <div class="installment-action-buttons">
                     <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
