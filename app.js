@@ -2641,6 +2641,79 @@ let pageRenderCache = {
     stats: { html: '', dataHash: '' }
 };
 
+// Web Worker 实例
+let statsWorker = null;
+
+// 初始化 Web Worker
+function initWorker() {
+    if (window.Worker) {
+        try {
+            statsWorker = new Worker('worker.js');
+            statsWorker.onmessage = function(e) {
+                const { type, result } = e.data;
+                if (type === 'statsResult') {
+                    // 更新统计数据
+                    updateStatsUI(result);
+                }
+            };
+        } catch (e) {
+            console.log('Web Worker 不支持，使用主线程计算');
+        }
+    }
+}
+
+// 使用 Worker 计算统计数据
+function calculateStatsAsync(data) {
+    return new Promise((resolve) => {
+        if (statsWorker) {
+            statsWorker.postMessage({ type: 'calculateStats', data });
+            statsWorker.onmessage = (e) => {
+                if (e.data.type === 'statsResult') {
+                    resolve(e.data.result);
+                }
+            };
+        } else {
+            // 降级：同步计算
+            resolve(calculateStatsSync(data));
+        }
+    });
+}
+
+// 同步计算统计数据（降级方案）
+function calculateStatsSync(data) {
+    const totalPhones = data.phones.length;
+    const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+    
+    let totalBalance = 0;
+    let totalEarned = 0;
+    let totalWithdrawn = 0;
+    let readyApps = 0;
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            totalBalance += app.balance || 0;
+            totalEarned += app.earned || 0;
+            totalWithdrawn += (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            if ((app.balance || 0) >= (app.minWithdraw || 0)) {
+                readyApps++;
+            }
+        });
+    });
+    
+    return { totalPhones, totalApps, totalBalance, totalEarned, totalWithdrawn, readyApps };
+}
+
+// 更新统计数据 UI
+function updateStatsUI(stats) {
+    const totalExpenses = DataManager.loadData().expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
+    const pendingExpenseBalance = stats.totalWithdrawn - totalExpenses;
+    
+    document.getElementById('total-phones').textContent = stats.totalPhones;
+    document.getElementById('total-apps').textContent = stats.totalApps;
+    document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
+    document.getElementById('ready-apps').textContent = stats.readyApps;
+}
+
 // 生成数据哈希（用于判断数据是否变化）
 function generateDataHash(data) {
     return JSON.stringify(data.phones.map(p => ({
@@ -3121,60 +3194,28 @@ function renderAppEarnContent(phone, data) {
 }
 
 // 渲染仪表盘
-function renderDashboard() {
+async function renderDashboard() {
     DataManager.calculateYearlyGoal();
     const data = DataManager.loadData();
     
-    // 统计数据 - 使用缓存的计算结果
-    const totalPhones = data.phones.length;
-    const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+    // 立即显示基本数据（不等待计算）
+    document.getElementById('total-phones').textContent = data.phones.length;
+    document.getElementById('total-apps').textContent = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
     
-    // 使用预计算的缓存值
-    let totalBalance = 0;
-    let totalEarned = 0;
-    let totalWithdrawnAmount = 0;
-    let readyApps = 0;
-    
-    data.phones.forEach(phone => {
-        // 使用手机的渲染缓存
-        const today = getCurrentDate();
-        const cacheKey = `${phone.id}_${today}`;
-        if (!phone._renderCache || phone._renderCache.key !== cacheKey) {
-            // 简化的计算，只计算必要的值
-            const phoneTotalEarned = phone.apps.reduce((sum, app) => sum + (app.earned || 0), 0);
-            const phoneTotalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
-            const phoneWithdrawn = phone.apps.reduce((sum, app) => sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0), 0);
-            const phoneReadyApps = phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
-            
-            phone._renderCache = {
-                key: cacheKey,
-                totalEarned: phoneTotalEarned,
-                totalBalance: phoneTotalBalance,
-                totalWithdrawn: phoneWithdrawn,
-                readyApps: phoneReadyApps
-            };
-        }
+    // 使用 Web Worker 异步计算统计数据（不阻塞主线程）
+    calculateStatsAsync(data).then(stats => {
+        const totalExpenses = data.expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
+        const pendingExpenseBalance = stats.totalWithdrawn - totalExpenses;
         
-        totalEarned += phone._renderCache.totalEarned;
-        totalBalance += phone._renderCache.totalBalance;
-        totalWithdrawnAmount += phone._renderCache.totalWithdrawn;
-        readyApps += phone._renderCache.readyApps;
+        document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
+        document.getElementById('ready-apps').textContent = stats.readyApps;
+        
+        // 全年目标进度
+        const yearlyGoal = data.settings.yearlyGoal || 10000;
+        const yearlyProgress = yearlyGoal > 0 ? Math.min((stats.totalEarned / yearlyGoal) * 100, 100) : 0;
+        document.getElementById('yearly-progress').textContent = `${yearlyProgress.toFixed(0)}%`;
+        document.getElementById('yearly-progress-bar').style.width = `${yearlyProgress}%`;
     });
-    
-    const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
-    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses;
-    
-    // 全年目标进度
-    const yearlyGoal = data.settings.yearlyGoal || 10000;
-    const yearlyProgress = yearlyGoal > 0 ? Math.min((totalEarned / yearlyGoal) * 100, 100) : 0;
-    
-    // 更新DOM - 关键数据立即显示
-    document.getElementById('total-phones').textContent = totalPhones;
-    document.getElementById('total-apps').textContent = totalApps;
-    document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
-    document.getElementById('ready-apps').textContent = readyApps;
-    document.getElementById('yearly-progress').textContent = `${yearlyProgress.toFixed(0)}%`;
-    document.getElementById('yearly-progress-bar').style.width = `${yearlyProgress}%`;
     
     // 渲染今日需要关注的软件（关键内容）
     renderTodayApps(data);
@@ -3195,17 +3236,17 @@ function renderDashboard() {
     }
     
     // 延迟渲染非关键内容（图表、日历等）
-    requestAnimationFrame(() => {
+    requestIdleCallback(() => {
         renderIncomeChart('week');
         renderIncomeCalendar();
-    });
+    }, { timeout: 200 });
     
     // 进一步延迟渲染次要内容
     setTimeout(() => {
         renderSmartSuggestions();
         renderIncomePrediction();
         renderAppRanking();
-    }, 100);
+    }, 300);
 }
 
 // 全局图表实例
@@ -7764,6 +7805,9 @@ function completeTodayGame() {
 document.addEventListener('DOMContentLoaded', function() {
     // 性能监控开始
     const initStartTime = performance.now();
+    
+    // 初始化 Web Worker
+    initWorker();
     
     init();
     initCalendars();
