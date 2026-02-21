@@ -2479,6 +2479,23 @@ function updateAllDates() {
 let pageStates = {};
 let currentPage = 'dashboard';
 
+// 页面渲染缓存（用于优化切换性能）
+let pageRenderCache = {
+    phones: { html: '', dataHash: '' },
+    stats: { html: '', dataHash: '' }
+};
+
+// 生成数据哈希（用于判断数据是否变化）
+function generateDataHash(data) {
+    return JSON.stringify(data.phones.map(p => ({
+        id: p.id,
+        name: p.name,
+        appsCount: p.apps.length,
+        balance: p.apps.reduce((s, a) => s + (a.balance || 0), 0),
+        earned: p.apps.reduce((s, a) => s + (a.earned || 0), 0)
+    })));
+}
+
 function showPage(pageName) {
     // 保存当前页面状态
     saveCurrentPageState();
@@ -2498,17 +2515,41 @@ function showPage(pageName) {
     const isMobile = window.innerWidth <= 768;
     const delay = isMobile ? 100 : 50;
     
-    setTimeout(() => {
-        if (pageName === 'dashboard') renderDashboard();
-        if (pageName === 'phones') renderPhones();
-        if (pageName === 'stats') renderStats();
-        if (pageName === 'settings') renderSettings();
-        if (pageName === 'withdraw-records') renderWithdrawRecords();
-        if (pageName === 'expense-records') renderExpenseRecords();
-        if (pageName === 'installments') renderInstallments();
-        if (pageName === 'today-earn') renderTodayEarnPage();
-        if (pageName === 'games') renderGamesPage();
-    }, delay);
+    // 检查是否可以使用缓存（手机端优化）
+    const isMobile = window.innerWidth <= 768;
+    const data = DataManager.loadData();
+    const currentHash = generateDataHash(data);
+    
+    if (isMobile && pageName === 'phones' && pageRenderCache.phones.html && pageRenderCache.phones.dataHash === currentHash) {
+        // 使用缓存的手机页面
+        document.getElementById('phone-grid').innerHTML = pageRenderCache.phones.html;
+    } else if (isMobile && pageName === 'stats' && pageRenderCache.stats.html && pageRenderCache.stats.dataHash === currentHash) {
+        // 使用缓存的统计页面
+        document.getElementById('app-withdraw-list').innerHTML = pageRenderCache.stats.html;
+    } else {
+        // 延迟渲染
+        setTimeout(() => {
+            if (pageName === 'dashboard') renderDashboard();
+            if (pageName === 'phones') {
+                renderPhones();
+                // 缓存渲染结果
+                pageRenderCache.phones.html = document.getElementById('phone-grid').innerHTML;
+                pageRenderCache.phones.dataHash = currentHash;
+            }
+            if (pageName === 'stats') {
+                renderStats();
+                // 缓存渲染结果
+                pageRenderCache.stats.html = document.getElementById('app-withdraw-list').innerHTML;
+                pageRenderCache.stats.dataHash = currentHash;
+            }
+            if (pageName === 'settings') renderSettings();
+            if (pageName === 'withdraw-records') renderWithdrawRecords();
+            if (pageName === 'expense-records') renderExpenseRecords();
+            if (pageName === 'installments') renderInstallments();
+            if (pageName === 'today-earn') renderTodayEarnPage();
+            if (pageName === 'games') renderGamesPage();
+        }, delay);
+    }
     
     // 恢复页面状态（仪表盘页面特殊处理）
     if (pageName === 'dashboard') {
