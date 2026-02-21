@@ -71,10 +71,14 @@
     --spacing-lg: 24px;
     --spacing-xl: 32px;
     
-    /* 动画 */
+    /* 动画 - 使用 will-change 优化 */
     --transition-fast: 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     --transition-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     --transition-slow: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    
+    /* 性能优化 */
+    --gpu-accelerate: translateZ(0);
+    --content-visibility: auto;
     
     /* 字体 - 梦幻紫主题：圆润可爱风格 */
     --font-primary: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
@@ -1017,6 +1021,32 @@ html[data-theme="dark"] .theme-item.active {
     box-sizing: border-box;
 }
 
+/* 性能优化：减少重绘重排 */
+* {
+    will-change: auto;
+}
+
+/* GPU 加速的动画元素 */
+.page,
+.card,
+.phone-item,
+.app-item,
+.btn,
+.tab-item {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* 内容可见性优化 */
+.phone-item,
+.app-item,
+.stat-card,
+.suggestion-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 500px;
+}
+
 body {
     font-family: var(--font-primary);
     background: var(--gradient-body);
@@ -1028,6 +1058,9 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* 滚动优化 */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* 导航栏 */

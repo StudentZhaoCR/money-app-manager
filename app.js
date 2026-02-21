@@ -21,23 +21,121 @@ const BACKUP_HISTORY_KEY = 'moneyApp_backupHistory';
 
 // ==================== 通用计算函数 ====================
 
-// 计算软件的已赚金额（累计）
+// 全局计算缓存
+const calculationCache = new Map();
+const CACHE_MAX_SIZE = 1000;
+
+// 获取缓存键
+function getCacheKey(type, id, dataHash) {
+    return `${type}:${id}:${dataHash}`;
+}
+
+// 设置缓存
+function setCalculationCache(key, value) {
+    if (calculationCache.size >= CACHE_MAX_SIZE) {
+        // LRU: 删除最早的条目
+        const firstKey = calculationCache.keys().next().value;
+        calculationCache.delete(firstKey);
+    }
+    calculationCache.set(key, value);
+}
+
+// 清除所有计算缓存
+function clearCalculationCache() {
+    calculationCache.clear();
+}
+
+// 计算软件的已赚金额（累计）- 带缓存
 // 公式：(当前余额 - 初始基准值) + 已提现金额
 function calculateAppEarned(app) {
+    const dataHash = `${app.balance || 0}-${app.withdrawn || 0}-${app.historicalWithdrawn || 0}`;
+    const cacheKey = getCacheKey('app', app.id, dataHash);
+    
+    if (calculationCache.has(cacheKey)) {
+        return calculationCache.get(cacheKey);
+    }
+    
     const initialBalance = app.initialBalance || 0;
     const currentBalance = app.balance || 0;
     const balanceEarned = Math.max(0, currentBalance - initialBalance);
     const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-    return balanceEarned + withdrawn;
+    const result = balanceEarned + withdrawn;
+    
+    setCalculationCache(cacheKey, result);
+    return result;
 }
 
-// 计算手机的总已赚金额
+// 计算手机的总已赚金额 - 带缓存
 function calculatePhoneTotalEarned(phone) {
-    return phone.apps.reduce((sum, app) => sum + calculateAppEarned(app), 0);
+    const dataHash = phone.apps.map(a => `${a.id}:${a.balance || 0}:${a.withdrawn || 0}`).join(',');
+    const cacheKey = getCacheKey('phone', phone.id, dataHash);
+    
+    if (calculationCache.has(cacheKey)) {
+        return calculationCache.get(cacheKey);
+    }
+    
+    const result = phone.apps.reduce((sum, app) => sum + calculateAppEarned(app), 0);
+    setCalculationCache(cacheKey, result);
+    return result;
 }
 
 // 全局变量和辅助函数定义
 let modalIsShowing = false;
+
+// ==================== 性能优化工具函数 ====================
+
+// 防抖函数
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 节流函数
+function throttle(func, limit) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// 惰性加载图片
+function lazyLoadImages() {
+    const images = document.querySelectorAll('img[data-src]');
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                img.src = img.dataset.src;
+                img.removeAttribute('data-src');
+                observer.unobserve(img);
+            }
+        });
+    });
+    
+    images.forEach(img => imageObserver.observe(img));
+}
+
+// 内存监控（开发环境使用）
+function logMemoryUsage() {
+    if (performance && performance.memory) {
+        console.log('内存使用:', {
+            used: (performance.memory.usedJSHeapSize / 1048576).toFixed(2) + ' MB',
+            total: (performance.memory.totalJSHeapSize / 1048576).toFixed(2) + ' MB',
+            limit: (performance.memory.jsHeapSizeLimit / 1048576).toFixed(2) + ' MB'
+        });
+    }
+}
 
 // 显示模态框
 function showModal(title, body, buttons, enableScroll = false) {
@@ -720,9 +818,26 @@ function updateAppCard(phoneId, appId) {
 
 // 原始代码开始
 
-// 数据管理类
+// 数据管理类 - 优化版本
 class DataManager {
+    // 内存缓存
+    static _cache = null;
+    static _cacheTimestamp = 0;
+    static _cacheExpiry = 5000; // 缓存有效期5秒
+    
+    // 批量保存队列
+    static _saveQueue = new Map();
+    static _saveTimeout = null;
+    
+    // 获取缓存的数据
     static loadData() {
+        const now = Date.now();
+        
+        // 检查缓存是否有效
+        if (this._cache && (now - this._cacheTimestamp) < this._cacheExpiry) {
+            return this._cache;
+        }
+        
         // 尝试从分片存储加载数据
         const phones = localStorage.getItem(PHONES_KEY);
         const installments = localStorage.getItem(INSTALLMENTS_KEY);
@@ -789,15 +904,56 @@ class DataManager {
             this.saveData(result);
         }
 
+        // 更新缓存
+        this._cache = result;
+        this._cacheTimestamp = now;
+
         return result;
     }
 
+    // 清除缓存（在数据修改后调用）
+    static clearCache() {
+        this._cache = null;
+        this._cacheTimestamp = 0;
+    }
+
     static saveData(data) {
+        // 清除缓存
+        this.clearCache();
+        
         // 分片存储数据
         localStorage.setItem(PHONES_KEY, JSON.stringify(data.phones));
         localStorage.setItem(INSTALLMENTS_KEY, JSON.stringify(data.installments));
         localStorage.setItem(EXPENSES_KEY, JSON.stringify(data.expenses));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+    }
+    
+    // 批量保存（延迟写入，减少localStorage操作）
+    static queueSave(key, data) {
+        this._saveQueue.set(key, data);
+        
+        // 清除之前的定时器
+        if (this._saveTimeout) {
+            clearTimeout(this._saveTimeout);
+        }
+        
+        // 延迟批量保存
+        this._saveTimeout = setTimeout(() => {
+            this.flushSaveQueue();
+        }, 100);
+    }
+    
+    // 立即执行批量保存
+    static flushSaveQueue() {
+        if (this._saveQueue.size === 0) return;
+        
+        this.clearCache();
+        
+        this._saveQueue.forEach((data, key) => {
+            localStorage.setItem(key, JSON.stringify(data));
+        });
+        
+        this._saveQueue.clear();
     }
     
     // 保存特定类型的数据（优化性能）
@@ -2516,7 +2672,6 @@ function showPage(pageName) {
     const delay = isMobile ? 100 : 50;
     
     // 检查是否可以使用缓存（手机端优化）
-    const isMobile = window.innerWidth <= 768;
     const data = DataManager.loadData();
     const currentHash = generateDataHash(data);
     
@@ -7629,6 +7784,34 @@ function completeTodayGame() {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
+    // 性能监控开始
+    const initStartTime = performance.now();
+    
     init();
     initCalendars();
+    
+    // 性能监控结束
+    const initEndTime = performance.now();
+    console.log(`初始化耗时: ${(initEndTime - initStartTime).toFixed(2)}ms`);
+    
+    // 定期清理计算缓存（每5分钟）
+    setInterval(() => {
+        clearCalculationCache();
+        console.log('计算缓存已清理');
+    }, 300000);
+    
+    // 页面可见性变化时优化
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            // 页面隐藏时清理缓存，释放内存
+            DataManager.clearCache();
+            clearCalculationCache();
+        }
+    });
+    
+    // 窗口大小变化时使用防抖
+    window.addEventListener('resize', debounce(() => {
+        // 重新计算布局等
+        console.log('窗口大小变化，重新计算布局');
+    }, 250));
 });
