@@ -2493,8 +2493,12 @@ function showPage(pageName) {
     const targetPage = document.getElementById(`page-${pageName}`);
     targetPage.classList.add('active');
     
-    // 使用 requestAnimationFrame 延迟渲染，让页面先显示
-    requestAnimationFrame(() => {
+    // 延迟渲染，让页面先完成切换动画
+    // 手机端使用更长的延迟，确保页面切换流畅
+    const isMobile = window.innerWidth <= 768;
+    const delay = isMobile ? 100 : 50;
+    
+    setTimeout(() => {
         if (pageName === 'dashboard') renderDashboard();
         if (pageName === 'phones') renderPhones();
         if (pageName === 'stats') renderStats();
@@ -2504,7 +2508,7 @@ function showPage(pageName) {
         if (pageName === 'installments') renderInstallments();
         if (pageName === 'today-earn') renderTodayEarnPage();
         if (pageName === 'games') renderGamesPage();
-    });
+    }, delay);
     
     // 恢复页面状态（仪表盘页面特殊处理）
     if (pageName === 'dashboard') {
