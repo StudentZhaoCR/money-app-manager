@@ -21,121 +21,23 @@ const BACKUP_HISTORY_KEY = 'moneyApp_backupHistory';
 
 // ==================== 通用计算函数 ====================
 
-// 全局计算缓存
-const calculationCache = new Map();
-const CACHE_MAX_SIZE = 1000;
-
-// 获取缓存键
-function getCacheKey(type, id, dataHash) {
-    return `${type}:${id}:${dataHash}`;
-}
-
-// 设置缓存
-function setCalculationCache(key, value) {
-    if (calculationCache.size >= CACHE_MAX_SIZE) {
-        // LRU: 删除最早的条目
-        const firstKey = calculationCache.keys().next().value;
-        calculationCache.delete(firstKey);
-    }
-    calculationCache.set(key, value);
-}
-
-// 清除所有计算缓存
-function clearCalculationCache() {
-    calculationCache.clear();
-}
-
-// 计算软件的已赚金额（累计）- 带缓存
+// 计算软件的已赚金额（累计）
 // 公式：(当前余额 - 初始基准值) + 已提现金额
 function calculateAppEarned(app) {
-    const dataHash = `${app.balance || 0}-${app.withdrawn || 0}-${app.historicalWithdrawn || 0}`;
-    const cacheKey = getCacheKey('app', app.id, dataHash);
-    
-    if (calculationCache.has(cacheKey)) {
-        return calculationCache.get(cacheKey);
-    }
-    
     const initialBalance = app.initialBalance || 0;
     const currentBalance = app.balance || 0;
     const balanceEarned = Math.max(0, currentBalance - initialBalance);
     const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-    const result = balanceEarned + withdrawn;
-    
-    setCalculationCache(cacheKey, result);
-    return result;
+    return balanceEarned + withdrawn;
 }
 
-// 计算手机的总已赚金额 - 带缓存
+// 计算手机的总已赚金额
 function calculatePhoneTotalEarned(phone) {
-    const dataHash = phone.apps.map(a => `${a.id}:${a.balance || 0}:${a.withdrawn || 0}`).join(',');
-    const cacheKey = getCacheKey('phone', phone.id, dataHash);
-    
-    if (calculationCache.has(cacheKey)) {
-        return calculationCache.get(cacheKey);
-    }
-    
-    const result = phone.apps.reduce((sum, app) => sum + calculateAppEarned(app), 0);
-    setCalculationCache(cacheKey, result);
-    return result;
+    return phone.apps.reduce((sum, app) => sum + calculateAppEarned(app), 0);
 }
 
 // 全局变量和辅助函数定义
 let modalIsShowing = false;
-
-// ==================== 性能优化工具函数 ====================
-
-// 防抖函数
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// 节流函数
-function throttle(func, limit) {
-    let inThrottle;
-    return function(...args) {
-        if (!inThrottle) {
-            func.apply(this, args);
-            inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
-        }
-    };
-}
-
-// 惰性加载图片
-function lazyLoadImages() {
-    const images = document.querySelectorAll('img[data-src]');
-    const imageObserver = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const img = entry.target;
-                img.src = img.dataset.src;
-                img.removeAttribute('data-src');
-                observer.unobserve(img);
-            }
-        });
-    });
-    
-    images.forEach(img => imageObserver.observe(img));
-}
-
-// 内存监控（开发环境使用）
-function logMemoryUsage() {
-    if (performance && performance.memory) {
-        console.log('内存使用:', {
-            used: (performance.memory.usedJSHeapSize / 1048576).toFixed(2) + ' MB',
-            total: (performance.memory.totalJSHeapSize / 1048576).toFixed(2) + ' MB',
-            limit: (performance.memory.jsHeapSizeLimit / 1048576).toFixed(2) + ' MB'
-        });
-    }
-}
 
 // 显示模态框
 function showModal(title, body, buttons, enableScroll = false) {
@@ -536,60 +438,31 @@ function renderInstallments() {
                     </div>
                 </div>
                 <div class="installment-app-goals">
-                    ${(() => {
-                        // 计算待支出金额可以覆盖的软件
-                        const pendingExpense = installment.pendingExpense || 0;
-                        // 按目标金额从小到大排序
-                        const sortedGoals = [...installment.appGoals].sort((a, b) => a.totalTarget - b.totalTarget);
-                        let remainingAmount = pendingExpense;
-                        let coveredCount = 0;
-                        const coveredAppIds = [];
-                        let partialCoveredApp = null;
-                        let partialCoverPercent = 0;
-                        
-                        for (const goal of sortedGoals) {
-                            if (remainingAmount >= goal.totalTarget) {
-                                remainingAmount -= goal.totalTarget;
-                                coveredCount++;
-                                coveredAppIds.push(goal.appId);
-                            } else if (remainingAmount > 0) {
-                                // 部分覆盖
-                                partialCoveredApp = goal.appId;
-                                partialCoverPercent = (remainingAmount / goal.totalTarget) * 100;
-                                remainingAmount = 0;
-                            } else {
-                                break;
-                            }
-                        }
-                        
-                        return `
-                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 <span style="font-size: 12px; color: var(--success-color);">(${coveredCount}/${installment.appGoals.length}个可覆盖)</span></div>
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 ${(() => {
+                        const completedCount = installment.appGoals.filter(goal => {
+                            const todayEarned = getAppTodayEarned(goal.appId);
+                            return todayEarned >= goal.dailyTarget;
+                        }).length;
+                        return `<span style="font-size: 12px; color: var(--success-color);">(${completedCount}/${installment.appGoals.length}个已完成)</span>`;
+                    })()}</div>
                     ${installment.appGoals.map(goal => {
-                        const isCovered = coveredAppIds.includes(goal.appId);
-                        const isPartial = partialCoveredApp === goal.appId;
-                        
-                        let backgroundStyle = '';
-                        if (isCovered) {
-                            backgroundStyle = 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);';
-                        } else if (isPartial) {
-                            backgroundStyle = `background: linear-gradient(to right, rgba(52, 211, 153, 0.1) ${partialCoverPercent}%, transparent ${partialCoverPercent}%); border-left: 4px solid var(--success-color);`;
-                        }
-                        
+                        const todayEarned = getAppTodayEarned(goal.appId);
+                        const isCompleted = todayEarned >= goal.dailyTarget;
                         return `
-                        <div class="installment-app-goal-item ${isCovered ? 'app-goal-completed' : ''}" style="${backgroundStyle}">
+                        <div class="installment-app-goal-item ${isCompleted ? 'app-goal-completed' : ''}" style="${isCompleted ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
                             <div class="installment-app-goal-header">
-                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCovered ? '✅' : ''}</span>
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCompleted ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-details">
                                 <span>每日目标: ¥${goal.dailyTarget.toFixed(2)}</span>
+                                <span style="color: ${isCompleted ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: ${isCompleted ? '600' : 'normal'};">今日: ¥${todayEarned.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
-                    `}).join('')}`;
-                    })()}
+                    `}).join('')}
                 </div>
                 <div class="installment-action-buttons">
                     <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
@@ -818,26 +691,9 @@ function updateAppCard(phoneId, appId) {
 
 // 原始代码开始
 
-// 数据管理类 - 优化版本
+// 数据管理类
 class DataManager {
-    // 内存缓存
-    static _cache = null;
-    static _cacheTimestamp = 0;
-    static _cacheExpiry = 5000; // 缓存有效期5秒
-    
-    // 批量保存队列
-    static _saveQueue = new Map();
-    static _saveTimeout = null;
-    
-    // 获取缓存的数据
     static loadData() {
-        const now = Date.now();
-        
-        // 检查缓存是否有效
-        if (this._cache && (now - this._cacheTimestamp) < this._cacheExpiry) {
-            return this._cache;
-        }
-        
         // 尝试从分片存储加载数据
         const phones = localStorage.getItem(PHONES_KEY);
         const installments = localStorage.getItem(INSTALLMENTS_KEY);
@@ -904,56 +760,15 @@ class DataManager {
             this.saveData(result);
         }
 
-        // 更新缓存
-        this._cache = result;
-        this._cacheTimestamp = now;
-
         return result;
     }
 
-    // 清除缓存（在数据修改后调用）
-    static clearCache() {
-        this._cache = null;
-        this._cacheTimestamp = 0;
-    }
-
     static saveData(data) {
-        // 清除缓存
-        this.clearCache();
-        
         // 分片存储数据
         localStorage.setItem(PHONES_KEY, JSON.stringify(data.phones));
         localStorage.setItem(INSTALLMENTS_KEY, JSON.stringify(data.installments));
         localStorage.setItem(EXPENSES_KEY, JSON.stringify(data.expenses));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
-    }
-    
-    // 批量保存（延迟写入，减少localStorage操作）
-    static queueSave(key, data) {
-        this._saveQueue.set(key, data);
-        
-        // 清除之前的定时器
-        if (this._saveTimeout) {
-            clearTimeout(this._saveTimeout);
-        }
-        
-        // 延迟批量保存
-        this._saveTimeout = setTimeout(() => {
-            this.flushSaveQueue();
-        }, 100);
-    }
-    
-    // 立即执行批量保存
-    static flushSaveQueue() {
-        if (this._saveQueue.size === 0) return;
-        
-        this.clearCache();
-        
-        this._saveQueue.forEach((data, key) => {
-            localStorage.setItem(key, JSON.stringify(data));
-        });
-        
-        this._saveQueue.clear();
     }
     
     // 保存特定类型的数据（优化性能）
@@ -2635,58 +2450,28 @@ function updateAllDates() {
 let pageStates = {};
 let currentPage = 'dashboard';
 
-// 页面渲染缓存（用于优化切换性能）
-let pageRenderCache = {
-    phones: { html: '', dataHash: '' },
-    stats: { html: '', dataHash: '' }
-};
-
-// 生成数据哈希（用于判断数据是否变化）
-function generateDataHash(data) {
-    return JSON.stringify(data.phones.map(p => ({
-        id: p.id,
-        name: p.name,
-        appsCount: p.apps.length,
-        balance: p.apps.reduce((s, a) => s + (a.balance || 0), 0),
-        earned: p.apps.reduce((s, a) => s + (a.earned || 0), 0)
-    })));
-}
-
 function showPage(pageName) {
     // 保存当前页面状态
     saveCurrentPageState();
     
-    // 先显示页面（立即反馈），再渲染内容
+    // 先刷新页面数据，再显示页面，避免内容加载导致的弹跳
+    if (pageName === 'dashboard') renderDashboard();
+    if (pageName === 'phones') renderPhones();
+    if (pageName === 'stats') renderStats();
+    if (pageName === 'settings') renderSettings();
+    if (pageName === 'withdraw-records') renderWithdrawRecords();
+    if (pageName === 'expense-records') renderExpenseRecords();
+    if (pageName === 'installments') renderInstallments();
+    if (pageName === 'today-earn') renderTodayEarnPage();
+    if (pageName === 'games') renderGamesPage();
+    
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
     
-    // 显示目标页面（立即显示，不等待渲染）
-    const targetPage = document.getElementById(`page-${pageName}`);
-    targetPage.classList.add('active');
-    
-    // 延迟渲染，让页面先完成切换动画
-    // 手机端使用更长的延迟，确保页面切换流畅
-    const isMobile = window.innerWidth <= 768;
-    const delay = isMobile ? 50 : 0;
-    
-    // 延迟渲染 - 使用 requestAnimationFrame 替代 setTimeout 更流畅
-    requestAnimationFrame(() => {
-        try {
-            if (pageName === 'dashboard') renderDashboard();
-            if (pageName === 'phones') renderPhones();
-            if (pageName === 'stats') renderStats();
-            if (pageName === 'settings') renderSettings();
-            if (pageName === 'withdraw-records') renderWithdrawRecords();
-            if (pageName === 'expense-records') renderExpenseRecords();
-            if (pageName === 'installments') renderInstallments();
-            if (pageName === 'today-earn') renderTodayEarnPage();
-            if (pageName === 'games') renderGamesPage();
-        } catch (error) {
-            console.error('页面渲染错误:', error);
-        }
-    });
+    // 显示目标页面
+    document.getElementById(`page-${pageName}`).classList.add('active');
     
     // 恢复页面状态（仪表盘页面特殊处理）
     if (pageName === 'dashboard') {
@@ -3125,15 +2910,41 @@ function renderDashboard() {
     DataManager.calculateYearlyGoal();
     const data = DataManager.loadData();
     
-    // 简化的统计数据计算
+    // 统计数据
     const totalPhones = data.phones.length;
     const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+    const totalBalance = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => appSum + (app.balance || 0), 0);
+    }, 0);
+    const totalEarned = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => appSum + (app.earned || 0), 0);
+    }, 0);
     
-    // 更新DOM - 基本数据
+    // 计算待支出余额（总提现金额 - 总支出金额）
+    const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => {
+            return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+        }, 0);
+    }, 0);
+    const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
+    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses;
+    const readyApps = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
+    }, 0);
+    
+    // 全年目标进度
+    const yearlyGoal = data.settings.yearlyGoal || 10000;
+    const yearlyProgress = yearlyGoal > 0 ? Math.min((totalEarned / yearlyGoal) * 100, 100) : 0;
+    
+    // 更新DOM
     document.getElementById('total-phones').textContent = totalPhones;
     document.getElementById('total-apps').textContent = totalApps;
+    document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
+    document.getElementById('ready-apps').textContent = readyApps;
+    document.getElementById('yearly-progress').textContent = `${yearlyProgress.toFixed(0)}%`;
+    document.getElementById('yearly-progress-bar').style.width = `${yearlyProgress}%`;
     
-    // 渲染今日需要关注的软件（关键内容）
+    // 渲染今日需要关注的软件
     renderTodayApps(data);
     
     // 更新用户等级和签到信息
@@ -3147,18 +2958,25 @@ function renderDashboard() {
     if (newAchievements.length > 0) {
         newAchievements.forEach(achievement => {
             showToast(`🎉 解锁成就: ${achievement}`);
+            // 显示成就分享弹窗
             setTimeout(() => showAchievementShare(achievement), 1000);
         });
     }
     
-    // 延迟渲染非关键内容
-    setTimeout(() => {
-        renderIncomeChart('week');
-        renderIncomeCalendar();
-        renderSmartSuggestions();
-        renderIncomePrediction();
-        renderAppRanking();
-    }, 100);
+    // 渲染收入趋势图表
+    renderIncomeChart('week');
+    
+    // 渲染收入日历
+    renderIncomeCalendar();
+    
+    // 渲染智能建议
+    renderSmartSuggestions();
+    
+    // 渲染收入预测
+    renderIncomePrediction();
+    
+    // 渲染软件收益排行
+    renderAppRanking();
 }
 
 // 全局图表实例
@@ -4552,27 +4370,54 @@ function renderPhones() {
         }
     });
     
-    // 预计算全局数据，避免重复计算
-    const settings = data.settings;
-    const yearlyGoal = settings.yearlyGoal || 0;
-    const phoneCount = data.phones.length || 1;
-    const currentYear = getCurrentYear();
-    const yearDays = getYearDays(currentYear);
-    const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
-    const today = getCurrentDate();
-    
-    // 直接渲染所有手机（简化逻辑，避免崩溃）
-    container.innerHTML = data.phones.map((phone, index) => renderPhoneCard(phone, index, data, dailyTarget, today)).join('');
-}
-
-// 渲染单个手机卡片（提取为独立函数）
-function renderPhoneCard(phone, index, data, dailyTarget, today) {
+    container.innerHTML = data.phones.map((phone, index) => {
         const isExpanded = expandedPhones[phone.id];
         
-        // 简化的计算（移除复杂缓存逻辑）
-        const totalEarned = phone.apps.reduce((sum, app) => sum + (app.earned || 0), 0);
-        const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
-        const todayEarned = 0; // 简化计算
+        // 计算该手机的总赚取金额
+        const totalEarned = calculatePhoneTotalEarned(phone);
+        
+        // 计算该手机的总余额
+        const totalBalance = phone.apps.reduce((sum, app) => {
+            return sum + (app.balance || 0);
+        }, 0);
+        
+        // 计算每日目标和进度
+        const settings = DataManager.loadData().settings;
+        const yearlyGoal = settings.yearlyGoal || 0;
+        const phoneCount = data.phones.length || 1;
+        const currentYear = getCurrentYear();
+        const yearDays = getYearDays(currentYear);
+        const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
+        
+        // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
+        const today = getCurrentDate();
+        const history = phone.dailyTotalEarnedHistory || {};
+        // 使用新的计算函数获取当前总已赚金额
+        const currentTotalEarned = calculatePhoneTotalEarned(phone);
+
+        // 找到昨天结束时的总赚取作为今天开始的基准
+        const yesterdayDate = new Date(today);
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterday = yesterdayDate.toISOString().split('T')[0];
+        let yesterdayTotal = history[yesterday];
+        
+        if (yesterdayTotal === undefined) {
+            // 昨天没有记录，找昨天之前最后一次记录
+            const datesBeforeYesterday = Object.keys(history)
+                .filter(d => d <= yesterday)
+                .sort();
+            
+            if (datesBeforeYesterday.length > 0) {
+                // 找到小于等于昨天的最大日期
+                yesterdayTotal = history[datesBeforeYesterday[datesBeforeYesterday.length - 1]];
+            } else {
+                // 昨天之前没有任何记录，基准为0
+                yesterdayTotal = 0;
+            }
+        }
+        
+        // 今日赚取 = 当前总赚取 - 昨天结束时的总赚取
+        const todayEarned = Math.max(0, currentTotalEarned - yesterdayTotal);
 
         const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
         
@@ -4636,6 +4481,7 @@ function renderPhoneCard(phone, index, data, dailyTarget, today) {
                 ${isExpanded ? renderAppList(phone) : `<div class="collapsed-hint">点击展开查看 ${phone.apps.length} 个软件</div>`}
             </div>
         `;
+    }).join('');
 }
 
 // 渲染软件列表
@@ -5087,17 +4933,6 @@ function deleteApp(phoneId, appId) {
 function renderStats() {
     const data = DataManager.loadData();
     
-    // 使用 Map 缓存计算结果，避免重复计算
-    const earnedCache = new Map();
-    const getCachedEarned = (app) => {
-        if (earnedCache.has(app.id)) {
-            return earnedCache.get(app.id);
-        }
-        const earned = calculateAppEarned(app);
-        earnedCache.set(app.id, earned);
-        return earned;
-    };
-    
     const allAppsWithPhone = [];
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
@@ -5105,8 +4940,8 @@ function renderStats() {
         });
     });
     
-    // 已赚金额使用统一函数计算（带缓存）
-    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + getCachedEarned(app), 0);
+    // 已赚金额使用统一函数计算
+    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + calculateAppEarned(app), 0);
     const totalWithdrawn = allAppsWithPhone.reduce((sum, app) => {
         return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     }, 0);
@@ -5116,7 +4951,7 @@ function renderStats() {
         }
         return sum;
     }, 0);
-    const totalBalance = allAppsWithPhone.reduce((sum, app) => sum + (app.balance || 0), 0);
+    const totalBalance = allAppsWithPhone.reduce((sum, app) => sum + app.balance, 0);
     
     const withdrawRate = totalEarned > 0 ? (totalWithdrawn / totalEarned) * 100 : 0;
     const expenseRate = totalWithdrawn > 0 ? (totalExpenses / totalWithdrawn) * 100 : 0;
@@ -5136,8 +4971,8 @@ function renderStats() {
     }
     
     container.innerHTML = allAppsWithPhone.map(app => {
-        // 使用缓存的已赚金额
-        const earned = getCachedEarned(app);
+        // 使用统一函数计算已赚金额
+        const earned = calculateAppEarned(app);
         const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const expenses = app.expenses && app.expenses.length > 0 ? 
             app.expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0;
@@ -5708,44 +5543,31 @@ function renderInstallments() {
                     </div>
                 </div>
                 <div class="installment-app-goals">
-                    ${(() => {
-                        // 计算待支出金额可以覆盖的软件
-                        const pendingExpense = installment.pendingExpense || 0;
-                        // 按目标金额从小到大排序
-                        const sortedGoals = [...installment.appGoals].sort((a, b) => a.totalTarget - b.totalTarget);
-                        let remainingAmount = pendingExpense;
-                        let coveredCount = 0;
-                        const coveredAppIds = [];
-                        
-                        for (const goal of sortedGoals) {
-                            if (remainingAmount >= goal.totalTarget) {
-                                remainingAmount -= goal.totalTarget;
-                                coveredCount++;
-                                coveredAppIds.push(goal.appId);
-                            } else {
-                                break;
-                            }
-                        }
-                        
-                        return `
-                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 <span style="font-size: 12px; color: var(--success-color);">(${coveredCount}/${installment.appGoals.length}个可覆盖)</span></div>
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 ${(() => {
+                        const completedCount = installment.appGoals.filter(goal => {
+                            const todayEarned = getAppTodayEarned(goal.appId);
+                            return todayEarned >= goal.dailyTarget;
+                        }).length;
+                        return `<span style="font-size: 12px; color: var(--success-color);">(${completedCount}/${installment.appGoals.length}个已完成)</span>`;
+                    })()}</div>
                     ${installment.appGoals.map(goal => {
-                        const isCovered = coveredAppIds.includes(goal.appId);
+                        const todayEarned = getAppTodayEarned(goal.appId);
+                        const isCompleted = todayEarned >= goal.dailyTarget;
                         return `
-                        <div class="installment-app-goal-item ${isCovered ? 'app-goal-completed' : ''}" style="${isCovered ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
+                        <div class="installment-app-goal-item ${isCompleted ? 'app-goal-completed' : ''}" style="${isCompleted ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
                             <div class="installment-app-goal-header">
-                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCovered ? '✅' : ''}</span>
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCompleted ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-details">
                                 <span>每日目标: ¥${goal.dailyTarget.toFixed(2)}</span>
+                                <span style="color: ${isCompleted ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: ${isCompleted ? '600' : 'normal'};">今日: ¥${todayEarned.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
-                    `}).join('')}`;
-                    })()}
+                    `}).join('')}
                 </div>
                 <div class="installment-action-buttons">
                     <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
@@ -7679,34 +7501,6 @@ function completeTodayGame() {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 性能监控开始
-    const initStartTime = performance.now();
-    
     init();
     initCalendars();
-    
-    // 性能监控结束
-    const initEndTime = performance.now();
-    console.log(`初始化耗时: ${(initEndTime - initStartTime).toFixed(2)}ms`);
-    
-    // 定期清理计算缓存（每5分钟）
-    setInterval(() => {
-        clearCalculationCache();
-        console.log('计算缓存已清理');
-    }, 300000);
-    
-    // 页面可见性变化时优化
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            // 页面隐藏时清理缓存，释放内存
-            DataManager.clearCache();
-            clearCalculationCache();
-        }
-    });
-    
-    // 窗口大小变化时使用防抖
-    window.addEventListener('resize', debounce(() => {
-        // 重新计算布局等
-        console.log('窗口大小变化，重新计算布局');
-    }, 250));
 });
