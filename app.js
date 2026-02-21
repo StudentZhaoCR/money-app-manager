@@ -3125,33 +3125,50 @@ function renderDashboard() {
     DataManager.calculateYearlyGoal();
     const data = DataManager.loadData();
     
-    // 统计数据
+    // 统计数据 - 使用缓存的计算结果
     const totalPhones = data.phones.length;
     const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
-    const totalBalance = data.phones.reduce((sum, phone) => {
-        return sum + phone.apps.reduce((appSum, app) => appSum + (app.balance || 0), 0);
-    }, 0);
-    const totalEarned = data.phones.reduce((sum, phone) => {
-        return sum + phone.apps.reduce((appSum, app) => appSum + (app.earned || 0), 0);
-    }, 0);
     
-    // 计算待支出余额（总提现金额 - 总支出金额）
-    const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
-        return sum + phone.apps.reduce((appSum, app) => {
-            return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-        }, 0);
-    }, 0);
+    // 使用预计算的缓存值
+    let totalBalance = 0;
+    let totalEarned = 0;
+    let totalWithdrawnAmount = 0;
+    let readyApps = 0;
+    
+    data.phones.forEach(phone => {
+        // 使用手机的渲染缓存
+        const today = getCurrentDate();
+        const cacheKey = `${phone.id}_${today}`;
+        if (!phone._renderCache || phone._renderCache.key !== cacheKey) {
+            // 简化的计算，只计算必要的值
+            const phoneTotalEarned = phone.apps.reduce((sum, app) => sum + (app.earned || 0), 0);
+            const phoneTotalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+            const phoneWithdrawn = phone.apps.reduce((sum, app) => sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0), 0);
+            const phoneReadyApps = phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
+            
+            phone._renderCache = {
+                key: cacheKey,
+                totalEarned: phoneTotalEarned,
+                totalBalance: phoneTotalBalance,
+                totalWithdrawn: phoneWithdrawn,
+                readyApps: phoneReadyApps
+            };
+        }
+        
+        totalEarned += phone._renderCache.totalEarned;
+        totalBalance += phone._renderCache.totalBalance;
+        totalWithdrawnAmount += phone._renderCache.totalWithdrawn;
+        readyApps += phone._renderCache.readyApps;
+    });
+    
     const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
     const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses;
-    const readyApps = data.phones.reduce((sum, phone) => {
-        return sum + phone.apps.filter(app => (app.balance || 0) >= (app.minWithdraw || 0)).length;
-    }, 0);
     
     // 全年目标进度
     const yearlyGoal = data.settings.yearlyGoal || 10000;
     const yearlyProgress = yearlyGoal > 0 ? Math.min((totalEarned / yearlyGoal) * 100, 100) : 0;
     
-    // 更新DOM
+    // 更新DOM - 关键数据立即显示
     document.getElementById('total-phones').textContent = totalPhones;
     document.getElementById('total-apps').textContent = totalApps;
     document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
@@ -3159,7 +3176,7 @@ function renderDashboard() {
     document.getElementById('yearly-progress').textContent = `${yearlyProgress.toFixed(0)}%`;
     document.getElementById('yearly-progress-bar').style.width = `${yearlyProgress}%`;
     
-    // 渲染今日需要关注的软件
+    // 渲染今日需要关注的软件（关键内容）
     renderTodayApps(data);
     
     // 更新用户等级和签到信息
@@ -3173,25 +3190,22 @@ function renderDashboard() {
     if (newAchievements.length > 0) {
         newAchievements.forEach(achievement => {
             showToast(`🎉 解锁成就: ${achievement}`);
-            // 显示成就分享弹窗
             setTimeout(() => showAchievementShare(achievement), 1000);
         });
     }
     
-    // 渲染收入趋势图表
-    renderIncomeChart('week');
+    // 延迟渲染非关键内容（图表、日历等）
+    requestAnimationFrame(() => {
+        renderIncomeChart('week');
+        renderIncomeCalendar();
+    });
     
-    // 渲染收入日历
-    renderIncomeCalendar();
-    
-    // 渲染智能建议
-    renderSmartSuggestions();
-    
-    // 渲染收入预测
-    renderIncomePrediction();
-    
-    // 渲染软件收益排行
-    renderAppRanking();
+    // 进一步延迟渲染次要内容
+    setTimeout(() => {
+        renderSmartSuggestions();
+        renderIncomePrediction();
+        renderAppRanking();
+    }, 100);
 }
 
 // 全局图表实例
@@ -4602,41 +4616,46 @@ function renderPhones() {
 function renderPhoneCard(phone, index, data, dailyTarget, today) {
         const isExpanded = expandedPhones[phone.id];
         
-        // 计算该手机的总赚取金额（只计算一次）
-        const totalEarned = calculatePhoneTotalEarned(phone);
-        
-        // 计算该手机的总余额
-        const totalBalance = phone.apps.reduce((sum, app) => {
-            return sum + (app.balance || 0);
-        }, 0);
-        
-        // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
-        const history = phone.dailyTotalEarnedHistory || {};
-        const currentTotalEarned = totalEarned; // 复用已计算的值
-
-        // 找到昨天结束时的总赚取作为今天开始的基准
-        const yesterdayDate = new Date(today);
-        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-        const yesterday = yesterdayDate.toISOString().split('T')[0];
-        let yesterdayTotal = history[yesterday];
-        
-        if (yesterdayTotal === undefined) {
-            // 昨天没有记录，找昨天之前最后一次记录
-            const datesBeforeYesterday = Object.keys(history)
-                .filter(d => d <= yesterday)
-                .sort();
+        // 使用缓存的计算结果（如果存在且日期未变）
+        const cacheKey = `${phone.id}_${today}`;
+        if (!phone._renderCache || phone._renderCache.key !== cacheKey) {
+            // 计算该手机的总赚取金额
+            const totalEarned = calculatePhoneTotalEarned(phone);
             
-            if (datesBeforeYesterday.length > 0) {
-                // 找到小于等于昨天的最大日期
-                yesterdayTotal = history[datesBeforeYesterday[datesBeforeYesterday.length - 1]];
-            } else {
-                // 昨天之前没有任何记录，基准为0
-                yesterdayTotal = 0;
+            // 计算该手机的总余额
+            const totalBalance = phone.apps.reduce((sum, app) => {
+                return sum + (app.balance || 0);
+            }, 0);
+            
+            // 计算今日已赚
+            const history = phone.dailyTotalEarnedHistory || {};
+            const yesterdayDate = new Date(today);
+            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+            const yesterday = yesterdayDate.toISOString().split('T')[0];
+            let yesterdayTotal = history[yesterday];
+            
+            if (yesterdayTotal === undefined) {
+                const datesBeforeYesterday = Object.keys(history)
+                    .filter(d => d <= yesterday)
+                    .sort();
+                yesterdayTotal = datesBeforeYesterday.length > 0 
+                    ? history[datesBeforeYesterday[datesBeforeYesterday.length - 1]] 
+                    : 0;
             }
+            
+            const todayEarned = Math.max(0, totalEarned - yesterdayTotal);
+            
+            // 缓存结果
+            phone._renderCache = {
+                key: cacheKey,
+                totalEarned,
+                totalBalance,
+                todayEarned
+            };
         }
         
-        // 今日赚取 = 当前总赚取 - 昨天结束时的总赚取
-        const todayEarned = Math.max(0, currentTotalEarned - yesterdayTotal);
+        // 使用缓存的值
+        const { totalEarned, totalBalance, todayEarned } = phone._renderCache;
 
         const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
         
