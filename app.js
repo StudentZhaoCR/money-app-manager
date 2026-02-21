@@ -2483,24 +2483,28 @@ function showPage(pageName) {
     // 保存当前页面状态
     saveCurrentPageState();
     
-    // 先刷新页面数据，再显示页面，避免内容加载导致的弹跳
-    if (pageName === 'dashboard') renderDashboard();
-    if (pageName === 'phones') renderPhones();
-    if (pageName === 'stats') renderStats();
-    if (pageName === 'settings') renderSettings();
-    if (pageName === 'withdraw-records') renderWithdrawRecords();
-    if (pageName === 'expense-records') renderExpenseRecords();
-    if (pageName === 'installments') renderInstallments();
-    if (pageName === 'today-earn') renderTodayEarnPage();
-    if (pageName === 'games') renderGamesPage();
-    
+    // 先显示页面（立即反馈），再渲染内容
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
     
-    // 显示目标页面
-    document.getElementById(`page-${pageName}`).classList.add('active');
+    // 显示目标页面（立即显示，不等待渲染）
+    const targetPage = document.getElementById(`page-${pageName}`);
+    targetPage.classList.add('active');
+    
+    // 使用 requestAnimationFrame 延迟渲染，让页面先显示
+    requestAnimationFrame(() => {
+        if (pageName === 'dashboard') renderDashboard();
+        if (pageName === 'phones') renderPhones();
+        if (pageName === 'stats') renderStats();
+        if (pageName === 'settings') renderSettings();
+        if (pageName === 'withdraw-records') renderWithdrawRecords();
+        if (pageName === 'expense-records') renderExpenseRecords();
+        if (pageName === 'installments') renderInstallments();
+        if (pageName === 'today-earn') renderTodayEarnPage();
+        if (pageName === 'games') renderGamesPage();
+    });
     
     // 恢复页面状态（仪表盘页面特殊处理）
     if (pageName === 'dashboard') {
