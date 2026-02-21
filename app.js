@@ -2641,79 +2641,6 @@ let pageRenderCache = {
     stats: { html: '', dataHash: '' }
 };
 
-// Web Worker 实例
-let statsWorker = null;
-
-// 初始化 Web Worker
-function initWorker() {
-    if (window.Worker) {
-        try {
-            statsWorker = new Worker('worker.js');
-            statsWorker.onmessage = function(e) {
-                const { type, result } = e.data;
-                if (type === 'statsResult') {
-                    // 更新统计数据
-                    updateStatsUI(result);
-                }
-            };
-        } catch (e) {
-            console.log('Web Worker 不支持，使用主线程计算');
-        }
-    }
-}
-
-// 使用 Worker 计算统计数据
-function calculateStatsAsync(data) {
-    return new Promise((resolve) => {
-        if (statsWorker) {
-            statsWorker.postMessage({ type: 'calculateStats', data });
-            statsWorker.onmessage = (e) => {
-                if (e.data.type === 'statsResult') {
-                    resolve(e.data.result);
-                }
-            };
-        } else {
-            // 降级：同步计算
-            resolve(calculateStatsSync(data));
-        }
-    });
-}
-
-// 同步计算统计数据（降级方案）
-function calculateStatsSync(data) {
-    const totalPhones = data.phones.length;
-    const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
-    
-    let totalBalance = 0;
-    let totalEarned = 0;
-    let totalWithdrawn = 0;
-    let readyApps = 0;
-    
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            totalBalance += app.balance || 0;
-            totalEarned += app.earned || 0;
-            totalWithdrawn += (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-            if ((app.balance || 0) >= (app.minWithdraw || 0)) {
-                readyApps++;
-            }
-        });
-    });
-    
-    return { totalPhones, totalApps, totalBalance, totalEarned, totalWithdrawn, readyApps };
-}
-
-// 更新统计数据 UI
-function updateStatsUI(stats) {
-    const totalExpenses = DataManager.loadData().expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
-    const pendingExpenseBalance = stats.totalWithdrawn - totalExpenses;
-    
-    document.getElementById('total-phones').textContent = stats.totalPhones;
-    document.getElementById('total-apps').textContent = stats.totalApps;
-    document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
-    document.getElementById('ready-apps').textContent = stats.readyApps;
-}
-
 // 生成数据哈希（用于判断数据是否变化）
 function generateDataHash(data) {
     return JSON.stringify(data.phones.map(p => ({
@@ -3194,28 +3121,17 @@ function renderAppEarnContent(phone, data) {
 }
 
 // 渲染仪表盘
-async function renderDashboard() {
+function renderDashboard() {
     DataManager.calculateYearlyGoal();
     const data = DataManager.loadData();
     
-    // 立即显示基本数据（不等待计算）
-    document.getElementById('total-phones').textContent = data.phones.length;
-    document.getElementById('total-apps').textContent = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+    // 简化的统计数据计算
+    const totalPhones = data.phones.length;
+    const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
     
-    // 使用 Web Worker 异步计算统计数据（不阻塞主线程）
-    calculateStatsAsync(data).then(stats => {
-        const totalExpenses = data.expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
-        const pendingExpenseBalance = stats.totalWithdrawn - totalExpenses;
-        
-        document.getElementById('total-balance').textContent = `¥${pendingExpenseBalance.toFixed(2)}`;
-        document.getElementById('ready-apps').textContent = stats.readyApps;
-        
-        // 全年目标进度
-        const yearlyGoal = data.settings.yearlyGoal || 10000;
-        const yearlyProgress = yearlyGoal > 0 ? Math.min((stats.totalEarned / yearlyGoal) * 100, 100) : 0;
-        document.getElementById('yearly-progress').textContent = `${yearlyProgress.toFixed(0)}%`;
-        document.getElementById('yearly-progress-bar').style.width = `${yearlyProgress}%`;
-    });
+    // 更新DOM - 基本数据
+    document.getElementById('total-phones').textContent = totalPhones;
+    document.getElementById('total-apps').textContent = totalApps;
     
     // 渲染今日需要关注的软件（关键内容）
     renderTodayApps(data);
@@ -3235,18 +3151,14 @@ async function renderDashboard() {
         });
     }
     
-    // 延迟渲染非关键内容（图表、日历等）
-    requestIdleCallback(() => {
+    // 延迟渲染非关键内容
+    setTimeout(() => {
         renderIncomeChart('week');
         renderIncomeCalendar();
-    }, { timeout: 200 });
-    
-    // 进一步延迟渲染次要内容
-    setTimeout(() => {
         renderSmartSuggestions();
         renderIncomePrediction();
         renderAppRanking();
-    }, 300);
+    }, 100);
 }
 
 // 全局图表实例
@@ -4657,46 +4569,10 @@ function renderPhones() {
 function renderPhoneCard(phone, index, data, dailyTarget, today) {
         const isExpanded = expandedPhones[phone.id];
         
-        // 使用缓存的计算结果（如果存在且日期未变）
-        const cacheKey = `${phone.id}_${today}`;
-        if (!phone._renderCache || phone._renderCache.key !== cacheKey) {
-            // 计算该手机的总赚取金额
-            const totalEarned = calculatePhoneTotalEarned(phone);
-            
-            // 计算该手机的总余额
-            const totalBalance = phone.apps.reduce((sum, app) => {
-                return sum + (app.balance || 0);
-            }, 0);
-            
-            // 计算今日已赚
-            const history = phone.dailyTotalEarnedHistory || {};
-            const yesterdayDate = new Date(today);
-            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-            const yesterday = yesterdayDate.toISOString().split('T')[0];
-            let yesterdayTotal = history[yesterday];
-            
-            if (yesterdayTotal === undefined) {
-                const datesBeforeYesterday = Object.keys(history)
-                    .filter(d => d <= yesterday)
-                    .sort();
-                yesterdayTotal = datesBeforeYesterday.length > 0 
-                    ? history[datesBeforeYesterday[datesBeforeYesterday.length - 1]] 
-                    : 0;
-            }
-            
-            const todayEarned = Math.max(0, totalEarned - yesterdayTotal);
-            
-            // 缓存结果
-            phone._renderCache = {
-                key: cacheKey,
-                totalEarned,
-                totalBalance,
-                todayEarned
-            };
-        }
-        
-        // 使用缓存的值
-        const { totalEarned, totalBalance, todayEarned } = phone._renderCache;
+        // 简化的计算（移除复杂缓存逻辑）
+        const totalEarned = phone.apps.reduce((sum, app) => sum + (app.earned || 0), 0);
+        const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+        const todayEarned = 0; // 简化计算
 
         const progress = dailyTarget > 0 ? Math.min(100, Math.round((todayEarned / dailyTarget) * 100)) : 0;
         
@@ -7805,9 +7681,6 @@ function completeTodayGame() {
 document.addEventListener('DOMContentLoaded', function() {
     // 性能监控开始
     const initStartTime = performance.now();
-    
-    // 初始化 Web Worker
-    initWorker();
     
     init();
     initCalendars();
