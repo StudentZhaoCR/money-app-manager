@@ -4399,10 +4399,19 @@ function renderPhones() {
         }
     });
     
+    // 预计算全局数据，避免重复计算
+    const settings = data.settings;
+    const yearlyGoal = settings.yearlyGoal || 0;
+    const phoneCount = data.phones.length || 1;
+    const currentYear = getCurrentYear();
+    const yearDays = getYearDays(currentYear);
+    const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
+    const today = getCurrentDate();
+    
     container.innerHTML = data.phones.map((phone, index) => {
         const isExpanded = expandedPhones[phone.id];
         
-        // 计算该手机的总赚取金额
+        // 计算该手机的总赚取金额（只计算一次）
         const totalEarned = calculatePhoneTotalEarned(phone);
         
         // 计算该手机的总余额
@@ -4410,19 +4419,9 @@ function renderPhones() {
             return sum + (app.balance || 0);
         }, 0);
         
-        // 计算每日目标和进度
-        const settings = DataManager.loadData().settings;
-        const yearlyGoal = settings.yearlyGoal || 0;
-        const phoneCount = data.phones.length || 1;
-        const currentYear = getCurrentYear();
-        const yearDays = getYearDays(currentYear);
-        const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
-        
         // 计算今日已赚：手机总赚取金额相比昨天结束时的变化
-        const today = getCurrentDate();
         const history = phone.dailyTotalEarnedHistory || {};
-        // 使用新的计算函数获取当前总已赚金额
-        const currentTotalEarned = calculatePhoneTotalEarned(phone);
+        const currentTotalEarned = totalEarned; // 复用已计算的值
 
         // 找到昨天结束时的总赚取作为今天开始的基准
         const yesterdayDate = new Date(today);
@@ -4962,6 +4961,17 @@ function deleteApp(phoneId, appId) {
 function renderStats() {
     const data = DataManager.loadData();
     
+    // 使用 Map 缓存计算结果，避免重复计算
+    const earnedCache = new Map();
+    const getCachedEarned = (app) => {
+        if (earnedCache.has(app.id)) {
+            return earnedCache.get(app.id);
+        }
+        const earned = calculateAppEarned(app);
+        earnedCache.set(app.id, earned);
+        return earned;
+    };
+    
     const allAppsWithPhone = [];
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
@@ -4969,8 +4979,8 @@ function renderStats() {
         });
     });
     
-    // 已赚金额使用统一函数计算
-    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + calculateAppEarned(app), 0);
+    // 已赚金额使用统一函数计算（带缓存）
+    const totalEarned = allAppsWithPhone.reduce((sum, app) => sum + getCachedEarned(app), 0);
     const totalWithdrawn = allAppsWithPhone.reduce((sum, app) => {
         return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     }, 0);
@@ -4980,7 +4990,7 @@ function renderStats() {
         }
         return sum;
     }, 0);
-    const totalBalance = allAppsWithPhone.reduce((sum, app) => sum + app.balance, 0);
+    const totalBalance = allAppsWithPhone.reduce((sum, app) => sum + (app.balance || 0), 0);
     
     const withdrawRate = totalEarned > 0 ? (totalWithdrawn / totalEarned) * 100 : 0;
     const expenseRate = totalWithdrawn > 0 ? (totalExpenses / totalWithdrawn) * 100 : 0;
@@ -5000,8 +5010,8 @@ function renderStats() {
     }
     
     container.innerHTML = allAppsWithPhone.map(app => {
-        // 使用统一函数计算已赚金额
-        const earned = calculateAppEarned(app);
+        // 使用缓存的已赚金额
+        const earned = getCachedEarned(app);
         const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const expenses = app.expenses && app.expenses.length > 0 ? 
             app.expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0;
