@@ -2467,8 +2467,15 @@ function showPage(pageName) {
     // 显示目标页面
     document.getElementById(`page-${pageName}`).classList.add('active');
     
-    // 恢复页面状态
-    restorePageState(pageName);
+    // 恢复页面状态（仪表盘页面特殊处理）
+    if (pageName === 'dashboard') {
+        // 仪表盘页面始终从顶部开始，强制整个页面滚动到顶部
+        window.scrollTo(0, 0);
+        // 清除仪表盘页面的保存状态
+        delete pageStates['dashboard'];
+    } else {
+        restorePageState(pageName);
+    }
     
     // 更新底部导航
     document.querySelectorAll('.tab-item').forEach(item => {
@@ -2511,9 +2518,6 @@ function restorePageState(pageName) {
     if (!state) return;
     
     const pageElement = document.getElementById(`page-${pageName}`);
-    if (pageElement && state.scrollTop) {
-        pageElement.scrollTop = state.scrollTop;
-    }
     
     // 恢复展开的区域
     if (state.expandedSections) {
@@ -2528,6 +2532,20 @@ function restorePageState(pageName) {
     // 恢复游戏页面选中的手机
     if (pageName === 'games' && state.currentGamePhoneId !== undefined) {
         currentGamePhoneId = state.currentGamePhoneId;
+    }
+    
+    // 恢复滚动位置（仪表盘页面始终从顶部开始）
+    if (pageElement) {
+        if (pageName === 'dashboard') {
+            // 仪表盘页面始终滚动到顶部，并清除保存的状态
+            pageElement.scrollTop = 0;
+            delete pageStates['dashboard'];
+        } else if (state.scrollTop) {
+            // 其他页面恢复之前的滚动位置
+            setTimeout(() => {
+                pageElement.scrollTop = state.scrollTop;
+            }, 100);
+        }
     }
 }
 
@@ -3767,11 +3785,15 @@ function handleSearchResult(type, phoneId, appId) {
         // 跳转到手机管理页面
         showPage('phones');
         
-        // 滚动到该手机
+        // 滚动到该手机（只在手机管理页面中查找）
         setTimeout(() => {
-            const phoneElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
+            const phonesPage = document.getElementById('page-phones');
+            if (!phonesPage) return;
+            
+            const phoneElement = phonesPage.querySelector(`[data-phone-id="${phoneId}"]`);
             if (phoneElement) {
-                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                
                 phoneElement.style.animation = 'highlight 1s ease';
                 // 添加高亮边框
                 phoneElement.style.border = '3px solid var(--primary-color)';
@@ -3790,16 +3812,20 @@ function handleSearchResult(type, phoneId, appId) {
         
         // 滚动并高亮（增加延迟确保手机展开和软件渲染完成）
         setTimeout(() => {
-            const phoneElement = document.querySelector(`[data-phone-id="${phoneId}"]`);
-            const appElement = document.querySelector(`[data-app-id="${appId}"]`);
+            // 只在手机管理页面中查找元素
+            const phonesPage = document.getElementById('page-phones');
+            if (!phonesPage) return;
+            
+            const phoneElement = phonesPage.querySelector(`[data-phone-id="${phoneId}"]`);
+            const appElement = phonesPage.querySelector(`[data-app-id="${appId}"]`);
             
             console.log('搜索软件 - phoneId:', phoneId, 'appId:', appId);
             console.log('搜索软件 - phoneElement:', phoneElement);
             console.log('搜索软件 - appElement:', appElement);
             
             if (appElement) {
-                // 滚动到软件元素
-                appElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 滚动到软件元素（只在当前活动页面内）
+                appElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
                 
                 // 添加明显的高亮效果
                 appElement.style.background = 'linear-gradient(135deg, var(--accent-light), var(--accent-color))';
@@ -3819,7 +3845,7 @@ function handleSearchResult(type, phoneId, appId) {
             } else if (phoneElement) {
                 // 如果找不到软件，至少滚动到手机
                 console.log('未找到软件元素，滚动到手机');
-                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             } else {
                 console.log('未找到手机和软件元素');
             }
