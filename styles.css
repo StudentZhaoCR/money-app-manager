@@ -3126,6 +3126,11 @@ body {
     input[type="date"] {
         width: 100%;
         box-sizing: border-box;
+        min-height: 44px;
+        padding: 10px 12px;
+        font-size: 16px;
+        border-width: 1px;
+        border-radius: var(--radius-md);
     }
     
     /* 支出表单适配 */
