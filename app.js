@@ -4408,7 +4408,35 @@ function renderPhones() {
     const dailyTarget = yearlyGoal > 0 ? yearlyGoal / yearDays / phoneCount : 0;
     const today = getCurrentDate();
     
-    container.innerHTML = data.phones.map((phone, index) => {
+    // 手机端优化：分批渲染，避免阻塞
+    const isMobile = window.innerWidth <= 768;
+    const batchSize = isMobile ? 3 : data.phones.length;
+    
+    if (isMobile && data.phones.length > batchSize) {
+        // 手机端分批渲染
+        container.innerHTML = '';
+        let currentIndex = 0;
+        
+        function renderBatch() {
+            const batch = data.phones.slice(currentIndex, currentIndex + batchSize);
+            const batchHtml = batch.map((phone, index) => renderPhoneCard(phone, currentIndex + index, data, dailyTarget, today)).join('');
+            container.insertAdjacentHTML('beforeend', batchHtml);
+            
+            currentIndex += batchSize;
+            if (currentIndex < data.phones.length) {
+                requestAnimationFrame(renderBatch);
+            }
+        }
+        
+        renderBatch();
+    } else {
+        // 电脑端直接渲染
+        container.innerHTML = data.phones.map((phone, index) => renderPhoneCard(phone, index, data, dailyTarget, today)).join('');
+    }
+}
+
+// 渲染单个手机卡片（提取为独立函数）
+function renderPhoneCard(phone, index, data, dailyTarget, today) {
         const isExpanded = expandedPhones[phone.id];
         
         // 计算该手机的总赚取金额（只计算一次）
@@ -4509,7 +4537,6 @@ function renderPhones() {
                 ${isExpanded ? renderAppList(phone) : `<div class="collapsed-hint">点击展开查看 ${phone.apps.length} 个软件</div>`}
             </div>
         `;
-    }).join('');
 }
 
 // 渲染软件列表
