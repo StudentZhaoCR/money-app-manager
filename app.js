@@ -438,30 +438,31 @@ function renderInstallments() {
                     </div>
                 </div>
                 <div class="installment-app-goals">
-                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标</div>
-                    ${installment.appGoals.map(goal => `
-                        <div class="installment-app-goal-item">
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 ${(() => {
+                        const completedCount = installment.appGoals.filter(goal => {
+                            const todayEarned = getAppTodayEarned(goal.appId);
+                            return todayEarned >= goal.dailyTarget;
+                        }).length;
+                        return `<span style="font-size: 12px; color: var(--success-color);">(${completedCount}/${installment.appGoals.length}个已完成)</span>`;
+                    })()}</div>
+                    ${installment.appGoals.map(goal => {
+                        const todayEarned = getAppTodayEarned(goal.appId);
+                        const isCompleted = todayEarned >= goal.dailyTarget;
+                        return `
+                        <div class="installment-app-goal-item ${isCompleted ? 'app-goal-completed' : ''}" style="${isCompleted ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
                             <div class="installment-app-goal-header">
-                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName}</span>
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCompleted ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-details">
-                                <span>每日要赚: ¥${goal.dailyTarget.toFixed(2)}</span>
-                            </div>
-                            <div class="progress-item">
-                                <div class="progress-header">
-                                    <span>已提现: ¥${goal.currentWithdrawn.toFixed(2)}</span>
-                                    <span>${goal.progress.toFixed(0)}%</span>
-                                </div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${goal.progress}%"></div>
-                                </div>
+                                <span>每日目标: ¥${goal.dailyTarget.toFixed(2)}</span>
+                                <span style="color: ${isCompleted ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: ${isCompleted ? '600' : 'normal'};">今日: ¥${todayEarned.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
                 <div class="installment-action-buttons">
                     <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
@@ -4305,6 +4306,48 @@ function renderTodayApps(data) {
     `).join('');
 }
 
+// 获取软件今日赚取金额
+function getAppTodayEarned(appId) {
+    const data = DataManager.loadData();
+    const today = getCurrentDate();
+    
+    // 查找该软件所属的手机
+    for (const phone of data.phones) {
+        const app = phone.apps.find(a => a.id === appId);
+        if (app) {
+            // 获取软件历史记录
+            const history = app.dailyEarnedHistory || {};
+            
+            // 找到昨天结束时的总赚取作为今天开始的基准
+            const yesterdayDate = new Date(today);
+            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+            const yesterday = yesterdayDate.toISOString().split('T')[0];
+            let yesterdayTotal = history[yesterday];
+            
+            if (yesterdayTotal === undefined) {
+                // 昨天没有记录，找昨天之前最后一次记录
+                const datesBeforeYesterday = Object.keys(history)
+                    .filter(d => d <= yesterday)
+                    .sort();
+                
+                if (datesBeforeYesterday.length > 0) {
+                    yesterdayTotal = history[datesBeforeYesterday[datesBeforeYesterday.length - 1]];
+                } else {
+                    yesterdayTotal = 0;
+                }
+            }
+            
+            // 今日赚取 = 当前总赚取 - 昨天结束时的总赚取
+            const currentTotalEarned = app.earned || 0;
+            const todayEarned = Math.max(0, currentTotalEarned - yesterdayTotal);
+            
+            return todayEarned;
+        }
+    }
+    
+    return 0;
+}
+
 // 渲染手机管理页面
 function renderPhones() {
     const data = DataManager.loadData();
@@ -5495,30 +5538,31 @@ function renderInstallments() {
                     </div>
                 </div>
                 <div class="installment-app-goals">
-                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标</div>
-                    ${installment.appGoals.map(goal => `
-                        <div class="installment-app-goal-item">
+                    <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 ${(() => {
+                        const completedCount = installment.appGoals.filter(goal => {
+                            const todayEarned = getAppTodayEarned(goal.appId);
+                            return todayEarned >= goal.dailyTarget;
+                        }).length;
+                        return `<span style="font-size: 12px; color: var(--success-color);">(${completedCount}/${installment.appGoals.length}个已完成)</span>`;
+                    })()}</div>
+                    ${installment.appGoals.map(goal => {
+                        const todayEarned = getAppTodayEarned(goal.appId);
+                        const isCompleted = todayEarned >= goal.dailyTarget;
+                        return `
+                        <div class="installment-app-goal-item ${isCompleted ? 'app-goal-completed' : ''}" style="${isCompleted ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
                             <div class="installment-app-goal-header">
-                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName}</span>
+                                <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCompleted ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-details">
-                                <span>每日要赚: ¥${goal.dailyTarget.toFixed(2)}</span>
-                            </div>
-                            <div class="progress-item">
-                                <div class="progress-header">
-                                    <span>已提现: ¥${goal.currentWithdrawn.toFixed(2)}</span>
-                                    <span>${goal.progress.toFixed(0)}%</span>
-                                </div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${goal.progress}%"></div>
-                                </div>
+                                <span>每日目标: ¥${goal.dailyTarget.toFixed(2)}</span>
+                                <span style="color: ${isCompleted ? 'var(--success-color)' : 'var(--text-secondary)'}; font-weight: ${isCompleted ? '600' : 'normal'};">今日: ¥${todayEarned.toFixed(2)}</span>
                             </div>
                             <div class="installment-app-goal-actions">
                                 <button class="btn btn-secondary btn-sm" onclick="editAppGoalAmount('${installment.id}')">修改目标</button>
                             </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
                 <div class="installment-action-buttons">
                     <button class="btn btn-secondary" onclick="openEditInstallmentModal('${installment.id}')">编辑</button>
