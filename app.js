@@ -446,12 +446,19 @@ function renderInstallments() {
                         let remainingAmount = pendingExpense;
                         let coveredCount = 0;
                         const coveredAppIds = [];
+                        let partialCoveredApp = null;
+                        let partialCoverPercent = 0;
                         
                         for (const goal of sortedGoals) {
                             if (remainingAmount >= goal.totalTarget) {
                                 remainingAmount -= goal.totalTarget;
                                 coveredCount++;
                                 coveredAppIds.push(goal.appId);
+                            } else if (remainingAmount > 0) {
+                                // 部分覆盖
+                                partialCoveredApp = goal.appId;
+                                partialCoverPercent = (remainingAmount / goal.totalTarget) * 100;
+                                remainingAmount = 0;
                             } else {
                                 break;
                             }
@@ -461,8 +468,17 @@ function renderInstallments() {
                     <div class="section-title" style="font-size: 14px; margin-bottom: 12px;">各软件目标 <span style="font-size: 12px; color: var(--success-color);">(${coveredCount}/${installment.appGoals.length}个可覆盖)</span></div>
                     ${installment.appGoals.map(goal => {
                         const isCovered = coveredAppIds.includes(goal.appId);
+                        const isPartial = partialCoveredApp === goal.appId;
+                        
+                        let backgroundStyle = '';
+                        if (isCovered) {
+                            backgroundStyle = 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);';
+                        } else if (isPartial) {
+                            backgroundStyle = `background: linear-gradient(to right, rgba(52, 211, 153, 0.1) ${partialCoverPercent}%, transparent ${partialCoverPercent}%); border-left: 4px solid var(--success-color);`;
+                        }
+                        
                         return `
-                        <div class="installment-app-goal-item ${isCovered ? 'app-goal-completed' : ''}" style="${isCovered ? 'background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--success-color);' : ''}">
+                        <div class="installment-app-goal-item ${isCovered ? 'app-goal-completed' : ''}" style="${backgroundStyle}">
                             <div class="installment-app-goal-header">
                                 <span class="installment-app-name">${goal.phoneName} - ${goal.appName} ${isCovered ? '✅' : ''}</span>
                                 <span class="installment-app-target">目标: ¥${goal.totalTarget.toFixed(2)}</span>
