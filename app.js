@@ -2254,7 +2254,12 @@ function getThemeName(theme) {
         'vitality-orange': '活力橙',
         'ocean-blue': '海洋蓝',
         'sweet-pink': '甜美粉',
-        'warm-sunset': '温暖夕阳'
+        'warm-sunset': '温暖夕阳',
+        'minimal-dark': '极简黑白',
+        'morandi': '莫兰迪色',
+        'forest': '森林自然',
+        'business': '极简商务风',
+        'dark': '暗黑模式'
     };
     return themeNames[theme] || '梦幻紫';
 }

@@ -779,18 +779,34 @@
     color: var(--text-secondary);
 }
 
-/* 主题选择器 - 暗黑模式主题项特殊样式（仅在默认主题下生效） */
-:root .theme-item[data-theme="dark"] {
+/* 主题选择器 - 暗黑模式主题项默认样式（非暗黑模式下显示白色） */
+.theme-item[data-theme="dark"] {
+    background: #ffffff;
+    border-color: transparent;
+    color: var(--text-primary);
+}
+
+.theme-item[data-theme="dark"]:hover {
+    background: var(--bg-cream);
+}
+
+.theme-item[data-theme="dark"].active {
+    background: var(--bg-cream);
+    border-color: var(--primary-color);
+}
+
+/* 默认主题（梦幻紫）时，暗黑模式主题项显示深色 */
+:root:not([data-theme]) .theme-item[data-theme="dark"] {
     background: #1e293b;
     border-color: #334155;
     color: white;
 }
 
-:root .theme-item[data-theme="dark"]:hover {
+:root:not([data-theme]) .theme-item[data-theme="dark"]:hover {
     background: #334155;
 }
 
-:root .theme-item[data-theme="dark"].active {
+:root:not([data-theme]) .theme-item[data-theme="dark"].active {
     background: #334155;
     border-color: #6366f1;
 }
@@ -1089,10 +1105,27 @@ body {
 /* 页面切换 */
 .page {
     display: none;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .page.active {
     display: block;
+    opacity: 1;
+    transform: translateY(0);
+    animation: pageFadeIn 0.4s ease;
+}
+
+@keyframes pageFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* 日期容器 */
