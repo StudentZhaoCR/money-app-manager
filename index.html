@@ -56,21 +56,21 @@
                 <div class="stats-row">
                     <div class="stat-card border-tertiary animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">待支出余额</span>
+                        <span class="stat-label">剩余支出</span>
                         <span class="stat-value" id="total-balance">¥0.00</span>
                     </div>
                     <div class="stat-card border-accent animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">待提现软件</span>
+                        <span class="stat-label">有提现软件</span>
                         <span class="stat-value" id="ready-apps">0</span>
                     </div>
                 </div>
             </div>
 
-            <!-- 智能建议助手 -->
+            <!-- 智能提现建议 -->
             <div class="card mt-4" id="smart-suggestions-card" style="display: none;">
                 <div class="section-header">
-                    <div class="section-title">💡 智能建议</div>
+                    <div class="section-title">💡 智能提现建议</div>
                     <div class="section-divider"></div>
                 </div>
                 <div id="smart-suggestions-content">
@@ -78,10 +78,10 @@
                 </div>
             </div>
 
-            <!-- 收入预测 -->
+            <!-- 提现预测 -->
             <div class="card mt-4" id="income-prediction-card" style="display: none;">
                 <div class="section-header">
-                    <div class="section-title">📊 收入预测</div>
+                    <div class="section-title">📊 提现预测</div>
                     <div class="section-divider"></div>
                 </div>
                 <div id="income-prediction-content">
@@ -89,10 +89,10 @@
                 </div>
             </div>
 
-            <!-- 软件收益排行 -->
+            <!-- 软件提现排行 -->
             <div class="card mt-4" id="app-ranking-card" style="display: none;">
                 <div class="section-header">
-                    <div class="section-title">🏆 软件收益排行</div>
+                    <div class="section-title">🏆 软件提现排行</div>
                     <div class="section-divider"></div>
                 </div>
                 <div id="app-ranking-content">
@@ -100,49 +100,10 @@
                 </div>
             </div>
 
-            <!-- 全年目标 -->
-            <div class="goal-card animate-border">
-                <i></i><i></i>
-                <div class="section-title">全年目标达成情况</div>
-                <div class="progress-item">
-                    <div class="progress-header">
-                        <span>总目标</span>
-                        <span class="font-semibold" id="yearly-progress">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="yearly-progress-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 用户等级和签到 -->
-            <div class="card mt-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <div class="section-header">
-                    <div class="section-title" style="color: white;">🏆 我的成就</div>
-                    <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <div>
-                        <div style="font-size: 24px; font-weight: bold;" id="user-level-title">Lv.1 新手</div>
-                        <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;" id="user-exp">经验值: 0/100</div>
-                    </div>
-                    <button class="btn" id="checkin-btn" onclick="doDailyCheckIn()" style="background: white; color: #667eea; font-weight: bold;">每日签到</button>
-                </div>
-                <div style="display: flex; gap: 16px; font-size: 14px;">
-                    <div>🔥 连续签到: <span id="consecutive-days">0</span>天</div>
-                    <div>📅 累计签到: <span id="total-checkin-days">0</span>天</div>
-                </div>
-                <div class="progress-item" style="margin-top: 12px;">
-                    <div class="progress-bar" style="background: rgba(255,255,255,0.3);">
-                        <div class="progress-fill" id="exp-progress-bar" style="width: 0%; background: white;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 收入趋势图表 -->
+            <!-- 提现趋势图表 -->
             <div class="card mt-4">
                 <div class="section-header">
-                    <div class="section-title">📈 收入趋势</div>
+                    <div class="section-title">📈 提现趋势</div>
                     <div class="section-divider"></div>
                 </div>
                 <div style="margin-bottom: 16px;">
@@ -155,10 +116,10 @@
                 </div>
             </div>
 
-            <!-- 收入日历 -->
+            <!-- 提现日历 -->
             <div class="card mt-4">
                 <div class="section-header">
-                    <div class="section-title">📅 收入日历</div>
+                    <div class="section-title">📅 提现日历</div>
                     <div class="section-divider"></div>
                 </div>
                 <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -170,25 +131,9 @@
                     <!-- 日历将由JS生成 -->
                 </div>
                 <div class="calendar-legend" style="margin-top: 16px; display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-                    <div style="display: flex; align-items: center; gap: 6px;"><div style="width: 16px; height: 16px; background: #dcfce7; border-radius: 4px;"></div><span style="font-size: 12px;">有收入</span></div>
+                    <div style="display: flex; align-items: center; gap: 6px;"><div style="width: 16px; height: 16px; background: #dcfce7; border-radius: 4px;"></div><span style="font-size: 12px;">有提现</span></div>
                     <div style="display: flex; align-items: center; gap: 6px;"><div style="width: 16px; height: 16px; background: #fee2e2; border-radius: 4px;"></div><span style="font-size: 12px;">有支出</span></div>
-                    <div style="display: flex; align-items: center; gap: 6px;"><div style="width: 16px; height: 16px; background: #dbeafe; border-radius: 4px;"></div><span style="font-size: 12px;">有提现</span></div>
                     <div style="display: flex; align-items: center; gap: 6px;"><div style="width: 16px; height: 16px; background: #fef3c7; border-radius: 4px;"></div><span style="font-size: 12px;">还款日</span></div>
-                </div>
-            </div>
-
-            <!-- 每日任务 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📋 每日任务</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="daily-tasks-list">
-                    <div class="empty-state" id="daily-tasks-empty">
-                        <div class="empty-state-illustration">📋</div>
-                        <div class="empty-state-title">暂无每日任务</div>
-                        <div class="empty-state-description">完成任务可以获得经验值和成就</div>
-                    </div>
                 </div>
             </div>
 
@@ -242,35 +187,18 @@
                 <div class="stats-row">
                     <div class="stat-card primary animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">已赚金额</span>
+                        <span class="stat-label">累计提现</span>
                         <span class="stat-value large" id="stats-total-earned">¥0.00</span>
                     </div>
                     <div class="stat-card secondary animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">已提金额</span>
-                        <span class="stat-value" id="stats-total-withdrawn">¥0.00</span>
-                    </div>
-                    <div class="stat-card tertiary animate-border">
-                        <i></i><i></i>
                         <span class="stat-label">支出金额</span>
                         <span class="stat-value" id="stats-total-expenses">¥0.00</span>
                     </div>
-                </div>
-                <div class="stats-row">
-                    <div class="stat-card primary animate-border">
-                        <i></i><i></i>
-                        <span class="stat-label">剩余余额</span>
-                        <span class="stat-value large" id="stats-total-balance">¥0.00</span>
-                    </div>
-                    <div class="stat-card secondary animate-border">
-                        <i></i><i></i>
-                        <span class="stat-label">提现率</span>
-                        <span class="stat-value" id="stats-withdraw-rate">0%</span>
-                    </div>
                     <div class="stat-card tertiary animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">支出率</span>
-                        <span class="stat-value" id="stats-expense-rate">0%</span>
+                        <span class="stat-label">剩余支出</span>
+                        <span class="stat-value" id="stats-total-balance">¥0.00</span>
                     </div>
                 </div>
             </div>
@@ -283,37 +211,6 @@
                 <div class="app-withdraw-list" id="app-withdraw-list">
                     <div class="empty-state">暂无软件数据</div>
                 </div>
-            </div>
-        </div>
-
-        <!-- 提前计算页面 -->
-        <div class="page" id="page-forecast">
-            <div class="date-container">
-                <span class="current-date" id="forecast-current-date"></span>
-            </div>
-
-            <div class="card">
-                <div class="setting-item">
-                    <label class="form-label">目标日期</label>
-                    <div class="date-input-container flex gap-4 items-center">
-                        <input type="date" id="target-date" class="form-input flex-1" min="2026-01-01">
-                        <button class="btn btn-primary" onclick="calculateForecast()">计算</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="forecast-result mt-6" id="forecast-result" style="display: none;">
-                <div class="card">
-                    <div class="result-header">
-                        <div class="result-title text-xl font-semibold mb-4">计算结果</div>
-                        <div class="block mb-1" id="forecast-days-info"></div>
-                        <div class="block mb-4 font-medium" id="forecast-total-needed"></div>
-                    </div>
-                    <div class="app-list" id="forecast-app-list"></div>
-                </div>
-            </div>
-            <div class="empty-state" id="forecast-empty">
-                请选择目标日期并点击计算按钮
             </div>
         </div>
 
@@ -402,19 +299,6 @@
                 <span class="current-date" id="settings-current-date"></span>
             </div>
 
-            <div class="card">
-                <div class="section-header">
-                    <div class="section-title">全年目标金额</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="setting-item">
-                    <div class="goal-input-container">
-                        <input type="number" id="yearly-goal" class="form-input" placeholder="请输入全年目标金额">
-                        <span class="year-days-hint" id="year-days-hint"></span>
-                    </div>
-                </div>
-            </div>
-
             <div class="card mt-6">
                 <div class="section-header">
                     <div class="section-title">主题风格</div>
@@ -468,120 +352,6 @@
                     </div>
                 </div>
             </div>
-
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">📊 数据管理中心</div>
-                    <div class="section-divider"></div>
-                </div>
-                
-                <!-- 数据备份与恢复 -->
-                <div class="settings-card card mb-4">
-                    <div class="settings-card-header">
-                        <span class="settings-icon">💾</span>
-                        <span class="settings-title">数据备份与恢复</span>
-                    </div>
-                    <div class="form-hint mb-3" style="font-size: 13px;">JSON格式包含所有数据，用于完整备份和恢复</div>
-                    <div class="data-management-buttons flex gap-3 mb-4">
-                        <button class="btn btn-primary flex-1" onclick="exportJSON()">📥 导出JSON</button>
-                        <button class="btn btn-secondary flex-1" onclick="importJSON()">📤 导入JSON</button>
-                    </div>
-                    <div class="data-management-buttons">
-                        <button class="btn btn-primary w-full" onclick="exportData()">📊 导出Excel</button>
-                    </div>
-                </div>
-
-                <!-- 日期模拟测试 -->
-                <div class="settings-card card mb-4">
-                    <div class="settings-card-header">
-                        <span class="settings-icon">📅</span>
-                        <span class="settings-title">日期模拟测试</span>
-                    </div>
-                    <div class="form-hint mb-3" style="font-size: 13px;">模拟不同日期，验证每日赚取计算是否正确</div>
-                    <div class="form-group mb-3">
-                        <label class="form-label" style="font-size: 13px;">模拟日期</label>
-                        <input type="date" id="simulated-date" class="form-input">
-                    </div>
-                    <div class="form-group mb-3">
-                        <label class="form-label" style="font-size: 13px;">当前状态</label>
-                        <div id="simulation-status" style="padding: 10px; background: var(--bg-cream); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 13px;">
-                            <span style="color: var(--text-secondary);">使用真实日期</span>
-                        </div>
-                    </div>
-                    <div class="data-management-buttons flex gap-3 mb-3">
-                        <button class="btn btn-primary flex-1" onclick="applyDateSimulation()">✅ 应用</button>
-                        <button class="btn btn-secondary flex-1" onclick="resetDateSimulation()">🔄 重置</button>
-                    </div>
-                    <div id="simulation-preview" style="display: none;">
-                        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">模拟效果预览</div>
-                        <div id="simulation-preview-content" style="padding: 10px; background: var(--bg-cream); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px;"></div>
-                    </div>
-                </div>
-
-                <!-- 批量操作 -->
-                <div class="settings-card card mb-4">
-                    <div class="settings-card-header">
-                        <span class="settings-icon">⚡</span>
-                        <span class="settings-title">批量操作</span>
-                    </div>
-                    
-                    <!-- 批量添加手机 -->
-                    <div class="settings-subsection mb-4">
-                        <div class="settings-subtitle">📱 批量添加手机</div>
-                        <div class="form-hint mb-2" style="font-size: 13px;">每行一个名称</div>
-                        <textarea id="bulk-phone-names" class="form-input mb-2" rows="3" placeholder="手机1&#10;手机2&#10;手机3" style="font-size: 13px;"></textarea>
-                        <button class="btn btn-primary w-full" onclick="bulkAddPhones()">添加手机</button>
-                    </div>
-                    
-                    <!-- 批量添加软件 -->
-                    <div class="settings-subsection">
-                        <div class="settings-subtitle">📲 批量添加软件</div>
-                        <div class="form-hint mb-2" style="font-size: 13px;">添加到所有手机</div>
-                        <textarea id="bulk-app-names" class="form-input mb-2" rows="3" placeholder="抖音极速版&#10;快手极速版&#10;百度极速版" style="font-size: 13px;"></textarea>
-                        <div class="form-group mb-2">
-                            <label class="form-label" style="font-size: 12px;">默认最小提现金额 (元)</label>
-                            <input type="number" id="bulk-app-min-withdraw" class="form-input" value="0.3" step="0.01" style="font-size: 13px;">
-                        </div>
-                        <button class="btn btn-primary w-full" onclick="bulkAddApps()">添加软件</button>
-                    </div>
-                </div>
-
-                <!-- 自动备份设置 -->
-                <div class="settings-card card mb-4">
-                    <div class="settings-card-header">
-                        <span class="settings-icon">💾</span>
-                        <span class="settings-title">自动备份设置</span>
-                    </div>
-                    <div class="form-hint mb-3" style="font-size: 13px;">设置自动备份频率，防止数据丢失</div>
-                    <div class="form-group mb-3">
-                        <label class="form-label" style="font-size: 12px;">自动备份频率</label>
-                        <select id="auto-backup-frequency" class="form-input" onchange="saveAutoBackupSettings()" style="font-size: 13px;">
-                            <option value="never">不自动备份</option>
-                            <option value="daily">每天</option>
-                            <option value="weekly">每周</option>
-                            <option value="monthly">每月</option>
-                        </select>
-                    </div>
-                    <div class="form-group mb-3">
-                        <label class="form-label" style="font-size: 12px;">备份保留数量</label>
-                        <select id="auto-backup-keep" class="form-input" onchange="saveAutoBackupSettings()" style="font-size: 13px;">
-                            <option value="3">保留3个备份</option>
-                            <option value="5">保留5个备份</option>
-                            <option value="10">保留10个备份</option>
-                            <option value="30">保留30个备份</option>
-                        </select>
-                    </div>
-                    <div class="form-group mb-3">
-                        <label class="form-label" style="font-size: 12px;">上次备份</label>
-                        <div id="last-backup-time" style="padding: 10px; background: var(--bg-cream); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 13px; color: var(--text-secondary);">
-                            从未备份
-                        </div>
-                    </div>
-                    <div class="flex gap-4">
-                        <button class="btn btn-primary flex-1" onclick="manualBackup()">💾 立即备份</button>
-                        <button class="btn btn-secondary flex-1" onclick="showBackupHistory()">📋 备份历史</button>
-                    </div>
-                </div>
 
                 <!-- 支出管理 -->
                 <div class="settings-card card mb-4">
@@ -645,63 +415,6 @@
             </div>
         </div>
 
-        <!-- 今日赚取页面 -->
-        <div class="page" id="page-today-earn">
-            <div class="page-header">
-                <button class="btn btn-secondary" onclick="showPage('phones')">返回</button>
-                <div class="section-title" id="today-earn-title">今日赚取</div>
-            </div>
-            
-            <!-- 切换按钮 -->
-            <div class="today-earn-tabs">
-                <button class="today-earn-tab active" id="tab-phone-earn" onclick="switchTodayEarnTab('phone')">
-                    📱 手机今日赚取
-                </button>
-                <button class="today-earn-tab" id="tab-app-earn" onclick="switchTodayEarnTab('app')">
-                    📲 软件今日赚取
-                </button>
-            </div>
-            
-            <!-- 手机今日赚取内容 -->
-            <div class="today-earn-content" id="phone-earn-content">
-                <div class="today-earn-summary card">
-                    <div class="summary-header">
-                        <span class="summary-title">📊 每日赚取概览</span>
-                    </div>
-                    <div class="summary-stats">
-                        <div class="summary-stat">
-                            <span class="summary-label">今日目标</span>
-                            <span class="summary-value" id="phone-daily-target">¥0.00</span>
-                        </div>
-                        <div class="summary-stat">
-                            <span class="summary-label">今日已赚</span>
-                            <span class="summary-value earned" id="phone-today-earned">¥0.00</span>
-                        </div>
-                        <div class="summary-stat">
-                            <span class="summary-label">完成进度</span>
-                            <span class="summary-value" id="phone-today-progress">0%</span>
-                        </div>
-                    </div>
-                    <div class="summary-progress-bar">
-                    <div class="summary-progress-fill" id="phone-progress-fill" style="width: 0%"></div>
-                </div>
-            </div>
-
-            <div class="section-title mt-6">📅 每日赚取记录</div>
-            <div class="earn-records-list" id="phone-earn-records">
-                <div class="empty-state">暂无赚取记录</div>
-            </div>
-        </div>
-            
-            <!-- 软件今日赚取内容 -->
-            <div class="today-earn-content hidden" id="app-earn-content">
-                <div class="section-title">📅 软件每日收益记录</div>
-                <div class="earn-records-list" id="app-earn-records">
-                    <div class="empty-state">暂无软件赚取记录</div>
-                </div>
-            </div>
-        </div>
-
         <!-- 分期还款管理页面 -->
         <div class="page" id="page-installments">
             <div class="date-container">
@@ -733,32 +446,23 @@
                     </div>
                     <div class="stats-row">
                         <div class="stat-card border-tertiary">
-                            <span class="stat-label">待支出金额</span>
-                            <span class="stat-value" id="installment-earned">¥0.00</span>
+                            <span class="stat-label">待还金额</span>
+                            <span class="stat-value" id="installment-pending-amount">¥0.00</span>
                         </div>
                         <div class="stat-card border-accent">
-                            <span class="stat-label">待提现金额</span>
-                            <span class="stat-value" id="installment-needed">¥0.00</span>
+                            <span class="stat-label">已还金额</span>
+                            <span class="stat-value" id="installment-repaid-amount">¥0.00</span>
                         </div>
                     </div>
                     <div class="stats-row">
                         <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9);">每日需赚取</span>
-                            <span class="stat-value" style="color: white;" id="daily-earn-needed">¥0.00</span>
+                            <span class="stat-label" style="color: rgba(255,255,255,0.9);">可用资金</span>
+                            <span class="stat-value" style="color: white;" id="installment-available-funds">¥0.00</span>
                         </div>
                         <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
                             <span class="stat-label" style="color: rgba(255,255,255,0.9);">剩余天数</span>
                             <span class="stat-value" style="color: white;" id="installment-days-left">0天</span>
                         </div>
-                    </div>
-                </div>
-                <div class="progress-item">
-                    <div class="progress-header">
-                        <span>总体进度</span>
-                        <span class="font-semibold" id="installment-overall-progress">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="installment-progress-bar" style="width: 0%"></div>
                     </div>
                 </div>
                 
@@ -789,10 +493,6 @@
         <div class="tab-item" data-page="installments" onclick="showPage('installments')">
             <span class="tab-icon">💳</span>
             <span class="tab-text">分期还款</span>
-        </div>
-        <div class="tab-item" data-page="forecast" onclick="showPage('forecast')">
-            <span class="tab-icon">🎯</span>
-            <span class="tab-text">提前计算</span>
         </div>
         <div class="tab-item" data-page="games" onclick="showPage('games')">
             <span class="tab-icon">🎮</span>
