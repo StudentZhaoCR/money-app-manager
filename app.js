@@ -1514,6 +1514,196 @@ class DataManager {
             };
         });
     }
+
+    // 计算每日最低提现目标
+    static calculateDailyWithdrawalTarget() {
+        const data = this.loadData();
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+
+        // 获取所有活跃分期
+        const activeInstallments = data.installments.filter(i => i.status === 'active');
+
+        if (activeInstallments.length === 0) {
+            return null;
+        }
+
+        // 计算总待还金额
+        const totalPendingAmount = activeInstallments.reduce((sum, inst) => {
+            return sum + (inst.amount - (inst.paidAmount || 0));
+        }, 0);
+
+        // 找到最远的还款日期
+        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+        const furthestDueDate = activeInstallments[0].dueDate;
+        const furthestDate = new Date(furthestDueDate);
+
+        // 计算剩余天数（从今天到最远还款日）
+        const daysRemaining = Math.max(1, Math.ceil((furthestDate - now) / (1000 * 60 * 60 * 24)));
+
+        // 计算每日最低提现 = 总待还金额 / 剩余天数
+        const dailyTarget = totalPendingAmount / daysRemaining;
+
+        // 统计软件数量
+        const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+
+        // 每个软件每日目标
+        const perAppTarget = totalApps > 0 ? dailyTarget / totalApps : 0;
+
+        return {
+            totalPendingAmount,
+            furthestDueDate,
+            daysRemaining,
+            dailyTarget,
+            totalApps,
+            perAppTarget
+        };
+    }
+
+    // 预测还清所有分期所需天数
+    static predictRepaymentDays() {
+        const data = this.loadData();
+        const now = new Date();
+
+        // 获取所有活跃分期
+        const activeInstallments = data.installments.filter(i => i.status === 'active');
+
+        if (activeInstallments.length === 0) {
+            return null;
+        }
+
+        // 计算总待还金额
+        const totalPendingAmount = activeInstallments.reduce((sum, inst) => {
+            return sum + (inst.amount - (inst.paidAmount || 0));
+        }, 0);
+
+        // 找到最远还款日
+        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+        const furthestDueDate = activeInstallments[0].dueDate;
+        const plannedDays = Math.max(1, Math.ceil((new Date(furthestDueDate) - now) / (1000 * 60 * 60 * 24)));
+
+        // 获取今日实际提现金额
+        const today = now.toISOString().split('T')[0];
+        let todayWithdrawal = 0;
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.withdrawals) {
+                    app.withdrawals.forEach(w => {
+                        if (w.date === today) {
+                            todayWithdrawal += w.amount;
+                        }
+                    });
+                }
+            });
+        });
+
+        // 如果没有今日提现数据，使用历史平均
+        let dailyWithdrawalRate = todayWithdrawal;
+        if (dailyWithdrawalRate === 0) {
+            // 计算最近7天的平均提现
+            let totalWithdrawal7Days = 0;
+            let daysWithWithdrawal = 0;
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                const dateStr = date.toISOString().split('T')[0];
+
+                let dayWithdrawal = 0;
+                data.phones.forEach(phone => {
+                    phone.apps.forEach(app => {
+                        if (app.withdrawals) {
+                            app.withdrawals.forEach(w => {
+                                if (w.date === dateStr) {
+                                    dayWithdrawal += w.amount;
+                                }
+                            });
+                        }
+                    });
+                });
+
+                if (dayWithdrawal > 0) {
+                    totalWithdrawal7Days += dayWithdrawal;
+                    daysWithWithdrawal++;
+                }
+            }
+
+            dailyWithdrawalRate = daysWithWithdrawal > 0 ? totalWithdrawal7Days / daysWithWithdrawal : 0;
+        }
+
+        // 预测还清天数
+        const predictedDays = dailyWithdrawalRate > 0 ? Math.ceil(totalPendingAmount / dailyWithdrawalRate) : 0;
+
+        // 计算提前天数
+        const daysAhead = plannedDays - predictedDays;
+
+        return {
+            totalPendingAmount,
+            plannedDays,
+            predictedDays,
+            daysAhead,
+            dailyWithdrawalRate,
+            furthestDueDate,
+            status: daysAhead > 0 ? 'ahead' : daysAhead < 0 ? 'behind' : 'ontrack'
+        };
+    }
+
+    // 计算追赶建议（当落后时）
+    static calculateCatchUpAdvice() {
+        const prediction = this.predictRepaymentDays();
+        if (!prediction || prediction.status !== 'behind') {
+            return null;
+        }
+
+        const data = this.loadData();
+        const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+
+        // 需要在计划天数内还完，计算每天需要提现多少
+        const requiredDailyWithdrawal = prediction.totalPendingAmount / prediction.plannedDays;
+
+        // 计算每天需要多提现多少
+        const extraNeeded = requiredDailyWithdrawal - prediction.dailyWithdrawalRate;
+
+        // 每个软件需要多提现多少
+        const extraPerApp = totalApps > 0 ? extraNeeded / totalApps : 0;
+
+        // 建议增加软件数量
+        const currentAvg = prediction.dailyWithdrawalRate;
+        const appsNeeded = currentAvg > 0 ? Math.ceil(requiredDailyWithdrawal / currentAvg * totalApps) : 0;
+        const suggestedApps = Math.max(0, appsNeeded - totalApps);
+
+        return {
+            plannedDays: prediction.plannedDays,
+            requiredDailyWithdrawal,
+            currentDailyWithdrawal: prediction.dailyWithdrawalRate,
+            extraNeeded,
+            totalApps,
+            extraPerApp,
+            suggestedApps,
+            message: this.generateCatchUpMessage(extraNeeded, extraPerApp, suggestedApps)
+        };
+    }
+
+    // 生成追赶建议文案
+    static generateCatchUpMessage(extraNeeded, extraPerApp, suggestedApps) {
+        if (extraNeeded <= 0) return null;
+
+        let messages = [];
+
+        // 建议1：增加每日提现
+        messages.push(`每天需要多提现 ¥${extraNeeded.toFixed(2)}`);
+
+        // 建议2：每个软件多提现
+        if (extraPerApp > 0) {
+            messages.push(`每个软件每天多提现 ¥${extraPerApp.toFixed(2)}`);
+        }
+
+        // 建议3：增加软件数量
+        if (suggestedApps > 0) {
+            messages.push(`建议增加 ${suggestedApps} 个赚钱软件`);
+        }
+
+        return messages;
+    }
 }
 
 // 全局状态
@@ -1707,12 +1897,6 @@ function init() {
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
-    
-    // 检查自动备份
-    checkAutoBackup();
-    
-    // 加载自动备份设置
-    loadAutoBackupSettings();
 }
 
 // 修复旧版本数据：为没有历史记录的手机初始化历史记录
@@ -2071,7 +2255,10 @@ function renderDashboard() {
         }, 0);
     }, 0);
     const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
-    const netEarning = totalWithdrawnAmount - totalExpenses;
+    // 已还分期总额
+    const totalRepaid = data.installments ? data.installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0) : 0;
+    // 剩余支出 = 总提现 - 总支出 - 已还分期
+    const netEarning = totalWithdrawnAmount - totalExpenses - totalRepaid;
     
     // 统计有提现记录的软件数量
     const appsWithWithdrawals = data.phones.reduce((sum, phone) => {
@@ -2086,7 +2273,71 @@ function renderDashboard() {
     document.getElementById('total-apps').textContent = totalApps;
     document.getElementById('total-balance').textContent = `¥${netEarning.toFixed(2)}`;
     document.getElementById('ready-apps').textContent = appsWithWithdrawals;
-    
+
+    // 计算并显示每日最低提现目标
+    const dailyTarget = DataManager.calculateDailyWithdrawalTarget();
+    const dailyTargetEl = document.getElementById('daily-withdrawal-target');
+    if (dailyTargetEl) {
+        if (dailyTarget) {
+            dailyTargetEl.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>今日目标</span>
+                    <span style="font-weight: 700; color: var(--primary-color);">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                    ${dailyTarget.daysRemaining}天还完 · 共${dailyTarget.totalApps}个软件 · 每个约¥${dailyTarget.perAppTarget.toFixed(2)}
+                </div>
+            `;
+        } else {
+            dailyTargetEl.innerHTML = '<span style="color: var(--text-secondary);">无分期目标</span>';
+        }
+    }
+
+    // 计算并显示还款预测
+    const repaymentPrediction = DataManager.predictRepaymentDays();
+    const predictionEl = document.getElementById('repayment-prediction');
+    if (predictionEl && repaymentPrediction) {
+        const statusColor = repaymentPrediction.status === 'ahead' ? '#22c55e' :
+                           repaymentPrediction.status === 'behind' ? '#ef4444' : '#f59e0b';
+        const statusText = repaymentPrediction.status === 'ahead' ? '提前' :
+                          repaymentPrediction.status === 'behind' ? '落后' : '正常';
+        const daysAheadText = repaymentPrediction.daysAhead > 0 ?
+            `提前${repaymentPrediction.daysAhead}天` :
+            repaymentPrediction.daysAhead < 0 ?
+            `落后${Math.abs(repaymentPrediction.daysAhead)}天` :
+            '按计划进行';
+
+        let predictionHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>还款预测</span>
+                <span style="font-weight: 700; color: ${statusColor};">${daysAheadText}</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                计划${repaymentPrediction.plannedDays}天 · 预计${repaymentPrediction.predictedDays}天还清
+                ${repaymentPrediction.dailyWithdrawalRate > 0 ? `· 今日已提现¥${repaymentPrediction.dailyWithdrawalRate.toFixed(2)}` : '· 今日尚未提现'}
+            </div>
+        `;
+
+        // 如果落后，显示追赶建议
+        if (repaymentPrediction.status === 'behind') {
+            const catchUpAdvice = DataManager.calculateCatchUpAdvice();
+            if (catchUpAdvice && catchUpAdvice.message && catchUpAdvice.message.length > 0) {
+                predictionHTML += `
+                    <div style="margin-top: 8px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
+                        <div style="font-size: 11px; font-weight: 600; color: #ef4444; margin-bottom: 4px;">💡 追赶建议</div>
+                        ${catchUpAdvice.message.map(msg => `
+                            <div style="font-size: 10px; color: #dc2626; margin-top: 2px;">• ${msg}</div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        }
+
+        predictionEl.innerHTML = predictionHTML;
+    } else if (predictionEl) {
+        predictionEl.innerHTML = '<span style="color: var(--text-secondary);">无分期数据</span>';
+    }
+
     // 渲染今日需要关注的软件
     renderTodayApps(data);
     
@@ -3084,10 +3335,14 @@ function generateEmptyState(type, options = {}) {
     return html;
 }
 
-// 渲染今日需要关注的软件 - 显示当天未提现的软件
+// 渲染今日需要关注的软件 - 显示当天未提现的软件及今日目标
 function renderTodayApps(data) {
     const today = getCurrentDate();
     let todayApps = [];
+
+    // 获取每日提现目标
+    const dailyTarget = DataManager.calculateDailyWithdrawalTarget();
+    const perAppTarget = dailyTarget ? dailyTarget.perAppTarget : 0;
 
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
@@ -3116,6 +3371,7 @@ function renderTodayApps(data) {
             <div class="app-item">
                 <div class="app-header">
                     <span class="app-name">${app.phoneName} - ${app.name}</span>
+                    ${dailyTarget ? `<span style="font-size: 12px; color: var(--primary-color); font-weight: 600;">目标: ¥${perAppTarget.toFixed(2)}</span>` : ''}
                 </div>
                 <div class="app-info">
                     <span>累计提现: ¥${earned.toFixed(2)}</span>
@@ -3535,8 +3791,8 @@ function renderStats() {
 // 渲染设置页面
 function renderSettings() {
     const data = DataManager.loadData();
-    
-    // 计算待支出余额（总提现金额 - 总支出金额）
+
+    // 计算待支出余额（总提现金额 - 总支出金额 - 已还分期）
     // 总提现金额 = 所有软件的 withdrawn + historicalWithdrawn
     let totalWithdrawnAmount = 0;
     data.phones.forEach(phone => {
@@ -3544,15 +3800,18 @@ function renderSettings() {
             totalWithdrawnAmount += (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         });
     });
-    
+
     // 计算总支出金额
     let totalExpenses = 0;
     if (data.expenses && data.expenses.length > 0) {
         totalExpenses = data.expenses.reduce((sum, expense) => sum + expense.amount, 0);
     }
-    
-    // 待支出金额 = 总提现金额 - 总支出金额
-    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses;
+
+    // 已还分期总额
+    const totalRepaid = data.installments ? data.installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0) : 0;
+
+    // 待支出金额 = 总提现金额 - 总支出金额 - 已还分期
+    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses - totalRepaid;
     document.getElementById('total-withdrawn').value = pendingExpenseBalance.toFixed(2);
 }
 
@@ -5455,4 +5714,594 @@ function completeTodayGame() {
 document.addEventListener('DOMContentLoaded', function() {
     init();
     initCalendars();
+});
+
+// ==================== 合成提现游戏 ====================
+
+// 游戏配置
+const MERGE_GAME_CONFIG = {
+    ballRadius: 25,
+    gravity: 0.5,
+    friction: 0.98,
+    wallBounce: 0.7,
+    mergeDistance: 5,
+    colors: [
+        '#667eea', '#764ba2', '#f093fb', '#f5576c',
+        '#4facfe', '#00f2fe', '#43e97b', '#38f9d7',
+        '#fa709a', '#fee140', '#30cfd0', '#330867'
+    ]
+};
+
+// 金额等级配置
+const AMOUNT_LEVELS = [
+    { amount: 0.3, radius: 20, color: '#667eea' },
+    { amount: 0.5, radius: 25, color: '#764ba2' },
+    { amount: 1, radius: 30, color: '#f093fb' },
+    { amount: 2, radius: 35, color: '#f5576c' },
+    { amount: 3, radius: 40, color: '#4facfe' },
+    { amount: 5, radius: 45, color: '#00f2fe' },
+    { amount: 10, radius: 50, color: '#43e97b' },
+    { amount: 20, radius: 55, color: '#38f9d7' },
+    { amount: 30, radius: 60, color: '#fa709a' },
+    { amount: 50, radius: 65, color: '#fee140' },
+    { amount: 100, radius: 70, color: '#30cfd0' }
+];
+
+// 游戏状态
+let mergeGameState = {
+    balls: [],
+    score: 0,
+    maxAmount: 0,
+    mergeCount: 0,
+    startTime: null,
+    isRunning: false,
+    nextBallLevel: 0,
+    canvas: null,
+    ctx: null,
+    animationId: null
+};
+
+// 显示合成游戏页面
+function showMergeGame() {
+    showPage('merge-game');
+    initMergeGame();
+}
+
+// 初始化游戏
+function initMergeGame() {
+    const canvas = document.getElementById('merge-game-canvas');
+    if (!canvas) return;
+
+    // 设置画布大小
+    canvas.width = canvas.offsetWidth;
+    canvas.height = 500;
+
+    mergeGameState.canvas = canvas;
+    mergeGameState.ctx = canvas.getContext('2d');
+    mergeGameState.balls = [];
+    mergeGameState.score = 0;
+    mergeGameState.maxAmount = 0;
+    mergeGameState.mergeCount = 0;
+    mergeGameState.startTime = Date.now();
+    mergeGameState.isRunning = true;
+    mergeGameState.nextBallLevel = 0;
+    mergeGameState.withdrawalBalls = []; // 存储与提现记录关联的球体
+
+    // 从实际提现记录生成初始球体
+    loadWithdrawalsAsBalls();
+
+    // 更新显示
+    updateMergeGameStats();
+    updateNextBallPreview();
+
+    // 绑定点击事件
+    canvas.onclick = handleMergeGameClick;
+
+    // 开始游戏循环
+    startMergeGameLoop();
+
+    // 开始计时
+    startMergeGameTimer();
+}
+
+// 从提现记录加载球体
+function loadWithdrawalsAsBalls() {
+    const data = DataManager.loadData();
+    const withdrawals = [];
+
+    // 收集所有提现记录
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (app.withdrawals && app.withdrawals.length > 0) {
+                app.withdrawals.forEach(w => {
+                    withdrawals.push({
+                        amount: w.amount,
+                        date: w.date,
+                        appName: app.name,
+                        phoneName: phone.name
+                    });
+                });
+            }
+        });
+    });
+
+    // 如果没有提现记录，显示提示
+    if (withdrawals.length === 0) {
+        showToast('暂无提现记录，请先添加提现数据');
+        return;
+    }
+
+    // 根据提现金额生成对应级别的球体
+    withdrawals.forEach((w, index) => {
+        // 找到最接近的金额级别
+        let level = 0;
+        for (let i = 0; i < AMOUNT_LEVELS.length; i++) {
+            if (Math.abs(w.amount - AMOUNT_LEVELS[i].amount) < 0.1) {
+                level = i;
+                break;
+            }
+            // 如果提现金额大于当前级别，继续查找
+            if (w.amount >= AMOUNT_LEVELS[i].amount) {
+                level = i;
+            }
+        }
+
+        // 在画布顶部排列球体
+        const x = 50 + (index % 5) * ((mergeGameState.canvas.width - 100) / 4);
+        const y = 30 + Math.floor(index / 5) * 60;
+
+        const ball = createBall(x, y, level);
+        ball.withdrawalInfo = w; // 关联提现信息
+        ball.isStatic = true; // 初始时静止，点击开始后落下
+        ball.isFromWithdrawal = true; // 标记为来自提现记录
+
+        mergeGameState.balls.push(ball);
+        mergeGameState.withdrawalBalls.push(ball);
+    });
+
+    // 显示加载了多少个提现球体
+    showToast(`已加载 ${withdrawals.length} 个提现记录作为球体`);
+
+    // 更新下一个球预览为null（不再生成新球）
+    mergeGameState.nextBallLevel = -1;
+    updateNextBallPreview();
+}
+
+// 游戏主循环
+function startMergeGameLoop() {
+    if (!mergeGameState.isRunning) return;
+
+    updateMergeGame();
+    renderMergeGame();
+
+    mergeGameState.animationId = requestAnimationFrame(startMergeGameLoop);
+}
+
+// 更新游戏状态
+function updateMergeGame() {
+    const balls = mergeGameState.balls;
+    const canvas = mergeGameState.canvas;
+
+    // 应用重力和更新位置
+    balls.forEach(ball => {
+        if (ball.isStatic) return;
+
+        ball.vy += MERGE_GAME_CONFIG.gravity;
+        ball.vx *= MERGE_GAME_CONFIG.friction;
+        ball.vy *= MERGE_GAME_CONFIG.friction;
+
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // 边界碰撞
+        if (ball.x - ball.radius < 0) {
+            ball.x = ball.radius;
+            ball.vx *= -MERGE_GAME_CONFIG.wallBounce;
+        }
+        if (ball.x + ball.radius > canvas.width) {
+            ball.x = canvas.width - ball.radius;
+            ball.vx *= -MERGE_GAME_CONFIG.wallBounce;
+        }
+        if (ball.y + ball.radius > canvas.height) {
+            ball.y = canvas.height - ball.radius;
+            ball.vy *= -MERGE_GAME_CONFIG.wallBounce;
+        }
+    });
+
+    // 球体之间的碰撞和合成
+    for (let i = 0; i < balls.length; i++) {
+        for (let j = i + 1; j < balls.length; j++) {
+            const ball1 = balls[i];
+            const ball2 = balls[j];
+
+            const dx = ball2.x - ball1.x;
+            const dy = ball2.y - ball1.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // 检查是否可以合成（相同金额且距离足够近）
+            if (ball1.level === ball2.level && distance < ball1.radius + ball2.radius + MERGE_GAME_CONFIG.mergeDistance) {
+                // 合成
+                mergeBalls(i, j);
+                return; // 一次只合成一对
+            }
+
+            // 物理碰撞
+            if (distance < ball1.radius + ball2.radius) {
+                resolveBallCollision(ball1, ball2);
+            }
+        }
+    }
+}
+
+// 合成两个球
+function mergeBalls(index1, index2) {
+    const balls = mergeGameState.balls;
+    const ball1 = balls[index1];
+    const ball2 = balls[index2];
+
+    // 计算新位置（中点）
+    const newX = (ball1.x + ball2.x) / 2;
+    const newY = (ball1.y + ball2.y) / 2;
+
+    // 计算新等级
+    const newLevel = ball1.level + 1;
+
+    // 移除旧球
+    balls.splice(Math.max(index1, index2), 1);
+    balls.splice(Math.min(index1, index2), 1);
+
+    // 创建新球
+    const newBall = createBall(newX, newY, newLevel);
+    newBall.vx = (ball1.vx + ball2.vx) / 2;
+    newBall.vy = (ball1.vy + ball2.vy) / 2;
+
+    // 合并提现信息
+    if (ball1.withdrawalInfo || ball2.withdrawalInfo) {
+        newBall.withdrawalInfo = {
+            sources: []
+        };
+        if (ball1.withdrawalInfo) {
+            newBall.withdrawalInfo.sources.push(ball1.withdrawalInfo);
+        }
+        if (ball2.withdrawalInfo) {
+            newBall.withdrawalInfo.sources.push(ball2.withdrawalInfo);
+        }
+    }
+
+    balls.push(newBall);
+
+    // 更新分数和统计
+    const amount = AMOUNT_LEVELS[newLevel]?.amount || (AMOUNT_LEVELS[AMOUNT_LEVELS.length - 1].amount * 2);
+    mergeGameState.score += amount;
+    mergeGameState.mergeCount++;
+    if (amount > mergeGameState.maxAmount) {
+        mergeGameState.maxAmount = amount;
+    }
+
+    // 更新显示
+    updateMergeGameStats();
+    addMergeRecord(amount, newBall.withdrawalInfo);
+
+    // 播放合成效果（可以添加音效）
+    showMergeEffect(newX, newY, amount);
+}
+
+// 创建球体
+function createBall(x, y, level) {
+    const config = AMOUNT_LEVELS[Math.min(level, AMOUNT_LEVELS.length - 1)];
+    return {
+        x: x,
+        y: y,
+        vx: 0,
+        vy: 0,
+        radius: config.radius,
+        level: level,
+        amount: config.amount,
+        color: config.color,
+        isStatic: false
+    };
+}
+
+// 解决球体碰撞
+function resolveBallCollision(ball1, ball2) {
+    const dx = ball2.x - ball1.x;
+    const dy = ball2.y - ball1.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance === 0) return;
+
+    // 分离球体
+    const overlap = ball1.radius + ball2.radius - distance;
+    const separationX = (dx / distance) * overlap * 0.5;
+    const separationY = (dy / distance) * overlap * 0.5;
+
+    ball1.x -= separationX;
+    ball1.y -= separationY;
+    ball2.x += separationX;
+    ball2.y += separationY;
+
+    // 交换速度（简化碰撞响应）
+    const tempVx = ball1.vx;
+    const tempVy = ball1.vy;
+    ball1.vx = ball2.vx * 0.8;
+    ball1.vy = ball2.vy * 0.8;
+    ball2.vx = tempVx * 0.8;
+    ball2.vy = tempVy * 0.8;
+}
+
+// 渲染游戏
+function renderMergeGame() {
+    const ctx = mergeGameState.ctx;
+    const canvas = mergeGameState.canvas;
+
+    // 清空画布
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 绘制球体
+    mergeGameState.balls.forEach(ball => {
+        // 球体阴影
+        ctx.beginPath();
+        ctx.arc(ball.x + 3, ball.y + 3, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fill();
+
+        // 球体本体
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+
+        // 渐变填充
+        const gradient = ctx.createRadialGradient(
+            ball.x - ball.radius * 0.3,
+            ball.y - ball.radius * 0.3,
+            0,
+            ball.x,
+            ball.y,
+            ball.radius
+        );
+
+        // 静止的提现球体使用更亮的颜色
+        if (ball.isStatic) {
+            gradient.addColorStop(0, lightenColor(ball.color, 50));
+            gradient.addColorStop(1, ball.color);
+        } else {
+            gradient.addColorStop(0, lightenColor(ball.color, 30));
+            gradient.addColorStop(1, ball.color);
+        }
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // 边框 - 提现球体有特殊边框
+        if (ball.isStatic && ball.withdrawalInfo) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            // 添加发光效果
+            ctx.shadowColor = ball.color;
+            ctx.shadowBlur = 10;
+        } else {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 0;
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0; // 重置阴影
+
+        // 金额文字
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(12, ball.radius * 0.4)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`¥${ball.amount}`, ball.x, ball.y);
+
+        // 静止球体显示提示图标
+        if (ball.isStatic) {
+            ctx.font = '12px Arial';
+            ctx.fillText('👆', ball.x, ball.y - ball.radius - 10);
+        }
+    });
+
+    // 绘制预览线（鼠标位置）
+    if (mergeGameState.mouseX !== undefined && mergeGameState.nextBallLevel >= 0) {
+        const previewLevel = Math.min(mergeGameState.nextBallLevel, AMOUNT_LEVELS.length - 1);
+        const previewRadius = AMOUNT_LEVELS[previewLevel].radius;
+        ctx.beginPath();
+        ctx.moveTo(mergeGameState.mouseX, 0);
+        ctx.lineTo(mergeGameState.mouseX, canvas.height);
+        ctx.strokeStyle = 'rgba(102, 126, 234, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+}
+
+// 处理点击事件
+function handleMergeGameClick(e) {
+    if (!mergeGameState.isRunning) return;
+
+    const canvas = mergeGameState.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    // 检查是否点击了静止的提现球体
+    for (let i = mergeGameState.balls.length - 1; i >= 0; i--) {
+        const ball = mergeGameState.balls[i];
+        if (ball.isStatic) {
+            const dx = clickX - ball.x;
+            const dy = clickY - ball.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= ball.radius) {
+                // 点击了静止球体，让它开始下落
+                ball.isStatic = false;
+                ball.vy = 2; // 给一个初始下落速度
+
+                // 显示提现信息
+                if (ball.withdrawalInfo) {
+                    showToast(`${ball.withdrawalInfo.phoneName} - ${ball.withdrawalInfo.appName}: ¥${ball.withdrawalInfo.amount}`);
+                }
+                return;
+            }
+        }
+    }
+
+    // 如果没有点击静止球体，显示提示
+    showToast('点击提现球体让它落下');
+}
+
+// 更新鼠标位置
+function updateMergeGameMouse(e) {
+    if (!mergeGameState.canvas) return;
+    const rect = mergeGameState.canvas.getBoundingClientRect();
+    mergeGameState.mouseX = e.clientX - rect.left;
+}
+
+// 显示合成效果
+function showMergeEffect(x, y, amount) {
+    // 可以在这里添加粒子效果或文字飘升效果
+    const effect = document.createElement('div');
+    effect.style.cssText = `
+        position: absolute;
+        left: ${x}px;
+        top: ${y}px;
+        color: #22c55e;
+        font-weight: bold;
+        font-size: 20px;
+        pointer-events: none;
+        animation: mergeEffect 1s ease-out forwards;
+        z-index: 1000;
+    `;
+    effect.textContent = `+¥${amount}`;
+    document.body.appendChild(effect);
+
+    setTimeout(() => effect.remove(), 1000);
+}
+
+// 更新游戏统计
+function updateMergeGameStats() {
+    document.getElementById('merge-game-score').textContent = mergeGameState.score.toFixed(2);
+    document.getElementById('merge-game-max').textContent = `¥${mergeGameState.maxAmount.toFixed(2)}`;
+    document.getElementById('merge-game-merges').textContent = mergeGameState.mergeCount;
+}
+
+// 更新下一个球预览
+function updateNextBallPreview() {
+    const preview = document.getElementById('next-ball-preview');
+    if (!preview) return;
+
+    // 如果没有下一个球（-1），显示提示
+    if (mergeGameState.nextBallLevel === -1) {
+        preview.textContent = '提现';
+        preview.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        preview.style.width = '60px';
+        preview.style.height = '60px';
+        preview.style.fontSize = '12px';
+        return;
+    }
+
+    const config = AMOUNT_LEVELS[mergeGameState.nextBallLevel];
+    preview.textContent = `¥${config.amount}`;
+    preview.style.background = `linear-gradient(135deg, ${config.color} 0%, ${lightenColor(config.color, -20)} 100%)`;
+    preview.style.width = `${config.radius * 2}px`;
+    preview.style.height = `${config.radius * 2}px`;
+}
+
+// 添加合成记录
+function addMergeRecord(amount, withdrawalInfo) {
+    const container = document.getElementById('merge-game-records');
+    if (!container) return;
+
+    // 构建来源信息
+    let sourceText = '';
+    if (withdrawalInfo && withdrawalInfo.sources && withdrawalInfo.sources.length > 0) {
+        const sourceNames = withdrawalInfo.sources.map(s => s.appName || '未知').join(' + ');
+        sourceText = `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">来自: ${sourceNames}</div>`;
+    }
+
+    const record = document.createElement('div');
+    record.style.cssText = 'padding: 8px; border-bottom: 1px solid var(--border-color); font-size: 13px;';
+    record.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600;">💰 合成 ¥${amount.toFixed(2)}</span>
+            <span style="color: var(--text-secondary); font-size: 11px;">${new Date().toLocaleTimeString()}</span>
+        </div>
+        ${sourceText}
+    `;
+
+    // 插入到最前面
+    if (container.children.length === 0 || container.children[0].classList.contains('empty-state')) {
+        container.innerHTML = '';
+    }
+    container.insertBefore(record, container.firstChild);
+
+    // 只保留最近20条记录
+    while (container.children.length > 20) {
+        container.removeChild(container.lastChild);
+    }
+}
+
+// 游戏计时器
+function startMergeGameTimer() {
+    const timerEl = document.getElementById('merge-game-time');
+    if (!timerEl) return;
+
+    const updateTimer = () => {
+        if (!mergeGameState.isRunning) return;
+
+        const elapsed = Math.floor((Date.now() - mergeGameState.startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+        requestAnimationFrame(updateTimer);
+    };
+
+    updateTimer();
+}
+
+// 重新开始游戏
+function restartMergeGame() {
+    // 停止当前游戏
+    mergeGameState.isRunning = false;
+    if (mergeGameState.animationId) {
+        cancelAnimationFrame(mergeGameState.animationId);
+    }
+
+    // 隐藏结束界面
+    const overlay = document.getElementById('merge-game-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    // 清空记录
+    const recordsContainer = document.getElementById('merge-game-records');
+    if (recordsContainer) recordsContainer.innerHTML = '<div class="empty-state">暂无合成记录</div>';
+
+    // 重新初始化
+    initMergeGame();
+}
+
+// 颜色处理辅助函数
+function lightenColor(color, percent) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return '#' + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+        (B < 255 ? B < 1 ? 0 : B : 255))
+        .toString(16).slice(1);
+}
+
+// 绑定鼠标移动事件
+document.addEventListener('mousemove', (e) => {
+    if (mergeGameState.isRunning && mergeGameState.canvas) {
+        const canvas = mergeGameState.canvas;
+        const rect = canvas.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            mergeGameState.mouseX = e.clientX - rect.left;
+        } else {
+            mergeGameState.mouseX = undefined;
+        }
+    }
 });

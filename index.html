@@ -56,13 +56,29 @@
                 <div class="stats-row">
                     <div class="stat-card border-tertiary animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">剩余支出</span>
+                        <span class="stat-label">可用资金</span>
                         <span class="stat-value" id="total-balance">¥0.00</span>
                     </div>
                     <div class="stat-card border-accent animate-border">
                         <i></i><i></i>
                         <span class="stat-label">有提现软件</span>
                         <span class="stat-value" id="ready-apps">0</span>
+                    </div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; flex: 1;">
+                        <span class="stat-label" style="color: rgba(255,255,255,0.9);">今日提现目标</span>
+                        <div class="stat-value" style="color: white; font-size: 14px; margin-top: 8px;" id="daily-withdrawal-target">
+                            <span style="color: rgba(255,255,255,0.7);">无分期目标</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; flex: 1;">
+                        <span class="stat-label" style="color: rgba(255,255,255,0.9);">还款预测</span>
+                        <div class="stat-value" style="color: white; font-size: 14px; margin-top: 8px;" id="repayment-prediction">
+                            <span style="color: rgba(255,255,255,0.7);">无分期数据</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -197,7 +213,7 @@
                     </div>
                     <div class="stat-card tertiary animate-border">
                         <i></i><i></i>
-                        <span class="stat-label">剩余支出</span>
+                        <span class="stat-label">可用资金</span>
                         <span class="stat-value" id="stats-total-balance">¥0.00</span>
                     </div>
                 </div>
@@ -220,8 +236,21 @@
                 <span class="current-date" id="games-current-date"></span>
             </div>
 
+            <!-- 合成提现游戏入口 -->
+            <div class="card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; cursor: pointer;" onclick="showMergeGame()">
+                <div class="section-header">
+                    <div class="section-title" style="color: white;">🎮 合成提现</div>
+                    <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
+                </div>
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">💰</div>
+                    <div style="font-size: 16px; margin-bottom: 8px;">将相同金额的提现合成更大的金额！</div>
+                    <div style="font-size: 13px; opacity: 0.9;">点击开始游戏 →</div>
+                </div>
+            </div>
+
             <!-- 今日游戏抽签 -->
-            <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+            <div class="card mt-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                 <div class="section-header">
                     <div class="section-title" style="color: white;">🎲 今日游戏抽签</div>
                     <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
@@ -293,6 +322,83 @@
             </div>
         </div>
 
+        <!-- 合成提现游戏页面 -->
+        <div class="page" id="page-merge-game">
+            <div class="date-container">
+                <span class="current-date" id="merge-game-current-date"></span>
+            </div>
+
+            <!-- 游戏标题和返回按钮 -->
+            <div class="card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                <div class="section-header">
+                    <div class="section-title" style="color: white;">🎮 合成提现</div>
+                    <button class="btn" onclick="showPage('games')" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">← 返回</button>
+                </div>
+                <div style="padding: 10px 0;">
+                    <div style="font-size: 14px; opacity: 0.9;">点击提现球体让它落下，相同金额合成更大金额！</div>
+                </div>
+            </div>
+
+            <!-- 游戏统计 -->
+            <div class="card mt-4">
+                <div class="stats-row">
+                    <div class="stat-card border-primary">
+                        <span class="stat-label">当前分数</span>
+                        <span class="stat-value" id="merge-game-score">0</span>
+                    </div>
+                    <div class="stat-card border-secondary">
+                        <span class="stat-label">最高合成</span>
+                        <span class="stat-value" id="merge-game-max">¥0</span>
+                    </div>
+                </div>
+                <div class="stats-row mt-3">
+                    <div class="stat-card border-tertiary">
+                        <span class="stat-label">合成次数</span>
+                        <span class="stat-value" id="merge-game-merges">0</span>
+                    </div>
+                    <div class="stat-card border-accent">
+                        <span class="stat-label">游戏时长</span>
+                        <span class="stat-value" id="merge-game-time">00:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 游戏画布 -->
+            <div class="card mt-4" style="padding: 0; overflow: hidden;">
+                <canvas id="merge-game-canvas" style="width: 100%; height: 500px; display: block; background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);"></canvas>
+                <div id="merge-game-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; display: none;">
+                    <div style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px;">游戏结束</div>
+                    <button class="btn btn-primary" onclick="restartMergeGame()">重新开始</button>
+                </div>
+            </div>
+
+            <!-- 游戏说明 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">🎯 游戏说明</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px; padding: 10px 0;">
+                    <div id="next-ball-preview" style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 12px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
+                        提现
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary);">
+                        点击发光球体让它落下<br>
+                        相同金额合成更大金额
+                    </div>
+                </div>
+            </div>
+
+            <!-- 合成记录 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📊 合成记录</div>
+                </div>
+                <div id="merge-game-records" style="max-height: 200px; overflow-y: auto;">
+                    <div class="empty-state">暂无合成记录</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 设置页面 -->
         <div class="page" id="page-settings">
             <div class="date-container">
@@ -360,7 +466,7 @@
                         <span class="settings-title">支出管理</span>
                     </div>
                     <div class="form-group mb-2">
-                        <label class="form-label" style="font-size: 12px;">待支出余额 (元)</label>
+                        <label class="form-label" style="font-size: 12px;">可用资金 (元)</label>
                         <input type="text" id="total-withdrawn" class="form-input" disabled style="font-size: 13px;">
                     </div>
                     <div class="form-group mb-2">
