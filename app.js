@@ -4126,19 +4126,33 @@ function openAddPhoneModal() {
     showModal('添加手机', `
         <div class="form-group">
             <label class="form-label">手机名称</label>
-            <input type="text" id="new-phone-name" class="form-input" placeholder="输入手机名称">
+            <textarea id="new-phone-names" class="form-input" rows="5" placeholder="输入手机名称，支持批量添加：
+方式1：每行一个，如：
+手机1
+手机2
+手机3
+
+方式2：逗号分隔，如：
+手机1,手机2,手机3"></textarea>
+            <div class="form-hint">支持批量添加，每行一个或用逗号分隔</div>
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
-        { 
-            text: '添加', 
-            class: 'btn-primary', 
+        {
+            text: '添加',
+            class: 'btn-primary',
             action: () => {
-                const name = document.getElementById('new-phone-name').value.trim();
-                if (name) {
-                    DataManager.addPhone(name);
+                const input = document.getElementById('new-phone-names').value.trim();
+                if (input) {
+                    // 解析手机名称（支持换行或逗号分隔）
+                    const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
+                    let addedCount = 0;
+                    names.forEach(name => {
+                        DataManager.addPhone(name);
+                        addedCount++;
+                    });
                     renderPhones();
-                    showToast('手机添加成功！');
+                    showToast(`成功添加 ${addedCount} 部手机！`);
                 }
                 closeModal();
             }
@@ -4152,12 +4166,20 @@ function openAddAppModal(phoneId) {
     showModal('添加软件', `
         <div class="form-group">
             <label class="form-label">软件名称</label>
-            <input type="text" id="app-name" class="form-input" placeholder="输入软件名称">
+            <textarea id="app-names" class="form-input" rows="5" placeholder="输入软件名称，支持批量添加：
+方式1：每行一个，如：
+抖音极速版
+快手极速版
+百度极速版
+
+方式2：逗号分隔，如：
+抖音极速版,快手极速版,百度极速版"></textarea>
+            <div class="form-hint">支持批量添加，每行一个或用逗号分隔</div>
         </div>
         <div class="form-group">
-            <label class="form-label">当前余额 (元)</label>
+            <label class="form-label">默认余额 (元)</label>
             <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
-            <div class="form-hint">软件账户中当前可提现的金额</div>
+            <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -4165,13 +4187,19 @@ function openAddAppModal(phoneId) {
             text: '添加',
             class: 'btn-primary',
             action: () => {
-                const name = document.getElementById('app-name').value.trim();
+                const input = document.getElementById('app-names').value.trim();
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
 
-                if (name) {
-                    DataManager.addApp(phoneId, { name, balance });
+                if (input) {
+                    // 解析软件名称（支持换行或逗号分隔）
+                    const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
+                    let addedCount = 0;
+                    names.forEach(name => {
+                        DataManager.addApp(phoneId, { name, balance });
+                        addedCount++;
+                    });
                     renderPhones();
-                    showToast('软件添加成功！');
+                    showToast(`成功添加 ${addedCount} 个软件！`);
                 }
                 closeModal();
             }
@@ -4274,6 +4302,70 @@ function openWithdrawModal(phoneId, appId) {
                     showToast('提现记录成功！');
                 } else {
                     showToast('请输入有效的提现金额！');
+                }
+                closeModal();
+            }
+        }
+    ]);
+}
+
+// 打开批量添加软件到所有手机的模态框
+function openBatchAddAppsModal() {
+    const data = DataManager.loadData();
+    const phoneCount = data.phones.length;
+
+    if (phoneCount === 0) {
+        showToast('请先添加手机！');
+        return;
+    }
+
+    showModal('批量添加软件到所有手机', `
+        <div class="form-group">
+            <label class="form-label">软件名称</label>
+            <textarea id="batch-app-names" class="form-input" rows="5" placeholder="输入软件名称，支持批量添加：
+方式1：每行一个，如：
+抖音极速版
+快手极速版
+百度极速版
+
+方式2：逗号分隔，如：
+抖音极速版,快手极速版,百度极速版"></textarea>
+            <div class="form-hint">支持批量添加，每行一个或用逗号分隔</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">默认余额 (元)</label>
+            <input type="number" id="batch-app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <div class="form-hint">批量添加时所有软件的默认余额</div>
+        </div>
+        <div class="form-group">
+            <div class="form-hint" style="background: var(--bg-cream); padding: 12px; border-radius: 8px;">
+                <strong>提示：</strong>将为 <strong>${phoneCount}</strong> 部手机各添加这些软件
+            </div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '添加',
+            class: 'btn-primary',
+            action: () => {
+                const input = document.getElementById('batch-app-names').value.trim();
+                const balance = parseFloat(document.getElementById('batch-app-balance').value) || 0;
+
+                if (input) {
+                    // 解析软件名称（支持换行或逗号分隔）
+                    const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
+                    let totalAddedCount = 0;
+
+                    // 为每部手机添加软件
+                    data.phones.forEach(phone => {
+                        names.forEach(name => {
+                            DataManager.addApp(phone.id, { name, balance });
+                            totalAddedCount++;
+                        });
+                    });
+
+                    renderPhones();
+                    showToast(`成功为 ${phoneCount} 部手机各添加 ${names.length} 个软件，共 ${totalAddedCount} 个！`);
                 }
                 closeModal();
             }
