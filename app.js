@@ -1679,6 +1679,176 @@ class DataManager {
         };
     }
 
+    // 计算动态目标调整
+    static calculateDynamicTarget() {
+        const data = this.loadData();
+        const now = new Date();
+
+        // 获取所有活跃分期
+        const activeInstallments = data.installments.filter(i => i.status === 'active');
+
+        if (activeInstallments.length === 0) {
+            return null;
+        }
+
+        // 找到最早开始的分期（作为起始日期）
+        activeInstallments.sort((a, b) => new Date(a.createdAt || a.dueDate) - new Date(b.createdAt || b.dueDate));
+        const startDate = new Date(activeInstallments[0].createdAt || activeInstallments[0].dueDate);
+        startDate.setDate(startDate.getDate() - 30); // 假设提前30天开始
+
+        // 找到最远还款日
+        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+        const furthestDueDate = activeInstallments[0].dueDate;
+        const endDate = new Date(furthestDueDate);
+
+        // 计算总待还金额
+        const totalPendingAmount = activeInstallments.reduce((sum, inst) => {
+            return sum + (inst.amount - (inst.paidAmount || 0));
+        }, 0);
+
+        // 计算已过去的天数
+        const daysElapsed = Math.max(1, Math.ceil((now - startDate) / (1000 * 60 * 60 * 24)));
+
+        // 计算剩余天数
+        const daysRemaining = Math.max(1, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+
+        // 计算总天数
+        const totalDays = daysElapsed + daysRemaining;
+
+        // 计算已提现总额
+        const totalWithdrawn = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
+        }, 0);
+
+        // 原始每日目标
+        const originalDailyTarget = totalPendingAmount / totalDays;
+
+        // 实际平均每日提现
+        const actualDailyAverage = daysElapsed > 0 ? totalWithdrawn / daysElapsed : 0;
+
+        // 新的动态目标（基于剩余金额和剩余天数）
+        const remainingAmount = Math.max(0, totalPendingAmount - totalWithdrawn);
+        const newDailyTarget = daysRemaining > 0 ? remainingAmount / daysRemaining : 0;
+
+        // 计算进度差异
+        const expectedWithdrawn = originalDailyTarget * daysElapsed;
+        const progressDiff = totalWithdrawn - expectedWithdrawn;
+
+        // 计算进度百分比
+        const progressPercent = totalPendingAmount > 0 ? (totalWithdrawn / totalPendingAmount * 100) : 0;
+
+        // 计算状态
+        let status = 'ontrack';
+        if (progressDiff > originalDailyTarget * 3) {
+            status = 'ahead'; // 超前3天以上
+        } else if (progressDiff < -originalDailyTarget * 3) {
+            status = 'behind'; // 落后3天以上
+        }
+
+        // 计算可以休息的天数（如果超前）
+        let restDays = 0;
+        if (status === 'ahead' && actualDailyAverage > 0) {
+            restDays = Math.floor(progressDiff / actualDailyAverage);
+        }
+
+        // 计算需要追赶的天数（如果落后）
+        let catchUpDays = 0;
+        if (status === 'behind' && newDailyTarget > actualDailyAverage) {
+            catchUpDays = Math.ceil((newDailyTarget - actualDailyAverage) / actualDailyAverage * daysRemaining);
+        }
+
+        return {
+            totalPendingAmount,
+            totalWithdrawn,
+            remainingAmount,
+            daysElapsed,
+            daysRemaining,
+            totalDays,
+            originalDailyTarget,
+            actualDailyAverage,
+            newDailyTarget,
+            progressDiff,
+            progressPercent,
+            status,
+            restDays,
+            catchUpDays,
+            perAppTarget: data.phones.reduce((sum, p) => sum + p.apps.length, 0) > 0 
+                ? newDailyTarget / data.phones.reduce((sum, p) => sum + p.apps.length, 0) 
+                : 0
+        };
+    }
+
+    // 生成智能提醒
+    static generateSmartReminders(dynamicTarget) {
+        if (!dynamicTarget) return [];
+
+        const reminders = [];
+
+        // 根据状态生成不同的提醒
+        switch (dynamicTarget.status) {
+            case 'ahead':
+                // 计算休息后的开始日期
+                const restStartDate = new Date();
+                restStartDate.setDate(restStartDate.getDate() + dynamicTarget.restDays);
+                const restStartDateStr = restStartDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+
+                reminders.push({
+                    type: 'success',
+                    icon: '🎉',
+                    title: '进度超前！',
+                    message: `您已提前完成 ${dynamicTarget.progressDiff.toFixed(2)} 元`,
+                    detail: dynamicTarget.restDays > 0 
+                        ? `可以休息 ${dynamicTarget.restDays} 天，${restStartDateStr} 再开始。或继续提现提前完成目标！`
+                        : '继续保持，可以提前还清分期！'
+                });
+                break;
+
+            case 'behind':
+                reminders.push({
+                    type: 'warning',
+                    icon: '⚠️',
+                    title: '需要加快进度',
+                    message: `落后目标 ${Math.abs(dynamicTarget.progressDiff).toFixed(2)} 元`,
+                    detail: `新的每日目标：¥${dynamicTarget.newDailyTarget.toFixed(2)}（原目标：¥${dynamicTarget.originalDailyTarget.toFixed(2)}）`
+                });
+
+                if (dynamicTarget.catchUpDays > 0) {
+                    reminders.push({
+                        type: 'info',
+                        icon: '💡',
+                        title: '追赶建议',
+                        message: `建议未来 ${dynamicTarget.catchUpDays} 天加大提现力度`,
+                        detail: `每天多提现 ¥${(dynamicTarget.newDailyTarget - dynamicTarget.actualDailyAverage).toFixed(2)} 即可追上进度`
+                    });
+                }
+                break;
+
+            default:
+                reminders.push({
+                    type: 'info',
+                    icon: '✅',
+                    title: '进度正常',
+                    message: `当前进度 ${dynamicTarget.progressPercent.toFixed(1)}%`,
+                    detail: `保持每日提现 ¥${dynamicTarget.newDailyTarget.toFixed(2)} 即可按时完成目标`
+                });
+        }
+
+        // 添加时间提醒
+        if (dynamicTarget.daysRemaining <= 7) {
+            reminders.push({
+                type: 'urgent',
+                icon: '⏰',
+                title: '还款日临近',
+                message: `还有 ${dynamicTarget.daysRemaining} 天到还款日`,
+                detail: `剩余待还：¥${dynamicTarget.remainingAmount.toFixed(2)}`
+            });
+        }
+
+        return reminders;
+    }
+
     // 生成追赶建议文案
     static generateCatchUpMessage(extraNeeded, extraPerApp, suggestedApps) {
         if (extraNeeded <= 0) return null;
@@ -2295,44 +2465,53 @@ function renderDashboard() {
         }
     }
 
-    // 计算并显示还款预测
-    const repaymentPrediction = DataManager.predictRepaymentDays();
+    // 计算并显示动态目标
+    const dynamicTarget = DataManager.calculateDynamicTarget();
     const predictionEl = document.getElementById('repayment-prediction');
-    if (predictionEl && repaymentPrediction) {
-        const statusColor = repaymentPrediction.status === 'ahead' ? '#22c55e' :
-                           repaymentPrediction.status === 'behind' ? '#ef4444' : '#f59e0b';
-        const statusText = repaymentPrediction.status === 'ahead' ? '提前' :
-                          repaymentPrediction.status === 'behind' ? '落后' : '正常';
-        const daysAheadText = repaymentPrediction.daysAhead > 0 ?
-            `提前${repaymentPrediction.daysAhead}天` :
-            repaymentPrediction.daysAhead < 0 ?
-            `落后${Math.abs(repaymentPrediction.daysAhead)}天` :
-            '按计划进行';
+    if (predictionEl && dynamicTarget) {
+        const statusColor = dynamicTarget.status === 'ahead' ? '#22c55e' :
+                           dynamicTarget.status === 'behind' ? '#ef4444' : '#3b82f6';
 
         let predictionHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>还款预测</span>
-                <span style="font-weight: 700; color: ${statusColor};">${daysAheadText}</span>
+                <span>动态目标</span>
+                <span style="font-weight: 700; color: ${statusColor};">¥${dynamicTarget.newDailyTarget.toFixed(2)}/天</span>
             </div>
             <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                计划${repaymentPrediction.plannedDays}天 · 预计${repaymentPrediction.predictedDays}天还清
-                ${repaymentPrediction.dailyWithdrawalRate > 0 ? `· 今日已提现¥${repaymentPrediction.dailyWithdrawalRate.toFixed(2)}` : '· 今日尚未提现'}
+                原目标¥${dynamicTarget.originalDailyTarget.toFixed(2)} · 实际¥${dynamicTarget.actualDailyAverage.toFixed(2)}/天
             </div>
         `;
 
-        // 如果落后，显示追赶建议
-        if (repaymentPrediction.status === 'behind') {
-            const catchUpAdvice = DataManager.calculateCatchUpAdvice();
-            if (catchUpAdvice && catchUpAdvice.message && catchUpAdvice.message.length > 0) {
+        // 显示智能提醒
+        const reminders = DataManager.generateSmartReminders(dynamicTarget);
+        if (reminders.length > 0) {
+            predictionHTML += `<div style="margin-top: 10px;">`;
+            reminders.forEach(reminder => {
+                const bgColor = reminder.type === 'success' ? 'rgba(34, 197, 94, 0.1)' :
+                               reminder.type === 'warning' ? 'rgba(239, 68, 68, 0.1)' :
+                               reminder.type === 'urgent' ? 'rgba(245, 158, 11, 0.1)' :
+                               'rgba(59, 130, 246, 0.1)';
+                const borderColor = reminder.type === 'success' ? '#22c55e' :
+                                   reminder.type === 'warning' ? '#ef4444' :
+                                   reminder.type === 'urgent' ? '#f59e0b' :
+                                   '#3b82f6';
+                const textColor = reminder.type === 'success' ? '#16a34a' :
+                                 reminder.type === 'warning' ? '#dc2626' :
+                                 reminder.type === 'urgent' ? '#d97706' :
+                                 '#2563eb';
+
                 predictionHTML += `
-                    <div style="margin-top: 8px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid #ef4444;">
-                        <div style="font-size: 11px; font-weight: 600; color: #ef4444; margin-bottom: 4px;">💡 追赶建议</div>
-                        ${catchUpAdvice.message.map(msg => `
-                            <div style="font-size: 10px; color: #dc2626; margin-top: 2px;">• ${msg}</div>
-                        `).join('')}
+                    <div style="margin-top: 8px; padding: 10px; background: ${bgColor}; border-radius: 8px; border-left: 3px solid ${borderColor};">
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                            <span style="font-size: 14px;">${reminder.icon}</span>
+                            <span style="font-size: 12px; font-weight: 600; color: ${textColor};">${reminder.title}</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-primary); margin-bottom: 2px;">${reminder.message}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">${reminder.detail}</div>
                     </div>
                 `;
-            }
+            });
+            predictionHTML += `</div>`;
         }
 
         predictionEl.innerHTML = predictionHTML;
