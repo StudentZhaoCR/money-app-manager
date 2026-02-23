@@ -1895,13 +1895,17 @@ class DataManager {
             return sum + (inst.amount - (inst.paidAmount || 0));
         }, 0);
 
-        // 计算可用资金（所有软件的当前余额总和）
-        const totalAvailableBalance = data.phones.reduce((sum, phone) => {
-            return sum + phone.apps.reduce((appSum, app) => appSum + (app.balance || 0), 0);
+        // 计算可用资金（已提现的金额 + 分期中已还的金额）
+        const totalWithdrawn = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
         }, 0);
+        const totalPaidInstallments = activeInstallments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0);
+        const totalAvailableFunds = totalWithdrawn + totalPaidInstallments;
 
         // 计算还需赚取的总金额
-        const totalNeedToEarn = Math.max(0, totalPendingAmount - totalAvailableBalance);
+        const totalNeedToEarn = Math.max(0, totalPendingAmount - totalAvailableFunds);
 
         // 统计软件数量
         const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
@@ -1968,7 +1972,7 @@ class DataManager {
                     completionPercent,
                     perAppTarget,
                     totalPendingAmount,
-                    totalAvailableBalance,
+                    totalAvailableFunds,
                     totalNeedToEarn
                 });
             });
@@ -1997,7 +2001,7 @@ class DataManager {
                 type: 'summary',
                 icon: '📊',
                 title: '还款周期分析',
-                message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用余额 ¥${firstApp.totalAvailableBalance.toFixed(2)}`,
+                message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用资金 ¥${firstApp.totalAvailableFunds.toFixed(2)}`,
                 detail: `还需赚取 ¥${firstApp.totalNeedToEarn.toFixed(2)} · 周期共${firstApp.totalCycleDays}天 · 剩余${firstApp.daysRemaining}天 · 每天需赚¥${totalDailyNeed.toFixed(2)}`
             });
         } else if (firstApp) {
@@ -2005,8 +2009,8 @@ class DataManager {
                 type: 'success',
                 icon: '✅',
                 title: '还款资金充足',
-                message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用余额 ¥${firstApp.totalAvailableBalance.toFixed(2)}`,
-                detail: '当前余额已足够覆盖还款需求！'
+                message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用资金 ¥${firstApp.totalAvailableFunds.toFixed(2)}`,
+                detail: '当前资金已足够覆盖还款需求！'
             });
         }
 
