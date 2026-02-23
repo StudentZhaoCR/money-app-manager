@@ -1881,73 +1881,95 @@ class DataManager {
         return messages;
     }
 
-    // 计算每个软件的赚取差额分析
+    // 计算每个软件的赚取差额分析（基于固定还款周期）
     static calculateAppEarningGap() {
         const data = this.loadData();
         const now = new Date();
-
-        // 获取动态目标
-        const dynamicTarget = this.calculateDynamicTarget();
-        if (!dynamicTarget) return [];
 
         // 获取所有活跃分期
         const activeInstallments = data.installments.filter(i => i.status === 'active');
         if (activeInstallments.length === 0) return [];
 
-        // 找到最远还款日
-        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
-        const furthestDueDate = activeInstallments[0].dueDate;
-        const daysRemaining = Math.max(1, Math.ceil((new Date(furthestDueDate) - now) / (1000 * 60 * 60 * 24)));
+        // 计算总待还金额
+        const totalPendingAmount = activeInstallments.reduce((sum, inst) => {
+            return sum + (inst.amount - (inst.paidAmount || 0));
+        }, 0);
 
-        // 每个软件的目标提现金额
-        const perAppTarget = dynamicTarget.perAppTarget;
+        // 计算可用资金（所有软件的当前余额总和）
+        const totalAvailableBalance = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => appSum + (app.balance || 0), 0);
+        }, 0);
+
+        // 计算还需赚取的总金额
+        const totalNeedToEarn = Math.max(0, totalPendingAmount - totalAvailableBalance);
+
+        // 统计软件数量
+        const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+        if (totalApps === 0) return [];
+
+        // 找到最早的分期创建日期（还款周期开始日）
+        activeInstallments.sort((a, b) => new Date(a.createdAt || a.dueDate) - new Date(b.createdAt || b.dueDate));
+        const cycleStartDate = new Date(activeInstallments[0].createdAt || activeInstallments[0].dueDate);
+
+        // 找到最远还款日（还款周期结束日）
+        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+        const cycleEndDate = new Date(activeInstallments[0].dueDate);
+
+        // 计算总还款周期天数
+        const totalCycleDays = Math.max(1, Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)));
+
+        // 计算剩余天数
+        const daysRemaining = Math.max(1, Math.ceil((cycleEndDate - now) / (1000 * 60 * 60 * 24)));
+
+        // 每个软件需要赚取的目标金额（总需求 ÷ 软件数量）
+        const perAppTarget = totalNeedToEarn / totalApps;
 
         // 分析每个软件
         const appAnalysis = [];
 
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                // 计算该软件已赚取金额（当前余额 + 已提现）
+                // 当前余额
                 const currentBalance = app.balance || 0;
-                const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-                const totalEarned = currentBalance + withdrawn;
 
-                // 该软件的目标金额
+                // 该软件需要赚取的目标金额
                 const targetAmount = perAppTarget;
 
-                // 差额 = 目标 - 已赚取
-                const gap = targetAmount - totalEarned;
+                // 差额 = 目标 - 当前余额（还需要赚多少）
+                const gap = targetAmount - currentBalance;
 
                 // 每天需要赚取多少才能补齐差额
-                const dailyNeed = daysRemaining > 0 ? gap / daysRemaining : 0;
+                const dailyNeed = daysRemaining > 0 && gap > 0 ? gap / daysRemaining : 0;
 
                 // 状态判断
                 let status = 'ontrack';
                 if (gap <= 0) {
                     status = 'completed'; // 已完成目标
-                } else if (dailyNeed > perAppTarget * 1.5) {
-                    status = 'critical'; // 缺口很大，需要大量赚取
-                } else if (dailyNeed > perAppTarget) {
+                } else if (dailyNeed > perAppTarget * 0.5) {
+                    status = 'critical'; // 缺口很大
+                } else if (dailyNeed > perAppTarget * 0.3) {
                     status = 'warning'; // 缺口较大
                 }
 
-                // 计算完成百分比
-                const completionPercent = targetAmount > 0 ? (totalEarned / targetAmount * 100) : 0;
+                // 计算完成百分比（基于目标金额）
+                const completionPercent = targetAmount > 0 ? (currentBalance / targetAmount * 100) : 0;
 
                 appAnalysis.push({
                     phoneName: phone.name,
                     appName: app.name,
                     appId: app.id,
                     currentBalance,
-                    withdrawn,
-                    totalEarned,
                     targetAmount,
                     gap,
                     dailyNeed,
                     daysRemaining,
+                    totalCycleDays,
                     status,
                     completionPercent,
-                    perAppTarget
+                    perAppTarget,
+                    totalPendingAmount,
+                    totalAvailableBalance,
+                    totalNeedToEarn
                 });
             });
         });
@@ -1968,16 +1990,23 @@ class DataManager {
         const completedApps = appAnalysis.filter(a => a.status === 'completed');
 
         // 总体情况
-        const totalGap = appAnalysis.reduce((sum, a) => sum + Math.max(0, a.gap), 0);
-        const totalDailyNeed = appAnalysis.reduce((sum, a) => sum + Math.max(0, a.dailyNeed), 0);
-
-        if (totalGap > 0) {
+        const firstApp = appAnalysis[0];
+        if (firstApp && firstApp.totalNeedToEarn > 0) {
+            const totalDailyNeed = appAnalysis.reduce((sum, a) => sum + Math.max(0, a.dailyNeed), 0);
             advice.push({
                 type: 'summary',
                 icon: '📊',
-                title: '总体情况',
-                message: `还需赚取 ¥${totalGap.toFixed(2)} 才能完成还款目标`,
-                detail: `未来 ${appAnalysis[0]?.daysRemaining || 0} 天，每天需要赚取 ¥${totalDailyNeed.toFixed(2)}`
+                title: '还款周期分析',
+                message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用余额 ¥${firstApp.totalAvailableBalance.toFixed(2)}`,
+                detail: `还需赚取 ¥${firstApp.totalNeedToEarn.toFixed(2)} · 周期共${firstApp.totalCycleDays}天 · 剩余${firstApp.daysRemaining}天 · 每天需赚¥${totalDailyNeed.toFixed(2)}`
+            });
+        } else if (firstApp) {
+            advice.push({
+                type: 'success',
+                icon: '✅',
+                title: '还款资金充足',
+                message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用余额 ¥${firstApp.totalAvailableBalance.toFixed(2)}`,
+                detail: '当前余额已足够覆盖还款需求！'
             });
         }
 
@@ -2951,12 +2980,11 @@ function renderAppEarningAnalysis() {
                     <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
                         <span>目标: ¥${app.targetAmount.toFixed(2)}</span>
                         <span>余额: ¥${app.currentBalance.toFixed(2)}</span>
-                        <span>已提: ¥${app.withdrawn.toFixed(2)}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border-color);">
                         <div>
                             <span style="font-size: 11px; color: var(--text-secondary);">差额: </span>
-                            <span style="font-size: 13px; font-weight: 600; color: ${statusColor};">¥${app.gap.toFixed(2)}</span>
+                            <span style="font-size: 13px; font-weight: 600; color: ${statusColor};">¥${Math.max(0, app.gap).toFixed(2)}</span>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
