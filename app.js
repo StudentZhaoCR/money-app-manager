@@ -1551,11 +1551,11 @@ class DataManager {
             }, 0);
         }, 0);
 
-        // 每个软件需要提现的目标 = 总待还金额 / 软件数量
-        const perAppTarget = totalApps > 0 ? totalPendingAmount / totalApps : 0;
-
         // 剩余目标金额
         const remainingTarget = Math.max(0, totalPendingAmount - totalWithdrawn);
+
+        // 每个软件需要提现的目标 = 剩余目标 / 软件数量
+        const perAppTarget = totalApps > 0 ? remainingTarget / totalApps : 0;
 
         return {
             totalApps,
@@ -2646,60 +2646,6 @@ function renderDashboard() {
         } else {
             dailyTargetEl.innerHTML = '<span style="color: #e0e0e0;">无分期还款目标</span>';
         }
-    }
-
-    // 计算并显示动态目标
-    const dynamicTarget = DataManager.calculateDynamicTarget();
-    const predictionEl = document.getElementById('repayment-prediction');
-    if (predictionEl && dynamicTarget) {
-        const statusColor = dynamicTarget.status === 'ahead' ? '#22c55e' :
-                           dynamicTarget.status === 'behind' ? '#ef4444' : '#3b82f6';
-
-        let predictionHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>动态目标</span>
-                <span style="font-weight: 700; color: ${statusColor};">¥${dynamicTarget.newDailyTarget.toFixed(2)}/天</span>
-            </div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                原目标¥${dynamicTarget.originalDailyTarget.toFixed(2)} · 实际¥${dynamicTarget.actualDailyAverage.toFixed(2)}/天
-            </div>
-        `;
-
-        // 显示智能提醒
-        const reminders = DataManager.generateSmartReminders(dynamicTarget);
-        if (reminders.length > 0) {
-            predictionHTML += `<div style="margin-top: 10px;">`;
-            reminders.forEach(reminder => {
-                const bgColor = reminder.type === 'success' ? 'rgba(34, 197, 94, 0.1)' :
-                               reminder.type === 'warning' ? 'rgba(239, 68, 68, 0.1)' :
-                               reminder.type === 'urgent' ? 'rgba(245, 158, 11, 0.1)' :
-                               'rgba(59, 130, 246, 0.1)';
-                const borderColor = reminder.type === 'success' ? '#22c55e' :
-                                   reminder.type === 'warning' ? '#ef4444' :
-                                   reminder.type === 'urgent' ? '#f59e0b' :
-                                   '#3b82f6';
-                const textColor = reminder.type === 'success' ? '#16a34a' :
-                                 reminder.type === 'warning' ? '#dc2626' :
-                                 reminder.type === 'urgent' ? '#d97706' :
-                                 '#2563eb';
-
-                predictionHTML += `
-                    <div style="margin-top: 8px; padding: 10px; background: ${bgColor}; border-radius: 8px; border-left: 3px solid ${borderColor};">
-                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-                            <span style="font-size: 14px;">${reminder.icon}</span>
-                            <span style="font-size: 12px; font-weight: 600; color: ${textColor};">${reminder.title}</span>
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-primary); margin-bottom: 2px;">${reminder.message}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary);">${reminder.detail}</div>
-                    </div>
-                `;
-            });
-            predictionHTML += `</div>`;
-        }
-
-        predictionEl.innerHTML = predictionHTML;
-    } else if (predictionEl) {
-        predictionEl.innerHTML = '<span style="color: var(--text-secondary);">无分期数据</span>';
     }
 
     // 渲染今日需要关注的软件
