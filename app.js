@@ -747,15 +747,18 @@ class DataManager {
                 };
                 needsMigration = true;
             }
-            // 数据迁移：为没有 balance 字段的软件添加默认值
+            // 数据迁移：为没有 balance 或 minWithdraw 字段的软件添加默认值
             phone.apps.forEach(app => {
                 if (app.balance === undefined) {
                     app.balance = 0;
                     needsMigration = true;
                 }
+                if (app.minWithdraw === undefined) {
+                    app.minWithdraw = 0;
+                    needsMigration = true;
+                }
                 delete app.initialBalance;
                 delete app.earned;
-                delete app.minWithdraw;
                 delete app.remainingWithdrawn;
                 delete app.dailyEarnedHistory;
                 delete app.lastEditBalance;
@@ -818,6 +821,7 @@ class DataManager {
                 id: Date.now().toString(),
                 name: appData.name,
                 balance: appData.balance || 0,  // 当前余额
+                minWithdraw: appData.minWithdraw || 0,  // 最低提现门槛
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -838,6 +842,7 @@ class DataManager {
             if (app) {
                 app.name = appData.name;
                 app.balance = appData.balance || 0;  // 更新余额
+                app.minWithdraw = appData.minWithdraw || 0;  // 更新提现门槛
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
 
@@ -2118,6 +2123,115 @@ class DataManager {
             progressPercent: totalRepayment > 0 ? (totalWithdrawn / totalRepayment * 100) : 0
         };
     }
+
+    // 获取智能提现方案
+    static getSmartWithdrawalPlan() {
+        const data = this.loadData();
+        const now = new Date();
+
+        // 获取所有软件
+        const allApps = [];
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                allApps.push({
+                    ...app,
+                    phoneId: phone.id,
+                    phoneName: phone.name
+                });
+            });
+        });
+
+        // 分类软件
+        const canWithdraw = []; // 可以提现的（余额 >= 门槛）
+        const nearThreshold = []; // 接近门槛的（余额 >= 门槛 * 0.8）
+        const farFromThreshold = []; // 远离门槛的
+        const noThreshold = []; // 无门槛的
+
+        allApps.forEach(app => {
+            const balance = app.balance || 0;
+            const threshold = app.minWithdraw || 0;
+
+            if (threshold === 0) {
+                noThreshold.push(app);
+            } else if (balance >= threshold) {
+                canWithdraw.push(app);
+            } else if (balance >= threshold * 0.8) {
+                nearThreshold.push(app);
+            } else {
+                farFromThreshold.push(app);
+            }
+        });
+
+        // 按余额排序（余额多的优先）
+        canWithdraw.sort((a, b) => (b.balance || 0) - (a.balance || 0));
+        nearThreshold.sort((a, b) => (b.balance || 0) - (a.balance || 0));
+        noThreshold.sort((a, b) => (b.balance || 0) - (a.balance || 0));
+
+        return {
+            canWithdraw,
+            nearThreshold,
+            farFromThreshold,
+            noThreshold,
+            totalApps: allApps.length
+        };
+    }
+
+    // 计算每天提现预测
+    static calculateDailyWithdrawalForecast() {
+        const data = this.loadData();
+        const now = new Date();
+
+        // 获取最近7天的提现记录
+        const last7Days = [];
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            last7Days.push(date.toISOString().split('T')[0]);
+        }
+
+        // 统计每天的提现金额
+        const dailyWithdrawals = {};
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.withdrawals) {
+                    app.withdrawals.forEach(w => {
+                        if (last7Days.includes(w.date)) {
+                            if (!dailyWithdrawals[w.date]) {
+                                dailyWithdrawals[w.date] = 0;
+                            }
+                            dailyWithdrawals[w.date] += w.amount;
+                        }
+                    });
+                }
+            });
+        });
+
+        // 计算平均值
+        const daysWithWithdrawals = Object.keys(dailyWithdrawals).length;
+        const totalWithdrawn = Object.values(dailyWithdrawals).reduce((sum, amount) => sum + amount, 0);
+        const averageDaily = daysWithWithdrawals > 0 ? totalWithdrawn / daysWithWithdrawals : 0;
+
+        // 计算今天已提现
+        const today = now.toISOString().split('T')[0];
+        const todayWithdrawn = dailyWithdrawals[today] || 0;
+
+        // 预测今天还能提现多少（基于可以提现的软件）
+        const plan = this.getSmartWithdrawalPlan();
+        let projectedToday = todayWithdrawn;
+        plan.canWithdraw.forEach(app => {
+            projectedToday += app.minWithdraw || 0;
+        });
+
+        return {
+            averageDaily,
+            todayWithdrawn,
+            projectedToday,
+            daysWithWithdrawals,
+            totalWithdrawn,
+            canWithdrawCount: plan.canWithdraw.length,
+            nearThresholdCount: plan.nearThreshold.length
+        };
+    }
 }
 
 // 全局状态
@@ -2736,10 +2850,167 @@ function renderDashboard() {
     
     // 渲染还款能力预测
     renderRepaymentPrediction();
+    
+    // 渲染智能提现方案
+    renderSmartWithdrawalPlan();
+    
+    // 渲染每天提现预测
+    renderDailyWithdrawalForecast();
 }
 
 // 全局图表实例
 let incomeChart = null;
+
+// ==================== 智能提现方案 ====================
+
+// 渲染智能提现方案
+function renderSmartWithdrawalPlan() {
+    const card = document.getElementById('smart-withdrawal-plan-card');
+    const content = document.getElementById('smart-withdrawal-plan-content');
+    if (!card || !content) return;
+
+    const plan = DataManager.getSmartWithdrawalPlan();
+    if (plan.totalApps === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+
+    let html = '';
+
+    // 可以提现的软件
+    if (plan.canWithdraw.length > 0) {
+        html += `
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 600; color: #22c55e; margin-bottom: 10px;">
+                    🟢 可以提现 (${plan.canWithdraw.length}个)
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+        `;
+        plan.canWithdraw.slice(0, 5).forEach(app => {
+            const threshold = app.minWithdraw || 0;
+            const balance = app.balance || 0;
+            html += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border-left: 3px solid #22c55e;">
+                    <div>
+                        <div style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.name}</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">余额: ¥${balance.toFixed(2)} / 门槛: ¥${threshold.toFixed(2)}</div>
+                    </div>
+                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;" onclick="openWithdrawModal('${app.phoneId}', '${app.id}')">提现</button>
+                </div>
+            `;
+        });
+        if (plan.canWithdraw.length > 5) {
+            html += `<div style="font-size: 11px; color: var(--text-secondary); text-align: center;">还有 ${plan.canWithdraw.length - 5} 个...</div>`;
+        }
+        html += `</div></div>`;
+    }
+
+    // 接近门槛的软件
+    if (plan.nearThreshold.length > 0) {
+        html += `
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 600; color: #f59e0b; margin-bottom: 10px;">
+                    🟡 接近门槛 (${plan.nearThreshold.length}个)
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+        `;
+        plan.nearThreshold.slice(0, 3).forEach(app => {
+            const threshold = app.minWithdraw || 0;
+            const balance = app.balance || 0;
+            const remaining = threshold - balance;
+            html += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 3px solid #f59e0b;">
+                    <div>
+                        <div style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.name}</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">还需 ¥${remaining.toFixed(2)} 达到门槛</div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div></div>`;
+    }
+
+    // 统计信息
+    html += `
+        <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-top: 12px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">提现统计</div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+                <div>✅ 可提现: ${plan.canWithdraw.length}个</div>
+                <div>🟡 接近门槛: ${plan.nearThreshold.length}个</div>
+                <div>🔴 还需努力: ${plan.farFromThreshold.length}个</div>
+                <div>⚪ 无门槛: ${plan.noThreshold.length}个</div>
+            </div>
+        </div>
+    `;
+
+    content.innerHTML = html;
+}
+
+// ==================== 每天提现预测 ====================
+
+// 渲染每天提现预测
+function renderDailyWithdrawalForecast() {
+    const card = document.getElementById('daily-withdrawal-forecast-card');
+    const content = document.getElementById('daily-withdrawal-forecast-content');
+    if (!card || !content) return;
+
+    const forecast = DataManager.calculateDailyWithdrawalForecast();
+    if (forecast.daysWithWithdrawals === 0 && forecast.canWithdrawCount === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+
+    let html = `
+        <div style="margin-bottom: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">7天平均</div>
+                    <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${forecast.averageDaily.toFixed(2)}</div>
+                </div>
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">今天已提现</div>
+                    <div style="font-size: 18px; font-weight: 700; color: var(--success-color);">¥${forecast.todayWithdrawn.toFixed(2)}</div>
+                </div>
+            </div>
+    `;
+
+    // 今天预测
+    if (forecast.canWithdrawCount > 0) {
+        html += `
+            <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border-radius: 8px; padding: 12px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 12px; font-weight: 600; color: var(--primary-color); margin-bottom: 8px;">
+                    📈 今天预测
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-size: 13px; color: var(--text-primary);">预计今天可提现</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">基于${forecast.canWithdrawCount}个可提现软件</div>
+                    </div>
+                    <div style="font-size: 20px; font-weight: 700; color: var(--primary-color);">¥${forecast.projectedToday.toFixed(2)}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // 建议
+    if (forecast.nearThresholdCount > 0) {
+        html += `
+            <div style="background: rgba(245, 158, 11, 0.1); border-radius: 8px; padding: 12px; margin-top: 12px; border-left: 3px solid #f59e0b;">
+                <div style="font-size: 12px; color: #d97706;">
+                    💡 有 ${forecast.nearThresholdCount} 个软件接近提现门槛，建议优先操作！
+                </div>
+            </div>
+        `;
+    }
+
+    html += `</div>`;
+
+    content.innerHTML = html;
+}
 
 // ==================== 智能建议助手 ====================
 
@@ -4181,6 +4452,11 @@ function openAddAppModal(phoneId) {
             <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
+        <div class="form-group">
+            <label class="form-label">提现门槛 (元)</label>
+            <input type="number" id="app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <div class="form-hint">达到此金额才能提现（0表示无门槛）</div>
+        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
         {
@@ -4189,13 +4465,14 @@ function openAddAppModal(phoneId) {
             action: () => {
                 const input = document.getElementById('app-names').value.trim();
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
+                const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value) || 0;
 
                 if (input) {
                     // 解析软件名称（支持换行或逗号分隔）
                     const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
                     let addedCount = 0;
                     names.forEach(name => {
-                        DataManager.addApp(phoneId, { name, balance });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw });
                         addedCount++;
                     });
                     renderPhones();
@@ -4229,6 +4506,11 @@ function openEditAppModal(phoneId, appId) {
             <div class="form-hint">软件账户中当前可提现的金额</div>
         </div>
         <div class="form-group">
+            <label class="form-label">提现门槛 (元)</label>
+            <input type="number" id="edit-app-min-withdraw" class="form-input" value="${(app.minWithdraw || 0).toFixed(2)}" step="0.01">
+            <div class="form-hint">达到此金额才能提现（0表示无门槛）</div>
+        </div>
+        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01">
             <div class="form-hint">修改历史提现金额（如需补录之前的提现记录）</div>
@@ -4241,12 +4523,14 @@ function openEditAppModal(phoneId, appId) {
             action: () => {
                 const name = document.getElementById('edit-app-name').value.trim();
                 const balance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
+                const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
                     DataManager.editApp(phoneId, appId, {
                         name,
                         balance,
+                        minWithdraw,
                         historicalWithdrawn
                     });
                     renderPhones();
@@ -4338,6 +4622,11 @@ function openBatchAddAppsModal() {
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
         <div class="form-group">
+            <label class="form-label">提现门槛 (元)</label>
+            <input type="number" id="batch-app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <div class="form-hint">批量添加时所有软件的默认提现门槛</div>
+        </div>
+        <div class="form-group">
             <div class="form-hint" style="background: var(--bg-cream); padding: 12px; border-radius: 8px;">
                 <strong>提示：</strong>将为 <strong>${phoneCount}</strong> 部手机各添加这些软件
             </div>
@@ -4350,6 +4639,7 @@ function openBatchAddAppsModal() {
             action: () => {
                 const input = document.getElementById('batch-app-names').value.trim();
                 const balance = parseFloat(document.getElementById('batch-app-balance').value) || 0;
+                const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value) || 0;
 
                 if (input) {
                     // 解析软件名称（支持换行或逗号分隔）
@@ -4359,7 +4649,7 @@ function openBatchAddAppsModal() {
                     // 为每部手机添加软件
                     data.phones.forEach(phone => {
                         names.forEach(name => {
-                            DataManager.addApp(phone.id, { name, balance });
+                            DataManager.addApp(phone.id, { name, balance, minWithdraw });
                             totalAddedCount++;
                         });
                     });
