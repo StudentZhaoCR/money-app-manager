@@ -814,6 +814,7 @@ class DataManager {
             const app = {
                 id: Date.now().toString(),
                 name: appData.name,
+                balance: appData.balance || 0,  // 当前余额
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -833,6 +834,7 @@ class DataManager {
             const app = phone.apps.find(a => a.id === appId);
             if (app) {
                 app.name = appData.name;
+                app.balance = appData.balance || 0;  // 更新余额
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
 
@@ -4019,16 +4021,22 @@ function openAddAppModal(phoneId) {
             <label class="form-label">软件名称</label>
             <input type="text" id="app-name" class="form-input" placeholder="输入软件名称">
         </div>
+        <div class="form-group">
+            <label class="form-label">当前余额 (元)</label>
+            <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <div class="form-hint">软件账户中当前可提现的金额</div>
+        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
-        { 
-            text: '添加', 
-            class: 'btn-primary', 
+        {
+            text: '添加',
+            class: 'btn-primary',
             action: () => {
                 const name = document.getElementById('app-name').value.trim();
-                
+                const balance = parseFloat(document.getElementById('app-balance').value) || 0;
+
                 if (name) {
-                    DataManager.addApp(phoneId, { name });
+                    DataManager.addApp(phoneId, { name, balance });
                     renderPhones();
                     showToast('软件添加成功！');
                 }
@@ -4055,22 +4063,29 @@ function openEditAppModal(phoneId, appId) {
             <input type="text" id="edit-app-name" class="form-input" value="${app.name}">
         </div>
         <div class="form-group">
+            <label class="form-label">当前余额 (元)</label>
+            <input type="number" id="edit-app-balance" class="form-input" value="${(app.balance || 0).toFixed(2)}" step="0.01">
+            <div class="form-hint">软件账户中当前可提现的金额</div>
+        </div>
+        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01">
             <div class="form-hint">修改历史提现金额（如需补录之前的提现记录）</div>
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
-        { 
-            text: '保存', 
-            class: 'btn-primary', 
+        {
+            text: '保存',
+            class: 'btn-primary',
             action: () => {
                 const name = document.getElementById('edit-app-name').value.trim();
+                const balance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
-                
+
                 if (name) {
-                    DataManager.editApp(phoneId, appId, { 
-                        name, 
+                    DataManager.editApp(phoneId, appId, {
+                        name,
+                        balance,
                         historicalWithdrawn
                     });
                     renderPhones();
