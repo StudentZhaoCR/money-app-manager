@@ -1870,6 +1870,146 @@ class DataManager {
 
         return messages;
     }
+
+    // 计算每个软件的赚取差额分析
+    static calculateAppEarningGap() {
+        const data = this.loadData();
+        const now = new Date();
+
+        // 获取动态目标
+        const dynamicTarget = this.calculateDynamicTarget();
+        if (!dynamicTarget) return [];
+
+        // 获取所有活跃分期
+        const activeInstallments = data.installments.filter(i => i.status === 'active');
+        if (activeInstallments.length === 0) return [];
+
+        // 找到最远还款日
+        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+        const furthestDueDate = activeInstallments[0].dueDate;
+        const daysRemaining = Math.max(1, Math.ceil((new Date(furthestDueDate) - now) / (1000 * 60 * 60 * 24)));
+
+        // 每个软件的目标提现金额
+        const perAppTarget = dynamicTarget.perAppTarget;
+
+        // 分析每个软件
+        const appAnalysis = [];
+
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                // 计算该软件已赚取金额（当前余额 + 已提现）
+                const currentBalance = app.balance || 0;
+                const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+                const totalEarned = currentBalance + withdrawn;
+
+                // 该软件的目标金额
+                const targetAmount = perAppTarget;
+
+                // 差额 = 目标 - 已赚取
+                const gap = targetAmount - totalEarned;
+
+                // 每天需要赚取多少才能补齐差额
+                const dailyNeed = daysRemaining > 0 ? gap / daysRemaining : 0;
+
+                // 状态判断
+                let status = 'ontrack';
+                if (gap <= 0) {
+                    status = 'completed'; // 已完成目标
+                } else if (dailyNeed > perAppTarget * 1.5) {
+                    status = 'critical'; // 缺口很大，需要大量赚取
+                } else if (dailyNeed > perAppTarget) {
+                    status = 'warning'; // 缺口较大
+                }
+
+                // 计算完成百分比
+                const completionPercent = targetAmount > 0 ? (totalEarned / targetAmount * 100) : 0;
+
+                appAnalysis.push({
+                    phoneName: phone.name,
+                    appName: app.name,
+                    appId: app.id,
+                    currentBalance,
+                    withdrawn,
+                    totalEarned,
+                    targetAmount,
+                    gap,
+                    dailyNeed,
+                    daysRemaining,
+                    status,
+                    completionPercent,
+                    perAppTarget
+                });
+            });
+        });
+
+        // 按缺口大小排序（缺口大的在前）
+        return appAnalysis.sort((a, b) => b.gap - a.gap);
+    }
+
+    // 生成软件赚取建议
+    static generateAppEarningAdvice(appAnalysis) {
+        if (!appAnalysis || appAnalysis.length === 0) return [];
+
+        const advice = [];
+
+        // 找出缺口最大的软件
+        const criticalApps = appAnalysis.filter(a => a.status === 'critical');
+        const warningApps = appAnalysis.filter(a => a.status === 'warning');
+        const completedApps = appAnalysis.filter(a => a.status === 'completed');
+
+        // 总体情况
+        const totalGap = appAnalysis.reduce((sum, a) => sum + Math.max(0, a.gap), 0);
+        const totalDailyNeed = appAnalysis.reduce((sum, a) => sum + Math.max(0, a.dailyNeed), 0);
+
+        if (totalGap > 0) {
+            advice.push({
+                type: 'summary',
+                icon: '📊',
+                title: '总体情况',
+                message: `还需赚取 ¥${totalGap.toFixed(2)} 才能完成还款目标`,
+                detail: `未来 ${appAnalysis[0]?.daysRemaining || 0} 天，每天需要赚取 ¥${totalDailyNeed.toFixed(2)}`
+            });
+        }
+
+        // 紧急软件建议
+        if (criticalApps.length > 0) {
+            criticalApps.slice(0, 3).forEach(app => {
+                advice.push({
+                    type: 'critical',
+                    icon: '🔴',
+                    title: `${app.phoneName} - ${app.appName}`,
+                    message: `缺口 ¥${app.gap.toFixed(2)}，完成度 ${app.completionPercent.toFixed(1)}%`,
+                    detail: `每天需赚取 ¥${app.dailyNeed.toFixed(2)}（目标 ¥${app.perAppTarget.toFixed(2)}/天）`
+                });
+            });
+        }
+
+        // 警告软件建议
+        if (warningApps.length > 0) {
+            warningApps.slice(0, 2).forEach(app => {
+                advice.push({
+                    type: 'warning',
+                    icon: '🟡',
+                    title: `${app.phoneName} - ${app.appName}`,
+                    message: `缺口 ¥${app.gap.toFixed(2)}，完成度 ${app.completionPercent.toFixed(1)}%`,
+                    detail: `每天需赚取 ¥${app.dailyNeed.toFixed(2)}`
+                });
+            });
+        }
+
+        // 已完成软件
+        if (completedApps.length > 0) {
+            advice.push({
+                type: 'success',
+                icon: '✅',
+                title: '已完成目标的软件',
+                message: `${completedApps.length} 个软件已完成还款目标`,
+                detail: completedApps.slice(0, 3).map(a => a.appName).join('、') + (completedApps.length > 3 ? '等' : '')
+            });
+        }
+
+        return advice;
+    }
 }
 
 // 全局状态
@@ -2536,6 +2676,9 @@ function renderDashboard() {
     
     // 渲染软件收益排行
     renderAppRanking();
+    
+    // 渲染软件赚取分析
+    renderAppEarningAnalysis();
 }
 
 // 全局图表实例
@@ -2725,6 +2868,99 @@ function generateSmartSuggestions(data) {
 
     // 最多显示3条建议
     return suggestions.slice(0, 3);
+}
+
+// ==================== 软件赚取分析功能 ====================
+
+// 渲染软件赚取分析
+function renderAppEarningAnalysis() {
+    const card = document.getElementById('app-earning-analysis-card');
+    const content = document.getElementById('app-earning-analysis-content');
+    if (!card || !content) return;
+
+    const appAnalysis = DataManager.calculateAppEarningGap();
+    const advice = DataManager.generateAppEarningAdvice(appAnalysis);
+
+    if (appAnalysis.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+
+    let html = '';
+
+    // 显示建议
+    if (advice.length > 0) {
+        advice.forEach(item => {
+            const bgColor = item.type === 'success' ? 'rgba(34, 197, 94, 0.1)' :
+                           item.type === 'critical' ? 'rgba(239, 68, 68, 0.1)' :
+                           item.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
+                           'rgba(59, 130, 246, 0.1)';
+            const borderColor = item.type === 'success' ? '#22c55e' :
+                               item.type === 'critical' ? '#ef4444' :
+                               item.type === 'warning' ? '#f59e0b' :
+                               '#3b82f6';
+            const textColor = item.type === 'success' ? '#16a34a' :
+                             item.type === 'critical' ? '#dc2626' :
+                             item.type === 'warning' ? '#d97706' :
+                             '#2563eb';
+
+            html += `
+                <div style="margin-bottom: 12px; padding: 12px; background: ${bgColor}; border-radius: 8px; border-left: 3px solid ${borderColor};">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <span style="font-size: 16px;">${item.icon}</span>
+                        <span style="font-size: 13px; font-weight: 600; color: ${textColor};">${item.title}</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-primary); margin-bottom: 4px;">${item.message}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">${item.detail}</div>
+                </div>
+            `;
+        });
+    }
+
+    // 显示软件列表（只显示有缺口的软件）
+    const appsWithGap = appAnalysis.filter(a => a.gap > 0).slice(0, 5);
+    if (appsWithGap.length > 0) {
+        html += `<div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">`;
+        html += `<div style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px;">📱 需要关注的软件</div>`;
+
+        appsWithGap.forEach(app => {
+            const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : '🟢';
+            const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : '#22c55e';
+
+            html += `
+                <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 12px;">${statusIcon}</span>
+                            <span style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.appName}</span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">${app.daysRemaining}天后还款</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
+                        <span>目标: ¥${app.targetAmount.toFixed(2)}</span>
+                        <span>余额: ¥${app.currentBalance.toFixed(2)}</span>
+                        <span>已提: ¥${app.withdrawn.toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+                        <div>
+                            <span style="font-size: 11px; color: var(--text-secondary);">差额: </span>
+                            <span style="font-size: 13px; font-weight: 600; color: ${statusColor};">¥${app.gap.toFixed(2)}</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
+                            <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+    }
+
+    content.innerHTML = html;
 }
 
 // ==================== 提现预测功能 ====================
