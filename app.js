@@ -1515,47 +1515,43 @@ class DataManager {
         });
     }
 
-    // 计算每日最低提现目标
+    // 计算软件提现总目标（基于分期还款总额）
     static calculateDailyWithdrawalTarget() {
         const data = this.loadData();
-        const now = new Date();
-        const today = now.toISOString().split('T')[0];
+
+        // 统计所有软件数量
+        const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
+
+        if (totalApps === 0) {
+            return null;
+        }
 
         // 获取所有活跃分期
         const activeInstallments = data.installments.filter(i => i.status === 'active');
 
-        if (activeInstallments.length === 0) {
-            return null;
-        }
-
-        // 计算总待还金额
+        // 计算总待还金额（所有分期的剩余还款额）
         const totalPendingAmount = activeInstallments.reduce((sum, inst) => {
             return sum + (inst.amount - (inst.paidAmount || 0));
         }, 0);
 
-        // 找到最远的还款日期
-        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
-        const furthestDueDate = activeInstallments[0].dueDate;
-        const furthestDate = new Date(furthestDueDate);
+        // 计算已提现总额
+        const totalWithdrawn = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
+        }, 0);
 
-        // 计算剩余天数（从今天到最远还款日）
-        const daysRemaining = Math.max(1, Math.ceil((furthestDate - now) / (1000 * 60 * 60 * 24)));
+        // 每个软件需要提现的目标 = 总待还金额 / 软件数量
+        const perAppTarget = totalApps > 0 ? totalPendingAmount / totalApps : 0;
 
-        // 计算每日最低提现 = 总待还金额 / 剩余天数
-        const dailyTarget = totalPendingAmount / daysRemaining;
-
-        // 统计软件数量
-        const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
-
-        // 每个软件每日目标
-        const perAppTarget = totalApps > 0 ? dailyTarget / totalApps : 0;
+        // 剩余目标金额
+        const remainingTarget = Math.max(0, totalPendingAmount - totalWithdrawn);
 
         return {
-            totalPendingAmount,
-            furthestDueDate,
-            daysRemaining,
-            dailyTarget,
             totalApps,
+            totalTargetAmount: totalPendingAmount,
+            totalWithdrawn,
+            remainingTarget,
             perAppTarget
         };
     }
@@ -2274,22 +2270,28 @@ function renderDashboard() {
     document.getElementById('total-balance').textContent = `¥${netEarning.toFixed(2)}`;
     document.getElementById('ready-apps').textContent = appsWithWithdrawals;
 
-    // 计算并显示每日最低提现目标
+    // 计算并显示软件提现总目标
     const dailyTarget = DataManager.calculateDailyWithdrawalTarget();
     const dailyTargetEl = document.getElementById('daily-withdrawal-target');
     if (dailyTargetEl) {
-        if (dailyTarget) {
+        if (dailyTarget && dailyTarget.totalTargetAmount > 0) {
+            const progressPercent = dailyTarget.totalTargetAmount > 0 
+                ? (dailyTarget.totalWithdrawn / dailyTarget.totalTargetAmount * 100).toFixed(1) 
+                : 0;
             dailyTargetEl.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>今日目标</span>
-                    <span style="font-weight: 700; color: var(--primary-color);">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="color: #ffffff; font-weight: 500;">还款总目标</span>
+                    <span style="font-weight: 700; color: #ffffff; font-size: 16px;">¥${dailyTarget.totalTargetAmount.toFixed(2)}</span>
                 </div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                    ${dailyTarget.daysRemaining}天还完 · 共${dailyTarget.totalApps}个软件 · 每个约¥${dailyTarget.perAppTarget.toFixed(2)}
+                <div style="font-size: 12px; color: #e0e0e0; margin-top: 6px; line-height: 1.6;">
+                    已提现 ¥${dailyTarget.totalWithdrawn.toFixed(2)} · 剩余 ¥${dailyTarget.remainingTarget.toFixed(2)}
+                </div>
+                <div style="font-size: 12px; color: #e0e0e0; margin-top: 4px;">
+                    共${dailyTarget.totalApps}个软件 · 每个需提现 ¥${dailyTarget.perAppTarget.toFixed(2)}
                 </div>
             `;
         } else {
-            dailyTargetEl.innerHTML = '<span style="color: var(--text-secondary);">无分期目标</span>';
+            dailyTargetEl.innerHTML = '<span style="color: #e0e0e0;">无分期还款目标</span>';
         }
     }
 
@@ -3371,7 +3373,7 @@ function renderTodayApps(data) {
             <div class="app-item">
                 <div class="app-header">
                     <span class="app-name">${app.phoneName} - ${app.name}</span>
-                    ${dailyTarget ? `<span style="font-size: 12px; color: var(--primary-color); font-weight: 600;">目标: ¥${perAppTarget.toFixed(2)}</span>` : ''}
+                    ${dailyTarget && dailyTarget.totalTargetAmount > 0 ? `<span style="font-size: 12px; color: var(--primary-color); font-weight: 600;">需提现: ¥${dailyTarget.perAppTarget.toFixed(2)}</span>` : ''}
                 </div>
                 <div class="app-info">
                     <span>累计提现: ¥${earned.toFixed(2)}</span>
@@ -5750,15 +5752,16 @@ const AMOUNT_LEVELS = [
 // 游戏状态
 let mergeGameState = {
     balls: [],
-    score: 0,
-    maxAmount: 0,
-    mergeCount: 0,
-    startTime: null,
+    containers: [], // 金额容器
+    totalAmount: 0,
+    remainingBalls: 0,
     isRunning: false,
-    nextBallLevel: 0,
     canvas: null,
     ctx: null,
-    animationId: null
+    animationId: null,
+    dropPosition: null, // 当前投放位置
+    currentBall: null, // 当前待投放的球
+    containerHeight: 80 // 容器高度
 };
 
 // 显示合成游戏页面
@@ -5776,36 +5779,71 @@ function initMergeGame() {
     canvas.width = canvas.offsetWidth;
     canvas.height = 500;
 
+    // 重置游戏状态
     mergeGameState.canvas = canvas;
     mergeGameState.ctx = canvas.getContext('2d');
     mergeGameState.balls = [];
-    mergeGameState.score = 0;
-    mergeGameState.maxAmount = 0;
-    mergeGameState.mergeCount = 0;
-    mergeGameState.startTime = Date.now();
+    mergeGameState.containers = [];
+    mergeGameState.totalAmount = 0;
+    mergeGameState.remainingBalls = 0;
     mergeGameState.isRunning = true;
-    mergeGameState.nextBallLevel = 0;
-    mergeGameState.withdrawalBalls = []; // 存储与提现记录关联的球体
+    mergeGameState.dropPosition = canvas.width / 2;
 
-    // 从实际提现记录生成初始球体
-    loadWithdrawalsAsBalls();
+    // 从实际提现记录生成球体队列
+    loadWithdrawalsAsQueue();
+
+    // 创建容器
+    createContainers();
 
     // 更新显示
     updateMergeGameStats();
-    updateNextBallPreview();
+    updateContainerStats();
 
-    // 绑定点击事件
-    canvas.onclick = handleMergeGameClick;
+    // 绑定事件
+    bindMergeGameEvents();
 
     // 开始游戏循环
     startMergeGameLoop();
-
-    // 开始计时
-    startMergeGameTimer();
 }
 
-// 从提现记录加载球体
-function loadWithdrawalsAsBalls() {
+// 创建金额容器
+function createContainers() {
+    const canvas = mergeGameState.canvas;
+    const uniqueAmounts = new Set();
+
+    // 收集所有不同的金额
+    mergeGameState.ballQueue.forEach(ball => {
+        const amount = AMOUNT_LEVELS[ball.level].amount;
+        uniqueAmounts.add(amount);
+    });
+
+    // 按金额排序
+    const sortedAmounts = Array.from(uniqueAmounts).sort((a, b) => a - b);
+
+    // 创建容器
+    const containerWidth = canvas.width / sortedAmounts.length;
+    mergeGameState.containers = sortedAmounts.map((amount, index) => ({
+        x: index * containerWidth,
+        y: canvas.height - mergeGameState.containerHeight,
+        width: containerWidth,
+        height: mergeGameState.containerHeight,
+        amount: amount,
+        balls: [],
+        color: getAmountColor(amount)
+    }));
+}
+
+// 获取金额对应的颜色
+function getAmountColor(amount) {
+    const level = AMOUNT_LEVELS.findIndex(l => l.amount === amount);
+    if (level >= 0) {
+        return AMOUNT_LEVELS[level].color;
+    }
+    return '#667eea';
+}
+
+// 从提现记录加载球体队列
+function loadWithdrawalsAsQueue() {
     const data = DataManager.loadData();
     const withdrawals = [];
 
@@ -5828,11 +5866,12 @@ function loadWithdrawalsAsBalls() {
     // 如果没有提现记录，显示提示
     if (withdrawals.length === 0) {
         showToast('暂无提现记录，请先添加提现数据');
+        mergeGameState.isRunning = false;
         return;
     }
 
-    // 根据提现金额生成对应级别的球体
-    withdrawals.forEach((w, index) => {
+    // 创建球体队列（按金额从小到大排序）
+    mergeGameState.ballQueue = withdrawals.map(w => {
         // 找到最接近的金额级别
         let level = 0;
         for (let i = 0; i < AMOUNT_LEVELS.length; i++) {
@@ -5840,31 +5879,129 @@ function loadWithdrawalsAsBalls() {
                 level = i;
                 break;
             }
-            // 如果提现金额大于当前级别，继续查找
             if (w.amount >= AMOUNT_LEVELS[i].amount) {
                 level = i;
             }
         }
+        return {
+            level: level,
+            withdrawalInfo: w
+        };
+    }).sort((a, b) => a.level - b.level); // 从小到大排序
 
-        // 在画布顶部排列球体
-        const x = 50 + (index % 5) * ((mergeGameState.canvas.width - 100) / 4);
-        const y = 30 + Math.floor(index / 5) * 60;
-
-        const ball = createBall(x, y, level);
-        ball.withdrawalInfo = w; // 关联提现信息
-        ball.isStatic = true; // 初始时静止，点击开始后落下
-        ball.isFromWithdrawal = true; // 标记为来自提现记录
-
-        mergeGameState.balls.push(ball);
-        mergeGameState.withdrawalBalls.push(ball);
-    });
+    mergeGameState.remainingBalls = mergeGameState.ballQueue.length;
 
     // 显示加载了多少个提现球体
-    showToast(`已加载 ${withdrawals.length} 个提现记录作为球体`);
+    showToast(`已加载 ${withdrawals.length} 个提现记录，按金额从小到大排列`);
 
-    // 更新下一个球预览为null（不再生成新球）
-    mergeGameState.nextBallLevel = -1;
-    updateNextBallPreview();
+    // 设置第一个球为当前球
+    setNextBallFromQueue();
+}
+
+// 从队列中设置下一个球
+function setNextBallFromQueue() {
+    if (mergeGameState.ballQueue.length === 0) {
+        mergeGameState.currentBall = null;
+        return;
+    }
+
+    const ballData = mergeGameState.ballQueue.shift();
+    const config = AMOUNT_LEVELS[ballData.level];
+
+    mergeGameState.currentBall = {
+        x: mergeGameState.dropPosition,
+        y: config.radius + 10,
+        radius: config.radius,
+        level: ballData.level,
+        amount: config.amount,
+        color: config.color,
+        withdrawalInfo: ballData.withdrawalInfo,
+        isDropping: false
+    };
+}
+
+// 绑定游戏事件
+function bindMergeGameEvents() {
+    const canvas = mergeGameState.canvas;
+    if (!canvas) return;
+
+    // 鼠标移动控制投放位置
+    canvas.onmousemove = (e) => {
+        if (mergeGameState.gameStatus !== 'playing') return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+
+        // 限制投放位置在画布范围内
+        if (mergeGameState.currentBall) {
+            const radius = mergeGameState.currentBall.radius;
+            mergeGameState.dropPosition = Math.max(radius, Math.min(canvas.width - radius, x));
+            mergeGameState.currentBall.x = mergeGameState.dropPosition;
+        }
+    };
+
+    // 触摸移动（移动端）
+    canvas.ontouchmove = (e) => {
+        if (!mergeGameState.isRunning) return;
+        e.preventDefault();
+
+        const rect = canvas.getBoundingClientRect();
+        const x = e.touches[0].clientX - rect.left;
+
+        if (mergeGameState.currentBall) {
+            const radius = mergeGameState.currentBall.radius;
+            mergeGameState.dropPosition = Math.max(radius, Math.min(canvas.width - radius, x));
+            mergeGameState.currentBall.x = mergeGameState.dropPosition;
+        }
+    };
+
+    // 点击投放球体
+    canvas.onclick = () => {
+        if (!mergeGameState.isRunning) return;
+        dropCurrentBall();
+    };
+
+    // 触摸投放（移动端）
+    canvas.ontouchend = (e) => {
+        if (!mergeGameState.isRunning) return;
+        e.preventDefault();
+        dropCurrentBall();
+    };
+}
+
+// 投放当前球体
+function dropCurrentBall() {
+    if (!mergeGameState.currentBall || mergeGameState.currentBall.isDropping) return;
+
+    // 将球体加入游戏
+    const ball = createBall(
+        mergeGameState.currentBall.x,
+        mergeGameState.currentBall.y,
+        mergeGameState.currentBall.level
+    );
+    ball.withdrawalInfo = mergeGameState.currentBall.withdrawalInfo;
+    ball.isStatic = false;
+    ball.targetContainer = findTargetContainer(ball.amount);
+
+    mergeGameState.balls.push(ball);
+    mergeGameState.totalAmount += ball.amount;
+    mergeGameState.remainingBalls--;
+
+    // 更新统计
+    updateMergeGameStats();
+
+    // 设置下一个球
+    setNextBallFromQueue();
+
+    // 检查是否全部投放完毕
+    if (mergeGameState.remainingBalls === 0 && !mergeGameState.currentBall) {
+        showToast('所有球体已投放完毕！');
+    }
+}
+
+// 找到目标容器
+function findTargetContainer(amount) {
+    return mergeGameState.containers.find(c => c.amount === amount);
 }
 
 // 游戏主循环
@@ -5880,6 +6017,7 @@ function startMergeGameLoop() {
 // 更新游戏状态
 function updateMergeGame() {
     const balls = mergeGameState.balls;
+    const containers = mergeGameState.containers;
     const canvas = mergeGameState.canvas;
 
     // 应用重力和更新位置
@@ -5902,13 +6040,31 @@ function updateMergeGame() {
             ball.x = canvas.width - ball.radius;
             ball.vx *= -MERGE_GAME_CONFIG.wallBounce;
         }
-        if (ball.y + ball.radius > canvas.height) {
-            ball.y = canvas.height - ball.radius;
-            ball.vy *= -MERGE_GAME_CONFIG.wallBounce;
+
+        // 容器底部碰撞
+        if (ball.targetContainer) {
+            const container = ball.targetContainer;
+            const containerTop = container.y;
+
+            // 检查球体是否在容器范围内
+            if (ball.x >= container.x && ball.x <= container.x + container.width) {
+                // 容器底部
+                if (ball.y + ball.radius > canvas.height) {
+                    ball.y = canvas.height - ball.radius;
+                    ball.vy *= -MERGE_GAME_CONFIG.wallBounce;
+                    ball.vx *= 0.5; // 底部摩擦
+                }
+            }
+        } else {
+            // 没有目标容器时的底部碰撞
+            if (ball.y + ball.radius > canvas.height) {
+                ball.y = canvas.height - ball.radius;
+                ball.vy *= -MERGE_GAME_CONFIG.wallBounce;
+            }
         }
     });
 
-    // 球体之间的碰撞和合成
+    // 球体之间的碰撞
     for (let i = 0; i < balls.length; i++) {
         for (let j = i + 1; j < balls.length; j++) {
             const ball1 = balls[i];
@@ -5918,72 +6074,12 @@ function updateMergeGame() {
             const dy = ball2.y - ball1.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            // 检查是否可以合成（相同金额且距离足够近）
-            if (ball1.level === ball2.level && distance < ball1.radius + ball2.radius + MERGE_GAME_CONFIG.mergeDistance) {
-                // 合成
-                mergeBalls(i, j);
-                return; // 一次只合成一对
-            }
-
             // 物理碰撞
             if (distance < ball1.radius + ball2.radius) {
                 resolveBallCollision(ball1, ball2);
             }
         }
     }
-}
-
-// 合成两个球
-function mergeBalls(index1, index2) {
-    const balls = mergeGameState.balls;
-    const ball1 = balls[index1];
-    const ball2 = balls[index2];
-
-    // 计算新位置（中点）
-    const newX = (ball1.x + ball2.x) / 2;
-    const newY = (ball1.y + ball2.y) / 2;
-
-    // 计算新等级
-    const newLevel = ball1.level + 1;
-
-    // 移除旧球
-    balls.splice(Math.max(index1, index2), 1);
-    balls.splice(Math.min(index1, index2), 1);
-
-    // 创建新球
-    const newBall = createBall(newX, newY, newLevel);
-    newBall.vx = (ball1.vx + ball2.vx) / 2;
-    newBall.vy = (ball1.vy + ball2.vy) / 2;
-
-    // 合并提现信息
-    if (ball1.withdrawalInfo || ball2.withdrawalInfo) {
-        newBall.withdrawalInfo = {
-            sources: []
-        };
-        if (ball1.withdrawalInfo) {
-            newBall.withdrawalInfo.sources.push(ball1.withdrawalInfo);
-        }
-        if (ball2.withdrawalInfo) {
-            newBall.withdrawalInfo.sources.push(ball2.withdrawalInfo);
-        }
-    }
-
-    balls.push(newBall);
-
-    // 更新分数和统计
-    const amount = AMOUNT_LEVELS[newLevel]?.amount || (AMOUNT_LEVELS[AMOUNT_LEVELS.length - 1].amount * 2);
-    mergeGameState.score += amount;
-    mergeGameState.mergeCount++;
-    if (amount > mergeGameState.maxAmount) {
-        mergeGameState.maxAmount = amount;
-    }
-
-    // 更新显示
-    updateMergeGameStats();
-    addMergeRecord(amount, newBall.withdrawalInfo);
-
-    // 播放合成效果（可以添加音效）
-    showMergeEffect(newX, newY, amount);
 }
 
 // 创建球体
@@ -6037,6 +6133,33 @@ function renderMergeGame() {
     // 清空画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // 绘制容器
+    mergeGameState.containers.forEach(container => {
+        // 容器背景
+        ctx.fillStyle = container.color + '20'; // 20% 透明度
+        ctx.fillRect(container.x, container.y, container.width, container.height);
+
+        // 容器边框
+        ctx.strokeStyle = container.color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(container.x, container.y, container.width, container.height);
+
+        // 容器标签
+        ctx.fillStyle = container.color;
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`¥${container.amount}`, container.x + container.width / 2, container.y + 20);
+
+        // 容器内球体数量
+        const count = container.balls.length;
+        if (count > 0) {
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#666';
+            ctx.fillText(`${count}个`, container.x + container.width / 2, container.y + 40);
+        }
+    });
+
     // 绘制球体
     mergeGameState.balls.forEach(ball => {
         // 球体阴影
@@ -6059,31 +6182,15 @@ function renderMergeGame() {
             ball.radius
         );
 
-        // 静止的提现球体使用更亮的颜色
-        if (ball.isStatic) {
-            gradient.addColorStop(0, lightenColor(ball.color, 50));
-            gradient.addColorStop(1, ball.color);
-        } else {
-            gradient.addColorStop(0, lightenColor(ball.color, 30));
-            gradient.addColorStop(1, ball.color);
-        }
+        gradient.addColorStop(0, lightenColor(ball.color, 30));
+        gradient.addColorStop(1, ball.color);
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // 边框 - 提现球体有特殊边框
-        if (ball.isStatic && ball.withdrawalInfo) {
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 3;
-            // 添加发光效果
-            ctx.shadowColor = ball.color;
-            ctx.shadowBlur = 10;
-        } else {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 2;
-            ctx.shadowBlur = 0;
-        }
+        // 边框
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.shadowBlur = 0; // 重置阴影
 
         // 金额文字
         ctx.fillStyle = '#fff';
@@ -6092,171 +6199,104 @@ function renderMergeGame() {
         ctx.textBaseline = 'middle';
         ctx.fillText(`¥${ball.amount}`, ball.x, ball.y);
 
-        // 静止球体显示提示图标
-        if (ball.isStatic) {
-            ctx.font = '12px Arial';
-            ctx.fillText('👆', ball.x, ball.y - ball.radius - 10);
+        // 显示来源软件名称（小字）
+        if (ball.withdrawalInfo) {
+            ctx.font = '10px Arial';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fillText(ball.withdrawalInfo.appName.substring(0, 4), ball.x, ball.y + ball.radius * 0.6);
         }
     });
 
-    // 绘制预览线（鼠标位置）
-    if (mergeGameState.mouseX !== undefined && mergeGameState.nextBallLevel >= 0) {
-        const previewLevel = Math.min(mergeGameState.nextBallLevel, AMOUNT_LEVELS.length - 1);
-        const previewRadius = AMOUNT_LEVELS[previewLevel].radius;
+    // 绘制当前待投放的球体
+    if (mergeGameState.currentBall && mergeGameState.isRunning) {
+        const ball = mergeGameState.currentBall;
+
+        // 绘制落点指示线
         ctx.beginPath();
-        ctx.moveTo(mergeGameState.mouseX, 0);
-        ctx.lineTo(mergeGameState.mouseX, canvas.height);
+        ctx.moveTo(ball.x, 0);
+        ctx.lineTo(ball.x, canvas.height);
         ctx.strokeStyle = 'rgba(102, 126, 234, 0.3)';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.stroke();
         ctx.setLineDash([]);
+
+        // 绘制球体阴影
+        ctx.beginPath();
+        ctx.arc(ball.x + 2, ball.y + 2, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fill();
+
+        // 绘制球体（半透明表示还未投放）
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        const gradient = ctx.createRadialGradient(
+            ball.x - ball.radius * 0.3,
+            ball.y - ball.radius * 0.3,
+            0,
+            ball.x,
+            ball.y,
+            ball.radius
+        );
+        gradient.addColorStop(0, lightenColor(ball.color, 50));
+        gradient.addColorStop(1, ball.color);
+        ctx.fillStyle = gradient;
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // 边框
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 金额文字
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(12, ball.radius * 0.4)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`¥${ball.amount}`, ball.x, ball.y);
+
+        // 提示文字
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#667eea';
+        ctx.fillText('点击投放', ball.x, ball.y + ball.radius + 15);
     }
-}
-
-// 处理点击事件
-function handleMergeGameClick(e) {
-    if (!mergeGameState.isRunning) return;
-
-    const canvas = mergeGameState.canvas;
-    const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-
-    // 检查是否点击了静止的提现球体
-    for (let i = mergeGameState.balls.length - 1; i >= 0; i--) {
-        const ball = mergeGameState.balls[i];
-        if (ball.isStatic) {
-            const dx = clickX - ball.x;
-            const dy = clickY - ball.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance <= ball.radius) {
-                // 点击了静止球体，让它开始下落
-                ball.isStatic = false;
-                ball.vy = 2; // 给一个初始下落速度
-
-                // 显示提现信息
-                if (ball.withdrawalInfo) {
-                    showToast(`${ball.withdrawalInfo.phoneName} - ${ball.withdrawalInfo.appName}: ¥${ball.withdrawalInfo.amount}`);
-                }
-                return;
-            }
-        }
-    }
-
-    // 如果没有点击静止球体，显示提示
-    showToast('点击提现球体让它落下');
-}
-
-// 更新鼠标位置
-function updateMergeGameMouse(e) {
-    if (!mergeGameState.canvas) return;
-    const rect = mergeGameState.canvas.getBoundingClientRect();
-    mergeGameState.mouseX = e.clientX - rect.left;
-}
-
-// 显示合成效果
-function showMergeEffect(x, y, amount) {
-    // 可以在这里添加粒子效果或文字飘升效果
-    const effect = document.createElement('div');
-    effect.style.cssText = `
-        position: absolute;
-        left: ${x}px;
-        top: ${y}px;
-        color: #22c55e;
-        font-weight: bold;
-        font-size: 20px;
-        pointer-events: none;
-        animation: mergeEffect 1s ease-out forwards;
-        z-index: 1000;
-    `;
-    effect.textContent = `+¥${amount}`;
-    document.body.appendChild(effect);
-
-    setTimeout(() => effect.remove(), 1000);
 }
 
 // 更新游戏统计
 function updateMergeGameStats() {
-    document.getElementById('merge-game-score').textContent = mergeGameState.score.toFixed(2);
-    document.getElementById('merge-game-max').textContent = `¥${mergeGameState.maxAmount.toFixed(2)}`;
-    document.getElementById('merge-game-merges').textContent = mergeGameState.mergeCount;
+    const totalEl = document.getElementById('merge-game-total');
+    const remainingEl = document.getElementById('merge-game-remaining');
+
+    if (totalEl) totalEl.textContent = `¥${mergeGameState.totalAmount.toFixed(2)}`;
+    if (remainingEl) remainingEl.textContent = mergeGameState.remainingBalls.toString();
 }
 
-// 更新下一个球预览
-function updateNextBallPreview() {
-    const preview = document.getElementById('next-ball-preview');
-    if (!preview) return;
+// 更新容器统计
+function updateContainerStats() {
+    const container = document.getElementById('container-stats');
+    if (!container) return;
 
-    // 如果没有下一个球（-1），显示提示
-    if (mergeGameState.nextBallLevel === -1) {
-        preview.textContent = '提现';
-        preview.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-        preview.style.width = '60px';
-        preview.style.height = '60px';
-        preview.style.fontSize = '12px';
+    if (mergeGameState.containers.length === 0) {
+        container.innerHTML = '<div class="empty-state">开始游戏后显示容器统计</div>';
         return;
     }
 
-    const config = AMOUNT_LEVELS[mergeGameState.nextBallLevel];
-    preview.textContent = `¥${config.amount}`;
-    preview.style.background = `linear-gradient(135deg, ${config.color} 0%, ${lightenColor(config.color, -20)} 100%)`;
-    preview.style.width = `${config.radius * 2}px`;
-    preview.style.height = `${config.radius * 2}px`;
-}
-
-// 添加合成记录
-function addMergeRecord(amount, withdrawalInfo) {
-    const container = document.getElementById('merge-game-records');
-    if (!container) return;
-
-    // 构建来源信息
-    let sourceText = '';
-    if (withdrawalInfo && withdrawalInfo.sources && withdrawalInfo.sources.length > 0) {
-        const sourceNames = withdrawalInfo.sources.map(s => s.appName || '未知').join(' + ');
-        sourceText = `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">来自: ${sourceNames}</div>`;
-    }
-
-    const record = document.createElement('div');
-    record.style.cssText = 'padding: 8px; border-bottom: 1px solid var(--border-color); font-size: 13px;';
-    record.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 600;">💰 合成 ¥${amount.toFixed(2)}</span>
-            <span style="color: var(--text-secondary); font-size: 11px;">${new Date().toLocaleTimeString()}</span>
-        </div>
-        ${sourceText}
-    `;
-
-    // 插入到最前面
-    if (container.children.length === 0 || container.children[0].classList.contains('empty-state')) {
-        container.innerHTML = '';
-    }
-    container.insertBefore(record, container.firstChild);
-
-    // 只保留最近20条记录
-    while (container.children.length > 20) {
-        container.removeChild(container.lastChild);
-    }
-}
-
-// 游戏计时器
-function startMergeGameTimer() {
-    const timerEl = document.getElementById('merge-game-time');
-    if (!timerEl) return;
-
-    const updateTimer = () => {
-        if (!mergeGameState.isRunning) return;
-
-        const elapsed = Math.floor((Date.now() - mergeGameState.startTime) / 1000);
-        const minutes = Math.floor(elapsed / 60);
-        const seconds = elapsed % 60;
-        timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-        requestAnimationFrame(updateTimer);
-    };
-
-    updateTimer();
+    container.innerHTML = mergeGameState.containers.map(c => {
+        const totalInContainer = c.balls.reduce((sum, b) => sum + b.amount, 0);
+        return `
+            <div style="padding: 8px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 12px; height: 12px; border-radius: 50%; background: ${c.color};"></div>
+                    <span>¥${c.amount}</span>
+                </div>
+                <div style="font-size: 13px; color: var(--text-secondary);">
+                    ${c.balls.length}个球体 · 合计¥${totalInContainer.toFixed(2)}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // 重新开始游戏
@@ -6271,10 +6311,6 @@ function restartMergeGame() {
     const overlay = document.getElementById('merge-game-overlay');
     if (overlay) overlay.style.display = 'none';
 
-    // 清空记录
-    const recordsContainer = document.getElementById('merge-game-records');
-    if (recordsContainer) recordsContainer.innerHTML = '<div class="empty-state">暂无合成记录</div>';
-
     // 重新初始化
     initMergeGame();
 }
@@ -6283,13 +6319,10 @@ function restartMergeGame() {
 function lightenColor(color, percent) {
     const num = parseInt(color.replace('#', ''), 16);
     const amt = Math.round(2.55 * percent);
-    const R = (num >> 16) + amt;
-    const G = (num >> 8 & 0x00FF) + amt;
-    const B = (num & 0x0000FF) + amt;
-    return '#' + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
-        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
-        (B < 255 ? B < 1 ? 0 : B : 255))
-        .toString(16).slice(1);
+    const R = Math.min(255, Math.max(0, (num >> 16) + amt));
+    const G = Math.min(255, Math.max(0, (num >> 8 & 0x00FF) + amt));
+    const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
+    return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
 }
 
 // 绑定鼠标移动事件

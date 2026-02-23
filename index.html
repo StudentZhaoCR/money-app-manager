@@ -66,10 +66,10 @@
                     </div>
                 </div>
                 <div class="stats-row">
-                    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; flex: 1;">
-                        <span class="stat-label" style="color: rgba(255,255,255,0.9);">今日提现目标</span>
-                        <div class="stat-value" style="color: white; font-size: 14px; margin-top: 8px;" id="daily-withdrawal-target">
-                            <span style="color: rgba(255,255,255,0.7);">无分期目标</span>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; flex: 1; padding: 16px;">
+                        <span class="stat-label" style="color: #ffffff; font-weight: 600; font-size: 13px;">软件提现总目标</span>
+                        <div class="stat-value" style="color: #ffffff; font-size: 15px; margin-top: 10px; line-height: 1.5;" id="daily-withdrawal-target">
+                            <span style="color: #e0e0e0;">无提现目标</span>
                         </div>
                     </div>
                 </div>
@@ -339,36 +339,32 @@
                 </div>
             </div>
 
-            <!-- 游戏统计 -->
+            <!-- 游戏状态 -->
             <div class="card mt-4">
                 <div class="stats-row">
-                    <div class="stat-card border-primary">
-                        <span class="stat-label">当前分数</span>
-                        <span class="stat-value" id="merge-game-score">0</span>
+                    <div class="stat-card border-primary" style="flex: 1;">
+                        <span class="stat-label">当前总金额</span>
+                        <span class="stat-value" id="merge-game-total">¥0.00</span>
                     </div>
-                    <div class="stat-card border-secondary">
-                        <span class="stat-label">最高合成</span>
-                        <span class="stat-value" id="merge-game-max">¥0</span>
-                    </div>
-                </div>
-                <div class="stats-row mt-3">
-                    <div class="stat-card border-tertiary">
-                        <span class="stat-label">合成次数</span>
-                        <span class="stat-value" id="merge-game-merges">0</span>
-                    </div>
-                    <div class="stat-card border-accent">
-                        <span class="stat-label">游戏时长</span>
-                        <span class="stat-value" id="merge-game-time">00:00</span>
+                    <div class="stat-card border-secondary" style="flex: 1;">
+                        <span class="stat-label">剩余球体</span>
+                        <span class="stat-value" id="merge-game-remaining">0</span>
                     </div>
                 </div>
             </div>
 
             <!-- 游戏画布 -->
-            <div class="card mt-4" style="padding: 0; overflow: hidden;">
+            <div class="card mt-4" style="padding: 0; overflow: hidden; position: relative;">
                 <canvas id="merge-game-canvas" style="width: 100%; height: 500px; display: block; background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);"></canvas>
-                <div id="merge-game-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; display: none;">
-                    <div style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px;">游戏结束</div>
-                    <button class="btn btn-primary" onclick="restartMergeGame()">重新开始</button>
+            </div>
+
+            <!-- 容器统计 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📦 容器统计</div>
+                </div>
+                <div id="container-stats" style="max-height: 200px; overflow-y: auto;">
+                    <div class="empty-state">开始游戏后显示容器统计</div>
                 </div>
             </div>
 
@@ -377,24 +373,9 @@
                 <div class="section-header">
                     <div class="section-title">🎯 游戏说明</div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 16px; padding: 10px 0;">
-                    <div id="next-ball-preview" style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 12px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);">
-                        提现
-                    </div>
-                    <div style="font-size: 13px; color: var(--text-secondary);">
-                        点击发光球体让它落下<br>
-                        相同金额合成更大金额
-                    </div>
-                </div>
-            </div>
-
-            <!-- 合成记录 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📊 合成记录</div>
-                </div>
-                <div id="merge-game-records" style="max-height: 200px; overflow-y: auto;">
-                    <div class="empty-state">暂无合成记录</div>
+                <div style="font-size: 13px; color: var(--text-secondary); padding: 10px 0;">
+                    滑动控制投放位置，点击投放球体<br>
+                    球体会自动落入对应金额的容器中
                 </div>
             </div>
         </div>
