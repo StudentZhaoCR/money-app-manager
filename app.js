@@ -2053,6 +2053,71 @@ class DataManager {
 
         return advice;
     }
+
+    // 计算还款能力预测
+    static calculateRepaymentPrediction() {
+        const data = this.loadData();
+        const now = new Date();
+
+        // 获取所有活跃分期
+        const activeInstallments = data.installments.filter(i => i.status === 'active');
+        if (activeInstallments.length === 0) return null;
+
+        // 计算总还款金额
+        const totalRepayment = activeInstallments.reduce((sum, inst) => sum + inst.amount, 0);
+
+        // 计算已提现金额
+        const totalWithdrawn = data.phones.reduce((sum, phone) => {
+            return sum + phone.apps.reduce((appSum, app) => {
+                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            }, 0);
+        }, 0);
+
+        // 找到最早的分期创建日期（开始计算日）
+        activeInstallments.sort((a, b) => new Date(a.createdAt || a.dueDate) - new Date(b.createdAt || b.dueDate));
+        const startDate = new Date(activeInstallments[0].createdAt || activeInstallments[0].dueDate);
+
+        // 找到最远还款日
+        activeInstallments.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+        const lastDueDate = new Date(activeInstallments[0].dueDate);
+
+        // 计算已过去天数
+        const daysElapsed = Math.max(1, Math.ceil((now - startDate) / (1000 * 60 * 60 * 24)));
+
+        // 计算剩余天数
+        const daysRemaining = Math.max(0, Math.ceil((lastDueDate - now) / (1000 * 60 * 60 * 24)));
+
+        // 计算每天平均提现
+        const dailyAverage = daysElapsed > 0 ? totalWithdrawn / daysElapsed : 0;
+
+        // 预测到还款日还能提现多少
+        const projectedAdditional = dailyAverage * daysRemaining;
+
+        // 预测总提现
+        const projectedTotal = totalWithdrawn + projectedAdditional;
+
+        // 判断是否足够
+        const isSufficient = projectedTotal >= totalRepayment;
+        const gap = Math.abs(totalRepayment - projectedTotal);
+
+        // 计算每天需要提现多少才能刚好达标
+        const requiredDaily = daysRemaining > 0 ? (totalRepayment - totalWithdrawn) / daysRemaining : 0;
+
+        return {
+            totalRepayment,
+            totalWithdrawn,
+            daysElapsed,
+            daysRemaining,
+            dailyAverage,
+            projectedAdditional,
+            projectedTotal,
+            isSufficient,
+            gap,
+            requiredDaily: Math.max(0, requiredDaily),
+            lastDueDate: activeInstallments[0].dueDate,
+            progressPercent: totalRepayment > 0 ? (totalWithdrawn / totalRepayment * 100) : 0
+        };
+    }
 }
 
 // 全局状态
@@ -2668,6 +2733,9 @@ function renderDashboard() {
     
     // 渲染软件赚取分析
     renderAppEarningAnalysis();
+    
+    // 渲染还款能力预测
+    renderRepaymentPrediction();
 }
 
 // 全局图表实例
@@ -2947,6 +3015,84 @@ function renderAppEarningAnalysis() {
 
         html += `</div>`;
     }
+
+    content.innerHTML = html;
+}
+
+// ==================== 还款能力预测功能 ====================
+
+// 渲染还款能力预测
+function renderRepaymentPrediction() {
+    const card = document.getElementById('repayment-prediction-card');
+    const content = document.getElementById('repayment-prediction-content');
+    if (!card || !content) return;
+
+    const prediction = DataManager.calculateRepaymentPrediction();
+    if (!prediction) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+
+    const statusColor = prediction.isSufficient ? '#22c55e' : '#ef4444';
+    const statusIcon = prediction.isSufficient ? '✅' : '⚠️';
+    const statusText = prediction.isSufficient ? '可以完成' : '无法完成';
+
+    let html = `
+        <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">总还款: ¥${prediction.totalRepayment.toFixed(2)}</span>
+                <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">已提现: ¥${prediction.totalWithdrawn.toFixed(2)}</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: var(--bg-cream); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                <div style="width: ${Math.min(100, prediction.progressPercent)}%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); border-radius: 4px;"></div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); text-align: center;">进度: ${prediction.progressPercent.toFixed(1)}%</div>
+        </div>
+
+        <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">历史表现</div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-primary);">
+                <span>已用天数: ${prediction.daysElapsed}天</span>
+                <span>每天平均: ¥${prediction.dailyAverage.toFixed(2)}</span>
+            </div>
+        </div>
+
+        <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">未来预测</div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--text-primary); margin-bottom: 4px;">
+                <span>剩余天数: ${prediction.daysRemaining}天</span>
+                <span>预计还能提现: ¥${prediction.projectedAdditional.toFixed(2)}</span>
+            </div>
+            <div style="border-top: 1px dashed var(--border-color); margin: 8px 0; padding-top: 8px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; color: var(--text-primary);">
+                <span>预计总提现:</span>
+                <span>¥${prediction.projectedTotal.toFixed(2)}</span>
+            </div>
+        </div>
+
+        <div style="background: ${prediction.isSufficient ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border-radius: 8px; padding: 12px; border-left: 3px solid ${statusColor};">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="font-size: 16px;">${statusIcon}</span>
+                <span style="font-size: 14px; font-weight: 600; color: ${statusColor};">结论: ${statusText}</span>
+            </div>
+            ${prediction.isSufficient ? `
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                    预计超额完成 ¥${prediction.gap.toFixed(2)} · 还款截止: ${new Date(prediction.lastDueDate).toLocaleDateString('zh-CN')}
+                </div>
+                <div style="font-size: 12px; color: #16a34a; margin-top: 4px;">
+                    建议: 保持当前每天¥${prediction.dailyAverage.toFixed(2)}的提现节奏！
+                </div>
+            ` : `
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                    资金缺口: ¥${prediction.gap.toFixed(2)} · 还款截止: ${new Date(prediction.lastDueDate).toLocaleDateString('zh-CN')}
+                </div>
+                <div style="font-size: 12px; color: #dc2626; margin-top: 4px;">
+                    建议: 每天需提现 ¥${prediction.requiredDaily.toFixed(2)} 才能达标！
+                </div>
+            `}
+        </div>
+    `;
 
     content.innerHTML = html;
 }
