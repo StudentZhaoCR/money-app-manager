@@ -747,9 +747,12 @@ class DataManager {
                 };
                 needsMigration = true;
             }
-            // 清理已删除的字段
+            // 数据迁移：为没有 balance 字段的软件添加默认值
             phone.apps.forEach(app => {
-                delete app.balance;
+                if (app.balance === undefined) {
+                    app.balance = 0;
+                    needsMigration = true;
+                }
                 delete app.initialBalance;
                 delete app.earned;
                 delete app.minWithdraw;
@@ -1093,22 +1096,27 @@ class DataManager {
         if (phone) {
             const app = phone.apps.find(a => a.id === appId);
             if (app) {
+                // 从余额中扣除提现金额
+                app.balance = (app.balance || 0) - amount;
+                // 确保余额不会变成负数
+                if (app.balance < 0) app.balance = 0;
+
                 app.withdrawn = (app.withdrawn || 0) + amount;
                 app.lastUpdated = new Date().toISOString();
-                
+
                 if (!app.withdrawals) {
                     app.withdrawals = [];
                 }
-                
+
                 const dateStr = date || new Date().toISOString().split('T')[0];
-                
+
                 app.withdrawals.push({
                     id: Date.now().toString(),
                     amount: amount,
                     date: dateStr,
                     created: new Date().toISOString()
                 });
-                
+
                 this.saveData(data);
             }
         }
@@ -3793,6 +3801,7 @@ function renderTodayApps(data) {
                     ${dailyTarget && dailyTarget.totalTargetAmount > 0 ? `<span style="font-size: 12px; color: var(--primary-color); font-weight: 600;">需提现: ¥${dailyTarget.perAppTarget.toFixed(2)}</span>` : ''}
                 </div>
                 <div class="app-info">
+                    <span>余额: ¥${(app.balance || 0).toFixed(2)}</span>
                     <span>累计提现: ¥${earned.toFixed(2)}</span>
                     <span>提现次数: ${withdrawalCount}次</span>
                 </div>
@@ -3916,11 +3925,11 @@ function renderAppList(phone) {
                     </span>
                 </div>
                 <div class="app-core-info">
-                    <span class="core-label">累计提现:</span>
-                    <span class="core-value">¥${earned.toFixed(2)}</span>
+                    <span class="core-label">当前余额:</span>
+                    <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
                 </div>
                 <div class="app-info-row">
-                    <span>提现次数: ${totalWithdrawals}次</span>
+                    <span>累计提现: ¥${earned.toFixed(2)} · 提现次数: ${totalWithdrawals}次</span>
                 </div>
                 <div class="action-buttons">
                     <button class="btn btn-primary" onclick="openWithdrawModal('${phone.id}', '${app.id}')">记录提现</button>
@@ -4204,6 +4213,10 @@ function renderStats() {
                     </div>
                 </div>
                 <div class="app-stats">
+                    <div class="stat-item stat-balance">
+                        <span class="stat-label">当前余额</span>
+                        <span class="stat-value">¥${(app.balance || 0).toFixed(2)}</span>
+                    </div>
                     <div class="stat-item stat-earned">
                         <span class="stat-label">累计提现</span>
                         <span class="stat-value">¥${withdrawn.toFixed(2)}</span>
