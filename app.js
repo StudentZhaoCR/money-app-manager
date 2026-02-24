@@ -1006,25 +1006,86 @@ class DataManager {
             return null;
         }
         
-        // 如果有多个游戏，随机选择一个
-        const randomIndex = Math.floor(Math.random() * activeGames.length);
-        const selectedGame = activeGames[randomIndex];
+        // 获取抽签历史用于计算权重
+        const drawHistory = this.getGameDrawHistory();
         
-        // 不再自动更新天数，天数在点击完成时更新
-        // 使用当前天数（未增加）
-        const daysPlayed = selectedGame.daysPlayed;
+        // 计算每个游戏的权重
+        const weightedGames = activeGames.map(game => {
+            const targetDays = game.targetDays || 7;
+            const remainingDays = targetDays - game.daysPlayed;
+            
+            // 1. 进度系数：快完成的游戏权重更高
+            let progressWeight = 1;
+            if (remainingDays <= 1) progressWeight = 3;      // 剩余1天：3倍权重
+            else if (remainingDays <= 2) progressWeight = 2; // 剩余2天：2倍权重
+            else if (remainingDays >= 5) progressWeight = 0.7; // 刚开始：降低权重
+            
+            // 2. 冷落系数：长时间未抽到的权重增加
+            let coldWeight = 1;
+            const lastDrawn = drawHistory.find(h => h.gameId === game.id);
+            if (lastDrawn) {
+                const lastDate = new Date(lastDrawn.date);
+                const todayDate = new Date(today);
+                const daysSinceLastDrawn = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+                
+                if (daysSinceLastDrawn >= 5) coldWeight = 3;      // 5天未抽到：3倍
+                else if (daysSinceLastDrawn >= 3) coldWeight = 2; // 3天未抽到：2倍
+                else if (daysSinceLastDrawn >= 2) coldWeight = 1.3; // 2天未抽到：1.3倍
+            } else {
+                // 从未抽到过，给予较高权重
+                coldWeight = 1.5;
+            }
+            
+            // 3. 连续系数：昨天玩过的降低权重
+            let consecutiveWeight = 1;
+            const yesterdayDraw = drawHistory.find(h => {
+                const hDate = new Date(h.date);
+                const todayDate = new Date(today);
+                const diffDays = Math.floor((todayDate - hDate) / (1000 * 60 * 60 * 24));
+                return diffDays === 1 && h.gameId === game.id;
+            });
+            if (yesterdayDraw) consecutiveWeight = 0.3; // 昨天玩过：大幅降低
+            
+            // 4. 保底机制：连续3天未抽中，第4天必中
+            const notDrawnFor3Days = drawHistory.filter(h => {
+                const hDate = new Date(h.date);
+                const todayDate = new Date(today);
+                const diffDays = Math.floor((todayDate - hDate) / (1000 * 60 * 60 * 24));
+                return diffDays <= 3 && h.gameId === game.id;
+            }).length === 0;
+            
+            let guaranteedWeight = 1;
+            if (notDrawnFor3Days) guaranteedWeight = 5; // 3天未抽到：5倍权重
+            
+            // 计算总权重
+            const totalWeight = progressWeight * coldWeight * consecutiveWeight * guaranteedWeight;
+            
+            return {
+                ...game,
+                weight: totalWeight,
+                weightDetails: {
+                    progress: progressWeight,
+                    cold: coldWeight,
+                    consecutive: consecutiveWeight,
+                    guaranteed: guaranteedWeight
+                }
+            };
+        });
+        
+        // 使用加权随机选择
+        const selectedGame = this.weightedRandomSelect(weightedGames);
         
         // 保存抽签历史
         const targetDays = selectedGame.targetDays || 7;
-        const drawHistory = this.getGameDrawHistory();
-        // 使用传入的 phoneId 参数，确保保存的是当前选中的手机ID
         const savedPhoneId = phoneId || null;
         
-        console.log('保存抽签历史:', {
+        console.log('智能抽签结果:', {
             date: today,
             gameName: selectedGame.name,
+            weight: selectedGame.weight,
+            weightDetails: selectedGame.weightDetails,
             phoneId: savedPhoneId,
-            daysPlayed: daysPlayed
+            daysPlayed: selectedGame.daysPlayed
         });
         
         drawHistory.unshift({
@@ -1032,10 +1093,12 @@ class DataManager {
             gameId: selectedGame.id,
             gameName: selectedGame.name,
             phoneId: savedPhoneId,
-            daysPlayed: daysPlayed,
-            remainingDays: targetDays - daysPlayed,
+            daysPlayed: selectedGame.daysPlayed,
+            remainingDays: targetDays - selectedGame.daysPlayed,
             targetDays: targetDays,
-            isRedownload: selectedGame.isRedownload || false
+            isRedownload: selectedGame.isRedownload || false,
+            weight: selectedGame.weight,
+            weightDetails: selectedGame.weightDetails
         });
         
         // 只保留最近30天的记录
@@ -1047,6 +1110,22 @@ class DataManager {
         console.log('保存后的历史记录:', drawHistory);
         
         return selectedGame;
+    }
+    
+    // 加权随机选择算法
+    static weightedRandomSelect(weightedItems) {
+        const totalWeight = weightedItems.reduce((sum, item) => sum + item.weight, 0);
+        let random = Math.random() * totalWeight;
+        
+        for (const item of weightedItems) {
+            random -= item.weight;
+            if (random <= 0) {
+                return item;
+            }
+        }
+        
+        // 兜底返回最后一个
+        return weightedItems[weightedItems.length - 1];
     }
 
     // 获取抽签历史
@@ -6534,6 +6613,23 @@ function drawTodayGame() {
             <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">
                 ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
             </div>
+            
+            <!-- 权重信息 -->
+            ${result.weightDetails ? `
+            <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 11px;">
+                <div style="margin-bottom: 6px; opacity: 0.9;">📊 智能权重分析</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; text-align: left;">
+                    <div>进度系数: ${result.weightDetails.progress}x</div>
+                    <div>冷落系数: ${result.weightDetails.cold}x</div>
+                    <div>连续系数: ${result.weightDetails.consecutive}x</div>
+                    <div>保底系数: ${result.weightDetails.guaranteed}x</div>
+                </div>
+                <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    总权重: <strong>${result.weight?.toFixed(2) || '1.00'}</strong>
+                </div>
+            </div>
+            ` : ''}
+            
             <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
                 ✅ 今天已经抽签，明天再来吧
             </div>
