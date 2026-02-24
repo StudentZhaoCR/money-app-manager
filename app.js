@@ -797,11 +797,24 @@ class DataManager {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     }
 
+    // 清空所有数据
+    static clearAllData() {
+        localStorage.removeItem(PHONES_KEY);
+        localStorage.removeItem(INSTALLMENTS_KEY);
+        localStorage.removeItem(EXPENSES_KEY);
+        localStorage.removeItem(SETTINGS_KEY);
+        localStorage.removeItem(DATA_KEY);
+        return { phones: [], installments: [], expenses: [], settings: {} };
+    }
+
     static addPhone(name) {
         const data = this.loadData();
         const today = new Date().toISOString().split('T')[0];
+        // 生成唯一ID：时间戳 + 随机数 + 名称哈希
+        const nameHash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
+        const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + nameHash;
         const phone = {
-            id: Date.now().toString(),
+            id: uniqueId,
             name,
             apps: [],
             dailyTotalEarnedHistory: {
@@ -817,8 +830,10 @@ class DataManager {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
         if (phone) {
+            // 生成唯一ID：时间戳 + 随机数 + 手机ID的一部分
+            const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + phoneId.substr(-4);
             const app = {
-                id: Date.now().toString(),
+                id: uniqueId,
                 name: appData.name,
                 balance: appData.balance || 0,  // 当前余额
                 minWithdraw: appData.minWithdraw || 0,  // 最低提现门槛
@@ -2836,9 +2851,6 @@ function renderDashboard() {
     // 渲染收入日历
     renderIncomeCalendar();
     
-    // 渲染智能建议
-    renderSmartSuggestions();
-    
     // 渲染收入预测
     renderIncomePrediction();
     
@@ -4642,12 +4654,16 @@ function openBatchAddAppsModal() {
                 const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value) || 0;
 
                 if (input) {
+                    // 重新获取最新数据
+                    const currentData = DataManager.loadData();
+                    const currentPhoneCount = currentData.phones.length;
+                    
                     // 解析软件名称（支持换行或逗号分隔）
                     const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
                     let totalAddedCount = 0;
 
                     // 为每部手机添加软件
-                    data.phones.forEach(phone => {
+                    currentData.phones.forEach(phone => {
                         names.forEach(name => {
                             DataManager.addApp(phone.id, { name, balance, minWithdraw });
                             totalAddedCount++;
@@ -4655,7 +4671,7 @@ function openBatchAddAppsModal() {
                     });
 
                     renderPhones();
-                    showToast(`成功为 ${phoneCount} 部手机各添加 ${names.length} 个软件，共 ${totalAddedCount} 个！`);
+                    showToast(`成功为 ${currentPhoneCount} 部手机各添加 ${names.length} 个软件，共 ${totalAddedCount} 个！`);
                 }
                 closeModal();
             }
