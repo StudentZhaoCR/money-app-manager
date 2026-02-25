@@ -3338,18 +3338,43 @@ function renderAppEarningAnalysis() {
         });
     }
 
-    // 显示软件列表（只显示有缺口的软件）
-    const appsWithGap = appAnalysis.filter(a => a.gap > 0).slice(0, 5);
-    if (appsWithGap.length > 0) {
+    // 显示软件列表（显示所有软件，按差额排序）
+    if (appAnalysis.length > 0) {
+        // 计算统计信息
+        const completedCount = appAnalysis.filter(a => a.gap <= 0).length;
+        const criticalCount = appAnalysis.filter(a => a.status === 'critical').length;
+        const warningCount = appAnalysis.filter(a => a.status === 'warning').length;
+        
         html += `<div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">`;
-        html += `<div style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px;">📱 需要关注的软件</div>`;
+        html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-primary);">
+                    📱 软件赚取分析 (${appAnalysis.length}个)
+                </div>
+                <button class="btn btn-sm btn-secondary" onclick="showAllAppsAnalysis()" style="font-size: 11px; padding: 4px 12px;">
+                    查看全部
+                </button>
+            </div>
+        `;
+        
+        // 显示统计摘要
+        html += `
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                ${completedCount > 0 ? `<span style="font-size: 11px; background: rgba(34, 197, 94, 0.1); color: #16a34a; padding: 2px 8px; border-radius: 10px;">✅ 已完成 ${completedCount}</span>` : ''}
+                ${criticalCount > 0 ? `<span style="font-size: 11px; background: rgba(239, 68, 68, 0.1); color: #dc2626; padding: 2px 8px; border-radius: 10px;">🔴 紧急 ${criticalCount}</span>` : ''}
+                ${warningCount > 0 ? `<span style="font-size: 11px; background: rgba(245, 158, 11, 0.1); color: #d97706; padding: 2px 8px; border-radius: 10px;">🟡 警告 ${warningCount}</span>` : ''}
+            </div>
+        `;
 
-        appsWithGap.forEach(app => {
-            const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : '🟢';
-            const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : '#22c55e';
+        // 只显示前5个（差额最大的在前）
+        const displayApps = appAnalysis.slice(0, 5);
+        displayApps.forEach(app => {
+            const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : app.gap <= 0 ? '✅' : '🟢';
+            const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : app.gap <= 0 ? '#22c55e' : '#3b82f6';
+            const gapText = app.gap <= 0 ? '已完成' : `差额 ¥${app.gap.toFixed(2)}`;
 
             html += `
-                <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px;">
+                <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <span style="font-size: 12px;">${statusIcon}</span>
@@ -3363,22 +3388,173 @@ function renderAppEarningAnalysis() {
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border-color);">
                         <div>
-                            <span style="font-size: 11px; color: var(--text-secondary);">差额: </span>
-                            <span style="font-size: 13px; font-weight: 600; color: ${statusColor};">¥${Math.max(0, app.gap).toFixed(2)}</span>
+                            <span style="font-size: 11px; color: var(--text-secondary);">${gapText}</span>
                         </div>
                         <div style="text-align: right;">
-                            <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
-                            <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                            ${app.gap > 0 ? `
+                                <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
+                                <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                            ` : `
+                                <div style="font-size: 12px; color: #22c55e; font-weight: 600;">✓ 已达标</div>
+                            `}
                         </div>
                     </div>
                 </div>
             `;
         });
+        
+        // 如果还有更多，显示提示
+        if (appAnalysis.length > 5) {
+            html += `
+                <div style="text-align: center; padding: 8px; font-size: 11px; color: var(--text-secondary);">
+                    还有 ${appAnalysis.length - 5} 个软件，点击查看全部
+                </div>
+            `;
+        }
 
         html += `</div>`;
     }
 
     content.innerHTML = html;
+}
+
+// 显示所有软件分析
+function showAllAppsAnalysis() {
+    const appAnalysis = DataManager.calculateAppEarningGap();
+    
+    if (appAnalysis.length === 0) {
+        showToast('暂无软件数据');
+        return;
+    }
+    
+    let html = `
+        <div style="max-height: 70vh; overflow-y: auto;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                📱 所有软件赚取分析 (${appAnalysis.length}个)
+            </div>
+    `;
+    
+    appAnalysis.forEach(app => {
+        const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : app.gap <= 0 ? '✅' : '🟢';
+        const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : app.gap <= 0 ? '#22c55e' : '#3b82f6';
+        const gapText = app.gap <= 0 ? '已完成' : `差额 ¥${app.gap.toFixed(2)}`;
+        
+        html += `
+            <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 12px;">${statusIcon}</span>
+                        <span style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.appName}</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">${app.daysRemaining}天后</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
+                    <span>目标: ¥${app.targetAmount.toFixed(2)}</span>
+                    <span>余额: ¥${app.currentBalance.toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+                    <div>
+                        <span style="font-size: 11px; color: var(--text-secondary);">${gapText}</span>
+                    </div>
+                    <div style="text-align: right;">
+                        ${app.gap > 0 ? `
+                            <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
+                            <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                        ` : `
+                            <div style="font-size: 12px; color: #22c55e; font-weight: 600;">✓ 已达标</div>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `</div>`;
+    
+    showModal('所有软件赚取分析', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 显示软件详情
+function showAppDetailModal(appId) {
+    const data = DataManager.loadData();
+    let targetApp = null;
+    let targetPhone = null;
+    
+    // 查找对应的软件和手机
+    for (const phone of data.phones) {
+        const app = phone.apps.find(a => a.id === appId);
+        if (app) {
+            targetApp = app;
+            targetPhone = phone;
+            break;
+        }
+    }
+    
+    if (!targetApp) {
+        showToast('未找到该软件');
+        return;
+    }
+    
+    const appAnalysis = DataManager.calculateAppEarningGap();
+    const analysis = appAnalysis.find(a => a.appId === appId);
+    
+    const earned = (targetApp.withdrawn || 0) + (targetApp.historicalWithdrawn || 0);
+    const balance = targetApp.balance || 0;
+    const totalEarned = balance + earned;
+    
+    let html = `
+        <div style="max-height: 70vh; overflow-y: auto;">
+            <div style="text-align: center; padding: 16px; background: var(--bg-cream); border-radius: 12px; margin-bottom: 16px;">
+                <div style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">${targetPhone.name} - ${targetApp.name}</div>
+                <div style="font-size: 24px; font-weight: 700; color: var(--primary-color);">¥${balance.toFixed(2)}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">当前余额</div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">¥${earned.toFixed(2)}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">累计提现</div>
+                </div>
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; text-align: center;">
+                    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">¥${totalEarned.toFixed(2)}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">总赚取</div>
+                </div>
+            </div>
+            
+            ${analysis ? `
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">📊 还款分析</div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+                        <div><span style="color: var(--text-secondary);">目标:</span> ¥${analysis.targetAmount.toFixed(2)}</div>
+                        <div><span style="color: var(--text-secondary);">余额:</span> ¥${analysis.currentBalance.toFixed(2)}</div>
+                        <div><span style="color: var(--text-secondary);">差额:</span> ¥${Math.max(0, analysis.gap).toFixed(2)}</div>
+                        <div><span style="color: var(--text-secondary);">剩余天数:</span> ${analysis.daysRemaining}天</div>
+                    </div>
+                    ${analysis.gap > 0 ? `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); text-align: center;">
+                            <div style="font-size: 11px; color: var(--text-secondary);">每天需赚取</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #ef4444;">¥${analysis.dailyNeed.toFixed(2)}</div>
+                        </div>
+                    ` : `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); text-align: center;">
+                            <div style="font-size: 14px; color: #22c55e; font-weight: 600;">✅ 已达标</div>
+                        </div>
+                    `}
+                </div>
+            ` : ''}
+            
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary flex-1" onclick="closeModal(); setTimeout(() => openWithdrawModal('${targetPhone.id}', '${targetApp.id}'), 200);">记录提现</button>
+                <button class="btn btn-secondary flex-1" onclick="closeModal(); setTimeout(() => openEditAppModal('${targetPhone.id}', '${targetApp.id}'), 200);">编辑软件</button>
+            </div>
+        </div>
+    `;
+    
+    showModal('软件详情', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
 }
 
 // ==================== 还款能力预测功能 ====================
@@ -3968,25 +4144,22 @@ function changeCalendarMonth(delta) {
 // 显示某天详情
 function showDayDetail(dateStr) {
     const data = DataManager.loadData();
-    const dayData = getDayData(dateStr, data);
+    const dayData = getDayWithdrawalData(dateStr, data);
     
     let content = `<div style="padding: 16px;">`;
     content += `<div style="font-weight: 600; margin-bottom: 12px; font-size: 16px;">${dateStr}</div>`;
     
-    if (dayData.income > 0) {
-        content += `<div style="margin-bottom: 8px; color: var(--success-color);">💰 收入: ¥${dayData.income.toFixed(2)}</div>`;
+    if (dayData.withdrawal > 0) {
+        content += `<div style="margin-bottom: 8px; color: var(--success-color);">💰 提现: ¥${dayData.withdrawal.toFixed(2)}</div>`;
     }
     if (dayData.expense > 0) {
         content += `<div style="margin-bottom: 8px; color: var(--error-color);">💸 支出: ¥${dayData.expense.toFixed(2)}</div>`;
-    }
-    if (dayData.withdrawal > 0) {
-        content += `<div style="margin-bottom: 8px; color: var(--info-color);">🏧 提现: ¥${dayData.withdrawal.toFixed(2)}</div>`;
     }
     if (dayData.installment) {
         content += `<div style="margin-bottom: 8px; color: var(--warning-color);">📅 有分期还款</div>`;
     }
     
-    if (dayData.income === 0 && dayData.expense === 0 && dayData.withdrawal === 0 && !dayData.installment) {
+    if (dayData.withdrawal === 0 && dayData.expense === 0 && !dayData.installment) {
         content += `<div style="color: var(--text-muted);">暂无记录</div>`;
     }
     
