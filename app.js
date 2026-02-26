@@ -56,13 +56,19 @@ function showModal(title, body, buttons, enableScroll = false) {
     document.getElementById('modal-body').innerHTML = body;
     
     // 创建按钮，使用事件监听器
-    buttons.forEach(btn => {
-        const button = document.createElement('button');
-        button.className = `btn ${btn.class}`;
-        button.textContent = btn.text;
-        button.addEventListener('click', btn.action);
-        buttonsContainer.appendChild(button);
-    });
+    // 如果只有一个关闭按钮，则隐藏底部按钮区域（因为右上角已有关闭按钮）
+    if (buttons.length === 1 && buttons[0].text === '关闭') {
+        buttonsContainer.style.display = 'none';
+    } else {
+        buttonsContainer.style.display = 'flex';
+        buttons.forEach(btn => {
+            const button = document.createElement('button');
+            button.className = `btn ${btn.class}`;
+            button.textContent = btn.text;
+            button.addEventListener('click', btn.action);
+            buttonsContainer.appendChild(button);
+        });
+    }
     
     // 如果需要滚动功能，添加滚动样式
     if (enableScroll) {
@@ -3493,19 +3499,33 @@ function renderDashboard() {
     const dailyTargetEl = document.getElementById('daily-withdrawal-target');
     if (dailyTargetEl) {
         if (dailyTarget && dailyTarget.totalTargetAmount > 0) {
-            const progressPercent = dailyTarget.totalTargetAmount > 0 
-                ? (dailyTarget.totalWithdrawn / dailyTarget.totalTargetAmount * 100).toFixed(1) 
+            const progressPercent = dailyTarget.totalTargetAmount > 0
+                ? (dailyTarget.totalWithdrawn / dailyTarget.totalTargetAmount * 100).toFixed(1)
                 : 0;
             dailyTargetEl.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <span style="color: #ffffff; font-weight: 500;">还款总目标</span>
-                    <span style="font-weight: 700; color: #ffffff; font-size: 16px;">¥${dailyTarget.totalTargetAmount.toFixed(2)}</span>
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <div style="font-size: 13px; color: rgba(255,255,255,0.8); margin-bottom: 4px;">还款总目标</div>
+                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">¥${dailyTarget.totalTargetAmount.toFixed(2)}</div>
                 </div>
-                <div style="font-size: 12px; color: #e0e0e0; margin-top: 6px; line-height: 1.6;">
-                    已提现 ¥${dailyTarget.totalWithdrawn.toFixed(2)} · 剩余 ¥${dailyTarget.remainingTarget.toFixed(2)}
+
+                <div style="background: rgba(255,255,255,0.2); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px;">
+                    <div style="background: #38ef7d; height: 100%; width: ${Math.min(100, progressPercent)}%; transition: width 0.5s ease; border-radius: 10px;"></div>
                 </div>
-                <div style="font-size: 12px; color: #e0e0e0; margin-top: 4px;">
-                    共${dailyTarget.totalApps}个软件 · 每个需提现 ¥${dailyTarget.perAppTarget.toFixed(2)}
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; text-align: center;">
+                    <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 10px;">
+                        <div style="font-size: 18px; font-weight: 700; color: #38ef7d;">¥${dailyTarget.totalWithdrawn.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 2px;">已提现</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 10px;">
+                        <div style="font-size: 18px; font-weight: 700; color: #ffffff;">¥${dailyTarget.remainingTarget.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 2px;">剩余</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <span style="font-size: 12px; color: rgba(255,255,255,0.8);">共 ${dailyTarget.totalApps} 个软件</span>
+                    <span style="font-size: 12px; color: rgba(255,255,255,0.8);">每个需 ¥${dailyTarget.perAppTarget.toFixed(2)}</span>
                 </div>
             `;
         } else {
@@ -3536,9 +3556,6 @@ function renderDashboard() {
     
     // 渲染软件赚取分析
     renderAppEarningAnalysis();
-    
-    // 渲染智能提现方案
-    renderSmartWithdrawalPlan();
     
     // 渲染每天提现预测
     renderDailyWithdrawalForecast();
@@ -3646,91 +3663,6 @@ function showTotalEarningsDetail() {
     showModal('总赚取详情', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
-}
-
-// 渲染智能提现方案
-function renderSmartWithdrawalPlan() {
-    const card = document.getElementById('smart-withdrawal-plan-card');
-    const content = document.getElementById('smart-withdrawal-plan-content');
-    if (!card || !content) return;
-
-    const plan = DataManager.getSmartWithdrawalPlan();
-    if (plan.totalApps === 0) {
-        card.style.display = 'none';
-        return;
-    }
-
-    card.style.display = 'block';
-
-    let html = '';
-
-    // 可以提现的软件
-    if (plan.canWithdraw.length > 0) {
-        html += `
-            <div style="margin-bottom: 16px;">
-                <div style="font-size: 13px; font-weight: 600; color: #22c55e; margin-bottom: 10px;">
-                    🟢 可以提现 (${plan.canWithdraw.length}个)
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-        `;
-        plan.canWithdraw.slice(0, 5).forEach(app => {
-            const threshold = app.minWithdraw || 0;
-            const balance = app.balance || 0;
-            html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border-left: 3px solid #22c55e;">
-                    <div>
-                        <div style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.name}</div>
-                        <div style="font-size: 11px; color: var(--text-secondary);">余额: ¥${balance.toFixed(2)} / 门槛: ¥${threshold.toFixed(2)}</div>
-                    </div>
-                    <button class="btn btn-primary" style="padding: 6px 12px; font-size: 11px;" onclick="openWithdrawModal('${app.phoneId}', '${app.id}')">提现</button>
-                </div>
-            `;
-        });
-        if (plan.canWithdraw.length > 5) {
-            html += `<div style="font-size: 11px; color: var(--text-secondary); text-align: center;">还有 ${plan.canWithdraw.length - 5} 个...</div>`;
-        }
-        html += `</div></div>`;
-    }
-
-    // 接近门槛的软件
-    if (plan.nearThreshold.length > 0) {
-        html += `
-            <div style="margin-bottom: 16px;">
-                <div style="font-size: 13px; font-weight: 600; color: #f59e0b; margin-bottom: 10px;">
-                    🟡 接近门槛 (${plan.nearThreshold.length}个)
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-        `;
-        plan.nearThreshold.slice(0, 3).forEach(app => {
-            const threshold = app.minWithdraw || 0;
-            const balance = app.balance || 0;
-            const remaining = threshold - balance;
-            html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 3px solid #f59e0b;">
-                    <div>
-                        <div style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.name}</div>
-                        <div style="font-size: 11px; color: var(--text-secondary);">还需 ¥${remaining.toFixed(2)} 达到门槛</div>
-                    </div>
-                </div>
-            `;
-        });
-        html += `</div></div>`;
-    }
-
-    // 统计信息
-    html += `
-        <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-top: 12px;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">提现统计</div>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
-                <div>✅ 可提现: ${plan.canWithdraw.length}个</div>
-                <div>🟡 接近门槛: ${plan.nearThreshold.length}个</div>
-                <div>🔴 还需努力: ${plan.farFromThreshold.length}个</div>
-                <div>⚪ 无门槛: ${plan.noThreshold.length}个</div>
-            </div>
-        </div>
-    `;
-
-    content.innerHTML = html;
 }
 
 // ==================== 每天提现预测 ====================
