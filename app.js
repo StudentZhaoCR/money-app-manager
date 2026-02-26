@@ -1130,8 +1130,10 @@ class DataManager {
             }
         }
         
-        const today = new Date().toISOString().split('T')[0];
-        const currentMonth = new Date().getMonth() + 1;
+        // 获取本地日期（修复时区问题）
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const currentMonth = now.getMonth() + 1;
         
         let totalDays = 0;
         let achievedDays = 0;
@@ -8434,7 +8436,9 @@ function renderDailyGoalContent() {
     
     const goal = DataManager.getAppDailyGoal(currentDailyGoalAppId);
     const stats = DataManager.calculateAppAchievementStats(currentDailyGoalAppId);
-    const today = new Date().toISOString().split('T')[0];
+    // 获取本地日期（修复时区问题）
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
     const titleEl = document.getElementById('daily-goal-modal-title');
     const bodyEl = document.getElementById('daily-goal-modal-body');
