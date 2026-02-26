@@ -885,13 +885,13 @@ class DataManager {
         const stats = this.getAppsYearlyStats(goal.year);
 
         if (goal.amount <= 0 || stats.length === 0) {
-            return { goal: goal, apps: [], totalProjected: 0, surplus: 0, deficit: 0 };
+            return { goal: goal, apps: [], totalEarned: 0, remaining: 0, progress: 0 };
         }
 
-        // 计算总预估收益
-        const totalProjected = stats.reduce((sum, s) => sum + s.projectedYearly, 0);
-        const surplus = Math.max(0, totalProjected - goal.amount);
-        const deficit = Math.max(0, goal.amount - totalProjected);
+        // 计算总赚取金额（今年实际收益 - 包含已提现、历史提现和余额）
+        const totalEarned = stats.reduce((sum, s) => sum + s.totalEarned, 0);
+        const remaining = Math.max(0, goal.amount - totalEarned);
+        const progress = Math.min(100, (totalEarned / goal.amount * 100)).toFixed(1);
 
         // 按今年实际收益排序（从低到高）- 实际表现决定排名
         const sortedStats = [...stats].sort((a, b) => a.yearlyEarned - b.yearlyEarned);
@@ -921,8 +921,8 @@ class DataManager {
             
             const adjustedTarget = baseTarget * performanceFactor;
 
-            // 计算差额（基于预估全年收益）
-            const diff = stat.projectedYearly - adjustedTarget;
+            // 计算差额（基于实际收益）
+            const diff = stat.yearlyEarned - adjustedTarget;
 
             return {
                 ...stat,
@@ -939,18 +939,21 @@ class DataManager {
         return {
             goal: goal,
             apps: apps,
-            totalProjected: totalProjected,
-            surplus: surplus,
-            deficit: deficit,
-            avgMonthlyNeeded: goal.amount / 12
+            totalEarned: totalEarned,
+            remaining: remaining,
+            progress: progress,
+            avgMonthlyNeeded: remaining / 12
         };
     }
 
-    // 自动分配超额收益
+    // 自动分配超额收益（基于实际收益）
     static autoDistributeSurplus() {
         const distribution = this.calculateYearlyGoalDistribution();
 
-        if (!distribution.goal.autoDistribute || distribution.surplus <= 0) {
+        // 计算超额总额（实际收益超过目标的部分）
+        const totalSurplus = distribution.apps.reduce((sum, a) => sum + Math.max(0, a.diff), 0);
+        
+        if (!distribution.goal.autoDistribute || totalSurplus <= 0) {
             return distribution;
         }
 
@@ -959,7 +962,7 @@ class DataManager {
         // 找出收益不足的软件
         const deficitApps = distribution.apps.filter(a => a.diff < 0);
 
-        let remainingSurplus = distribution.surplus;
+        let remainingSurplus = totalSurplus;
 
         // 按缺口大小排序（缺口大的优先）
         deficitApps.sort((a, b) => a.diff - b.diff);
@@ -973,7 +976,7 @@ class DataManager {
 
             deficitApp.allocatedSurplus = allocated;
             deficitApp.newTarget = deficitApp.adjustedTarget - allocated;
-            deficitApp.newDiff = deficitApp.projectedYearly - deficitApp.newTarget;
+            deficitApp.newDiff = deficitApp.yearlyEarned - deficitApp.newTarget;
             deficitApp.newStatus = deficitApp.newDiff >= 0 ? '达标' : '仍需努力';
 
             remainingSurplus -= allocated;
@@ -987,6 +990,7 @@ class DataManager {
             surplusApp.newStatus = '超额完成';
         });
 
+        distribution.totalSurplus = totalSurplus;
         distribution.remainingSurplus = remainingSurplus;
 
         return distribution;
@@ -8085,9 +8089,8 @@ function renderYearlyGoal() {
         return;
     }
 
-    const currentMonth = new Date().getMonth() + 1;
-    const progressPercent = Math.min(100, (distribution.totalProjected / goal.amount * 100)).toFixed(1);
-    const isOverTarget = distribution.totalProjected >= goal.amount;
+    const progressPercent = distribution.progress;
+    const isOverTarget = distribution.totalEarned >= goal.amount;
 
     let html = `
         <div style="padding: 16px;">
@@ -8101,16 +8104,16 @@ function renderYearlyGoal() {
                     <div style="background: ${isOverTarget ? '#38ef7d' : '#fff'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px;"></div>
                 </div>
                 <div style="display: flex; justify-content: space-between; font-size: 13px; opacity: 0.9;">
-                    <span>预估全年: ¥${distribution.totalProjected.toFixed(2)}</span>
+                    <span>已赚取: ¥${distribution.totalEarned.toFixed(2)}</span>
                     <span>${progressPercent}%</span>
                 </div>
                 ${isOverTarget ? `
                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                    <span style="color: #38ef7d; font-weight: bold;">🎉 超额完成! 超出 ¥${distribution.surplus.toFixed(2)}</span>
+                    <span style="color: #38ef7d; font-weight: bold;">🎉 超额完成! 超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)}</span>
                 </div>
                 ` : `
                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                    <span style="opacity: 0.9;">还需: ¥${distribution.deficit.toFixed(2)} · 月均需: ¥${distribution.avgMonthlyNeeded.toFixed(2)}</span>
+                    <span style="opacity: 0.9;">剩余: ¥${distribution.remaining.toFixed(2)} · 月均需: ¥${distribution.avgMonthlyNeeded.toFixed(2)}</span>
                 </div>
                 `}
             </div>
@@ -8127,11 +8130,11 @@ function renderYearlyGoal() {
         html += `<div class="empty-state">暂无软件数据</div>`;
     } else {
         // 按排名排序显示（收益高的排在前面）
-        const sortedApps = [...distribution.apps].sort((a, b) => b.yearlyEarned - a.yearlyEarned);
+        const sortedApps = [...distribution.apps].sort((a, b) => b.totalEarned - a.totalEarned);
         
         sortedApps.forEach((app, index) => {
-            const appProgress = Math.min(100, (app.yearlyEarned / app.adjustedTarget * 100)).toFixed(1);
-            const isCompleted = app.yearlyEarned >= app.adjustedTarget;
+            const appProgress = Math.min(100, (app.totalEarned / app.adjustedTarget * 100)).toFixed(1);
+            const isCompleted = app.totalEarned >= app.adjustedTarget;
             const hasAllocation = app.allocatedSurplus > 0;
             
             // 根据排名确定表现等级
@@ -8172,11 +8175,16 @@ function renderYearlyGoal() {
                     
                     <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: var(--text-secondary);">
                         <span>年目标: ¥${app.adjustedTarget.toFixed(2)}</span>
-                        <span>当前: ¥${app.yearlyEarned.toFixed(2)}</span>
+                        <span>已赚: ¥${app.totalEarned.toFixed(2)}</span>
                     </div>
                     
                     <div style="background: var(--border-color); border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 8px;">
                         <div style="background: ${isCompleted ? '#38ef7d' : rankColor}; height: 100%; width: ${appProgress}%; transition: width 0.3s ease; border-radius: 6px;"></div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
+                        <span>剩余: ¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</span>
+                        <span>进度: ${appProgress}%</span>
                     </div>
                     
                     <!-- 每日目标信息 -->
@@ -8258,8 +8266,7 @@ function viewYearlyGoalDetail() {
         return;
     }
 
-    const currentMonth = new Date().getMonth() + 1;
-    const progressPercent = Math.min(100, (distribution.totalProjected / goal.amount * 100)).toFixed(1);
+    const progressPercent = distribution.progress;
 
     let appsHtml = '';
     
@@ -8288,8 +8295,8 @@ function viewYearlyGoalDetail() {
                     </div>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; color: var(--text-secondary);">
                         <div>目标: ¥${app.adjustedTarget.toFixed(2)}</div>
-                        <div>当前: ¥${app.yearlyEarned.toFixed(2)}</div>
-                        <div>预估: ¥${app.projectedYearly.toFixed(2)}</div>
+                        <div>已赚: ¥${app.totalEarned.toFixed(2)}</div>
+                        <div>剩余: ¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</div>
                         <div style="color: ${app.diff >= 0 ? 'var(--success-color)' : 'var(--error-color)'};">
                             ${app.diff >= 0 ? '+' : ''}¥${app.diff.toFixed(2)}
                         </div>
@@ -8321,12 +8328,12 @@ function viewYearlyGoalDetail() {
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; font-size: 12px;">
                     <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
-                        <div style="font-weight: bold; font-size: 14px;">¥${distribution.totalProjected.toFixed(2)}</div>
-                        <div style="opacity: 0.8;">预估全年</div>
+                        <div style="font-weight: bold; font-size: 14px;">¥${distribution.totalEarned.toFixed(2)}</div>
+                        <div style="opacity: 0.8;">已赚取</div>
                     </div>
                     <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
-                        <div style="font-weight: bold; font-size: 14px;">¥${distribution.surplus.toFixed(2)}</div>
-                        <div style="opacity: 0.8;">超额部分</div>
+                        <div style="font-weight: bold; font-size: 14px;">¥${distribution.remaining.toFixed(2)}</div>
+                        <div style="opacity: 0.8;">剩余</div>
                     </div>
                     <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
                         <div style="font-weight: bold; font-size: 14px;">¥${distribution.avgMonthlyNeeded.toFixed(2)}</div>

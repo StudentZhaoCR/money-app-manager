@@ -3092,6 +3092,28 @@ body {
     .modal-content {
         width: 95%;
         padding: 20px;
+        max-height: 90vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    /* 每日目标弹窗移动端适配 */
+    #daily-goal-modal .modal-content {
+        padding: 16px;
+        max-height: 92vh;
+    }
+    
+    #daily-goal-modal .modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding-bottom: 8px;
+    }
+    
+    #daily-goal-modal .modal-buttons {
+        padding-top: 12px;
+        margin-top: 8px;
+        flex-shrink: 0;
     }
     
     .date-input-container {

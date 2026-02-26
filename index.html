@@ -686,14 +686,13 @@
     </div>
 
     <!-- 每日目标弹窗 -->
-    <div class="modal" id="daily-goal-modal" style="display: none;">
-        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px; max-height: 85vh;">
-            <div class="modal-title" id="daily-goal-modal-title">📅 每日目标</div>
-            <div class="modal-body" id="daily-goal-modal-body" style="overflow-y: auto;">
+    <div class="modal" id="daily-goal-modal" style="display: none; align-items: flex-end;">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px; width: 100%; max-height: 90vh; margin: 0; border-radius: 20px 20px 0 0; position: relative;">
+            <!-- 关闭按钮 -->
+            <button onclick="closeDailyGoalModal()" style="position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border: none; background: rgba(0,0,0,0.1); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--text-secondary); z-index: 10;">✕</button>
+            <div class="modal-title" id="daily-goal-modal-title" style="font-size: 18px; padding-bottom: 12px; padding-right: 40px;">📅 每日目标</div>
+            <div class="modal-body" id="daily-goal-modal-body" style="overflow-y: auto; -webkit-overflow-scrolling: touch;">
                 <!-- 内容将由JS生成 -->
-            </div>
-            <div class="modal-buttons" id="daily-goal-modal-buttons">
-                <button class="btn btn-secondary" onclick="closeDailyGoalModal()">关闭</button>
             </div>
         </div>
     </div>
