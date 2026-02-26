@@ -73,16 +73,27 @@
                         </div>
                     </div>
                 </div>
+                <div class="stats-row">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; flex: 1; padding: 16px; cursor: pointer;" onclick="showTotalEarningsDetail()">
+                        <span class="stat-label" style="color: #ffffff; font-weight: 600; font-size: 13px;">💰 总赚取金额</span>
+                        <div class="stat-value" style="color: #ffffff; font-size: 24px; margin-top: 10px; font-weight: 700;" id="total-earnings">
+                            ¥0.00
+                        </div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 4px;">
+                            点击查看详情
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <!-- 还款能力预测 -->
-            <div class="card mt-4" id="repayment-prediction-card" style="display: none;">
+            <!-- 年度目标面板 -->
+            <div class="card mt-4" id="yearly-goal-card">
                 <div class="section-header">
-                    <div class="section-title">📈 还款能力预测</div>
+                    <div class="section-title">🎯 年度收益目标</div>
                     <div class="section-divider"></div>
                 </div>
-                <div id="repayment-prediction-content">
-                    <!-- 预测内容将由JS生成 -->
+                <div id="yearly-goal-content">
+                    <!-- 年度目标内容将由JS生成 -->
                 </div>
             </div>
 
@@ -137,6 +148,17 @@
                     <div class="section-divider"></div>
                 </div>
                 <div id="app-ranking-content">
+                    <!-- 排行内容将由JS生成 -->
+                </div>
+            </div>
+
+            <!-- 软件收益排行 -->
+            <div class="card mt-4" id="app-earnings-ranking-card" style="display: none;">
+                <div class="section-header">
+                    <div class="section-title">💰 软件收益排行</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="app-earnings-ranking-content">
                     <!-- 排行内容将由JS生成 -->
                 </div>
             </div>
@@ -466,6 +488,39 @@
                 </div>
             </div>
 
+                <!-- 年度目标设置 -->
+                <div class="settings-card card mb-4">
+                    <div class="settings-card-header">
+                        <span class="settings-icon">🎯</span>
+                        <span class="settings-title">年度收益目标</span>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="form-label" style="font-size: 12px;">目标年份</label>
+                        <select id="yearly-goal-year" class="form-input" style="font-size: 13px;">
+                            <option value="2025">2025年</option>
+                            <option value="2026">2026年</option>
+                            <option value="2027">2027年</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="form-label" style="font-size: 12px;">年度目标金额 (元)</label>
+                        <input type="number" id="yearly-goal-amount" class="form-input" placeholder="输入年度目标金额" step="0.01" style="font-size: 13px;">
+                    </div>
+                    <div class="form-group mb-3">
+                        <label class="form-label" style="font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="yearly-goal-auto-distribute" checked style="width: auto;">
+                            自动分配超额收益
+                        </label>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                            超额完成的收益自动分配给收益不足的软件
+                        </div>
+                    </div>
+                    <div class="flex gap-4">
+                        <button class="btn btn-primary flex-1" onclick="saveYearlyGoal()">💾 保存目标</button>
+                        <button class="btn btn-secondary flex-1" onclick="viewYearlyGoalDetail()">📊 详情</button>
+                    </div>
+                </div>
+
                 <!-- 支出管理 -->
                 <div class="settings-card card mb-4">
                     <div class="settings-card-header">
@@ -697,6 +752,19 @@
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closePhoneDrawModal()">关闭</button>
                 <button class="btn btn-primary" id="phone-draw-btn" onclick="startPhoneDraw()">开始抽签</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 每日目标弹窗 -->
+    <div class="modal" id="daily-goal-modal" style="display: none;">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px; max-height: 85vh;">
+            <div class="modal-title" id="daily-goal-modal-title">📅 每日目标</div>
+            <div class="modal-body" id="daily-goal-modal-body" style="overflow-y: auto;">
+                <!-- 内容将由JS生成 -->
+            </div>
+            <div class="modal-buttons" id="daily-goal-modal-buttons">
+                <button class="btn btn-secondary" onclick="closeDailyGoalModal()">关闭</button>
             </div>
         </div>
     </div>
