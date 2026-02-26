@@ -3386,15 +3386,8 @@ function showPage(pageName) {
     // 显示目标页面
     document.getElementById(`page-${pageName}`).classList.add('active');
     
-    // 恢复页面状态（仪表盘页面特殊处理）
-    if (pageName === 'dashboard') {
-        // 仪表盘页面始终从顶部开始，强制整个页面滚动到顶部
-        window.scrollTo(0, 0);
-        // 清除仪表盘页面的保存状态
-        delete pageStates['dashboard'];
-    } else {
-        restorePageState(pageName);
-    }
+    // 恢复页面状态
+    restorePageState(pageName);
     
     // 更新底部导航
     document.querySelectorAll('.tab-item').forEach(item => {
@@ -3453,18 +3446,11 @@ function restorePageState(pageName) {
         currentGamePhoneId = state.currentGamePhoneId;
     }
     
-    // 恢复滚动位置（仪表盘页面始终从顶部开始）
-    if (pageElement) {
-        if (pageName === 'dashboard') {
-            // 仪表盘页面始终滚动到顶部，并清除保存的状态
-            pageElement.scrollTop = 0;
-            delete pageStates['dashboard'];
-        } else if (state.scrollTop) {
-            // 其他页面恢复之前的滚动位置
-            setTimeout(() => {
-                pageElement.scrollTop = state.scrollTop;
-            }, 100);
-        }
+    // 恢复滚动位置
+    if (pageElement && state.scrollTop !== undefined) {
+        setTimeout(() => {
+            pageElement.scrollTop = state.scrollTop;
+        }, 100);
     }
 }
 
