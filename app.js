@@ -1514,16 +1514,16 @@ class DataManager {
         localStorage.setItem('moneyApp_gameTimers', JSON.stringify(timers));
     }
     
-    // 计算剩余时间（支持跨天和暂停）
+    // 计算剩余时间（支持跨天、暂停和后台运行）
     static calculateRemainingTime(timerData) {
         if (!timerData || !timerData.startTime) return 0;
 
-        const now = new Date();
-        const start = new Date(timerData.startTime);
+        const now = Date.now();
+        const start = new Date(timerData.startTime).getTime();
         const duration = timerData.duration || 30; // 默认30分钟
         const totalDurationMs = duration * 60 * 1000;
 
-        // 计算已经过的时间（考虑暂停）
+        // 计算已经过的时间
         let elapsedMs = now - start;
 
         // 减去累计暂停时长
@@ -1531,9 +1531,14 @@ class DataManager {
             elapsedMs -= timerData.pausedDuration;
         }
 
-        // 如果当前正在暂停，减去当前暂停的时长
+        // 如果当前正在暂停，只计算到暂停开始的时间
         if (timerData.isPaused && timerData.pausedTime) {
-            elapsedMs -= (now - new Date(timerData.pausedTime));
+            const pausedTime = new Date(timerData.pausedTime).getTime();
+            // 重新计算：从start到pausedTime的时间，减去之前的暂停时长
+            elapsedMs = pausedTime - start;
+            if (timerData.pausedDuration) {
+                elapsedMs -= timerData.pausedDuration;
+            }
         }
 
         const remaining = totalDurationMs - elapsedMs;
@@ -7950,6 +7955,57 @@ function stopGameTimerInternal() {
         gameTimerState.intervalId = null;
     }
 }
+
+// 页面可见性变化处理（支持后台计时）
+let pageHiddenTime = null;
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // 页面进入后台
+        pageHiddenTime = Date.now();
+        console.log('页面进入后台，计时器继续运行');
+    } else {
+        // 页面回到前台
+        const pageVisibleTime = Date.now();
+        const hiddenDuration = pageHiddenTime ? pageVisibleTime - pageHiddenTime : 0;
+
+        console.log('页面回到前台，后台时长:', hiddenDuration, 'ms');
+
+        // 如果有正在运行的计时器，更新显示
+        if (gameTimerState.gameId && !gameTimerState.isPaused) {
+            const timerData = DataManager.getGameTimer(gameTimerState.gameId);
+            if (timerData && !timerData.isCompleted) {
+                // 立即更新显示
+                updateTimerDisplayFromStorage();
+
+                // 检查是否已经结束
+                const remaining = DataManager.calculateRemainingTime(timerData);
+                if (remaining <= 0) {
+                    onTimerComplete(gameTimerState.gameId);
+                } else {
+                    showToast('计时器已同步', 'info');
+                }
+            }
+        }
+
+        pageHiddenTime = null;
+    }
+});
+
+// 窗口获得焦点时同步计时器（处理切换手机的情况）
+window.addEventListener('focus', () => {
+    if (gameTimerState.gameId && !gameTimerState.isPaused) {
+        const timerData = DataManager.getGameTimer(gameTimerState.gameId);
+        if (timerData && !timerData.isCompleted) {
+            updateTimerDisplayFromStorage();
+
+            const remaining = DataManager.calculateRemainingTime(timerData);
+            if (remaining <= 0) {
+                onTimerComplete(gameTimerState.gameId);
+            }
+        }
+    }
+});
 
 // 计时完成回调
 function onTimerComplete(gameId) {
