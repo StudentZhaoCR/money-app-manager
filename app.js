@@ -2772,6 +2772,23 @@ class DataManager {
 
         // 总体情况
         const firstApp = appAnalysis[0];
+        
+        // 计算今日达标状态
+        const today = new Date().toISOString().split('T')[0];
+        let todayEarned = 0;
+        let todayTarget = 0;
+        let todayAchieved = false;
+        
+        // 从 appAnalysis 中计算今日收益
+        appAnalysis.forEach(app => {
+            // 今日收益已经在 appAnalysis 中计算好了
+            if (app.todayEarned) {
+                todayEarned += app.todayEarned;
+            }
+            todayTarget += Math.max(0, app.dailyNeed);
+        });
+        todayAchieved = todayTarget > 0 && todayEarned >= todayTarget;
+        
         if (firstApp && firstApp.totalNeedToEarn > 0) {
             const totalDailyNeed = appAnalysis.reduce((sum, a) => sum + Math.max(0, a.dailyNeed), 0);
             advice.push({
@@ -2779,7 +2796,10 @@ class DataManager {
                 icon: '📊',
                 title: '还款周期分析',
                 message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用资金 ¥${firstApp.totalAvailableFunds.toFixed(2)}`,
-                detail: `还需赚取 ¥${firstApp.totalNeedToEarn.toFixed(2)} · 周期共${firstApp.totalCycleDays}天 · 剩余${firstApp.daysRemaining}天 · 每天需赚¥${totalDailyNeed.toFixed(2)}`
+                detail: `还需赚取 ¥${firstApp.totalNeedToEarn.toFixed(2)} · 周期共${firstApp.totalCycleDays}天 · 剩余${firstApp.daysRemaining}天 · 每天需赚¥${totalDailyNeed.toFixed(2)}`,
+                todayEarned: todayEarned,
+                todayTarget: todayTarget,
+                todayAchieved: todayAchieved
             });
         } else if (firstApp) {
             advice.push({
@@ -2787,7 +2807,10 @@ class DataManager {
                 icon: '✅',
                 title: '还款资金充足',
                 message: `总待还 ¥${firstApp.totalPendingAmount.toFixed(2)} · 可用资金 ¥${firstApp.totalAvailableFunds.toFixed(2)}`,
-                detail: '当前资金已足够覆盖还款需求！'
+                detail: '当前资金已足够覆盖还款需求！',
+                todayEarned: todayEarned,
+                todayTarget: todayTarget,
+                todayAchieved: todayAchieved
             });
         }
 
@@ -4004,29 +4027,79 @@ function renderAppEarningAnalysis() {
     // 显示建议
     if (advice.length > 0) {
         advice.forEach(item => {
-            const bgColor = item.type === 'success' ? 'rgba(34, 197, 94, 0.1)' :
-                           item.type === 'critical' ? 'rgba(239, 68, 68, 0.1)' :
-                           item.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
-                           'rgba(59, 130, 246, 0.1)';
-            const borderColor = item.type === 'success' ? '#22c55e' :
-                               item.type === 'critical' ? '#ef4444' :
-                               item.type === 'warning' ? '#f59e0b' :
-                               '#3b82f6';
-            const textColor = item.type === 'success' ? '#16a34a' :
-                             item.type === 'critical' ? '#dc2626' :
-                             item.type === 'warning' ? '#d97706' :
-                             '#2563eb';
-
-            html += `
-                <div style="margin-bottom: 12px; padding: 12px; background: ${bgColor}; border-radius: 8px; border-left: 3px solid ${borderColor};">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                        <span style="font-size: 16px;">${item.icon}</span>
-                        <span style="font-size: 13px; font-weight: 600; color: ${textColor};">${item.title}</span>
+            // 还款周期分析使用特殊布局
+            if (item.title === '还款周期分析' || item.title === '还款资金充足') {
+                const isAchieved = item.todayAchieved;
+                const todayStatusColor = isAchieved ? '#22c55e' : '#f59e0b';
+                const todayStatusBg = isAchieved ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+                
+                html += `
+                    <div style="margin-bottom: 16px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; padding: 16px; border: 1px solid #bae6fd;">
+                        <!-- 标题 -->
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                            <span style="font-size: 20px;">${item.icon}</span>
+                            <span style="font-size: 15px; font-weight: 700; color: #0369a1;">${item.title}</span>
+                        </div>
+                        
+                        <!-- 今日达标状态 -->
+                        <div style="background: ${todayStatusBg}; border-radius: 10px; padding: 12px; margin-bottom: 12px; border-left: 4px solid ${todayStatusColor};">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-size: 13px; font-weight: 600; color: ${isAchieved ? '#166534' : '#92400e'};">
+                                    ${isAchieved ? '✅ 今日已达标' : '⏳ 今日未达标'}
+                                </span>
+                                <span style="font-size: 12px; color: ${isAchieved ? '#166534' : '#92400e'};">
+                                    ${isAchieved ? '超额完成' : `还需 ¥${(item.todayTarget - item.todayEarned).toFixed(2)}`}
+                                </span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 16px; font-weight: 700; color: ${todayStatusColor};">¥${item.todayEarned.toFixed(2)}</div>
+                                    <div style="font-size: 10px; color: #64748b;">今日已赚</div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 16px; font-weight: 700; color: #0369a1;">¥${item.todayTarget.toFixed(2)}</div>
+                                    <div style="font-size: 10px; color: #64748b;">今日目标</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 还款信息 -->
+                        <div style="background: rgba(255,255,255,0.6); border-radius: 8px; padding: 12px;">
+                            <div style="font-size: 12px; color: #475569; margin-bottom: 8px; line-height: 1.6;">
+                                ${item.message}
+                            </div>
+                            <div style="font-size: 11px; color: #64748b; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
+                                ${item.detail}
+                            </div>
+                        </div>
                     </div>
-                    <div style="font-size: 12px; color: var(--text-primary); margin-bottom: 4px;">${item.message}</div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">${item.detail}</div>
-                </div>
-            `;
+                `;
+            } else {
+                // 其他建议使用原有布局
+                const bgColor = item.type === 'success' ? 'rgba(34, 197, 94, 0.1)' :
+                               item.type === 'critical' ? 'rgba(239, 68, 68, 0.1)' :
+                               item.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
+                               'rgba(59, 130, 246, 0.1)';
+                const borderColor = item.type === 'success' ? '#22c55e' :
+                                   item.type === 'critical' ? '#ef4444' :
+                                   item.type === 'warning' ? '#f59e0b' :
+                                   '#3b82f6';
+                const textColor = item.type === 'success' ? '#16a34a' :
+                                 item.type === 'critical' ? '#dc2626' :
+                                 item.type === 'warning' ? '#d97706' :
+                                 '#2563eb';
+
+                html += `
+                    <div style="margin-bottom: 12px; padding: 12px; background: ${bgColor}; border-radius: 8px; border-left: 3px solid ${borderColor};">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                            <span style="font-size: 16px;">${item.icon}</span>
+                            <span style="font-size: 13px; font-weight: 600; color: ${textColor};">${item.title}</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-primary); margin-bottom: 4px;">${item.message}</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">${item.detail}</div>
+                    </div>
+                `;
+            }
         });
     }
 
