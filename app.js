@@ -1232,6 +1232,54 @@ class DataManager {
         return summary;
     }
 
+    // 计算推荐添加的手机数量
+    static calculateRecommendedPhones() {
+        const data = this.loadData();
+        const goal = this.getYearlyGoal();
+        
+        if (goal.amount <= 0) {
+            return {
+                currentPhones: data.phones.length,
+                currentApps: data.phones.reduce((sum, p) => sum + p.apps.length, 0),
+                avgAppsPerPhone: 0,
+                recommendedPhones: 0,
+                reason: '请先设置年度目标'
+            };
+        }
+
+        // 计算当前平均每个手机的软件数
+        const totalApps = data.phones.reduce((sum, p) => sum + p.apps.length, 0);
+        const avgAppsPerPhone = data.phones.length > 0 
+            ? totalApps / data.phones.length 
+            : 3; // 默认建议每部手机3个软件
+
+        // 假设每个软件平均每年可赚取 ¥500（基于经验值）
+        const avgEarningPerAppPerYear = 500;
+        
+        // 计算需要多少个软件才能达到年目标
+        const requiredApps = Math.ceil(goal.amount / avgEarningPerAppPerYear);
+        
+        // 计算需要多少部手机
+        const requiredPhones = Math.ceil(requiredApps / avgAppsPerPhone);
+        
+        // 计算还需添加多少部手机
+        const currentPhones = data.phones.length;
+        const recommendedPhones = Math.max(0, requiredPhones - currentPhones);
+        
+        return {
+            currentPhones: currentPhones,
+            currentApps: totalApps,
+            avgAppsPerPhone: avgAppsPerPhone.toFixed(1),
+            requiredApps: requiredApps,
+            requiredPhones: requiredPhones,
+            recommendedPhones: recommendedPhones,
+            avgEarningPerApp: avgEarningPerAppPerYear,
+            reason: recommendedPhones > 0 
+                ? `基于年目标¥${goal.amount}，建议共需${requiredPhones}部手机（每部约${avgAppsPerPhone.toFixed(0)}个软件）`
+                : '当前手机数量已满足年目标需求'
+        };
+    }
+
     // 清空所有数据
     static clearAllData() {
         localStorage.removeItem(PHONES_KEY);
@@ -1466,16 +1514,29 @@ class DataManager {
         localStorage.setItem('moneyApp_gameTimers', JSON.stringify(timers));
     }
     
-    // 计算剩余时间（支持跨天）
+    // 计算剩余时间（支持跨天和暂停）
     static calculateRemainingTime(timerData) {
         if (!timerData || !timerData.startTime) return 0;
-        
+
         const now = new Date();
         const start = new Date(timerData.startTime);
         const duration = timerData.duration || 30; // 默认30分钟
-        const endTime = new Date(start.getTime() + duration * 60 * 1000);
-        
-        const remaining = endTime - now;
+        const totalDurationMs = duration * 60 * 1000;
+
+        // 计算已经过的时间（考虑暂停）
+        let elapsedMs = now - start;
+
+        // 减去累计暂停时长
+        if (timerData.pausedDuration) {
+            elapsedMs -= timerData.pausedDuration;
+        }
+
+        // 如果当前正在暂停，减去当前暂停的时长
+        if (timerData.isPaused && timerData.pausedTime) {
+            elapsedMs -= (now - new Date(timerData.pausedTime));
+        }
+
+        const remaining = totalDurationMs - elapsedMs;
         return Math.max(0, remaining);
     }
 
@@ -6871,7 +6932,7 @@ function displayGameDrawResult(result, container, showCheckbox = false, historyI
         
         html += `
             <div class="game-draw-item ${completedClass}" style="animation-delay: ${index * 0.1}s">
-                <div class="game-draw-order">#${index + 1}</div>
+                <div class="game-draw-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);">${index + 1}</div>
                 <div class="game-draw-info">
                     <span class="game-draw-name">${game.name}</span>
                     <span class="game-draw-time">⏱️ ${game.playTime} 分钟</span>
@@ -6959,7 +7020,7 @@ function openGameResultPopup(result) {
     result.forEach((game, index) => {
         html += `
             <div class="popup-game-item" style="animation-delay: ${index * 0.15}s">
-                <div class="popup-game-order">#${index + 1}</div>
+                <div class="popup-game-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);">${index + 1}</div>
                 <div class="popup-game-info">
                     <span class="popup-game-name">${game.name}</span>
                     <span class="popup-game-time">⏱️ ${game.playTime} 分钟</span>
@@ -7531,7 +7592,65 @@ function showTodayDrawResult(todayDraw) {
     const targetDays = todayDraw.targetDays || 7;
     const progressPercent = (todayDraw.daysPlayed / targetDays) * 100;
     const remainingDays = todayDraw.remainingDays;
-    
+
+    // 检查今天是否已完成
+    const today = getCurrentDate();
+    const isCompletedToday = todayDraw.completedToday === today;
+
+    // 检查是否有正在进行的计时器
+    const timerData = DataManager.getGameTimer(todayDraw.gameId);
+    const hasActiveTimer = timerData && !timerData.isCompleted && !isCompletedToday;
+
+    if (hasActiveTimer) {
+        // 恢复计时器显示
+        const remainingSeconds = Math.floor(DataManager.calculateRemainingTime(timerData) / 1000);
+        if (remainingSeconds > 0) {
+            // 恢复计时器
+            startGameTimer(todayDraw.gameId, timerData.originalDuration || timerData.duration);
+
+            container.innerHTML = `
+                <div style="animation: fadeIn 0.5s ease;" id="draw-result-container">
+                    <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 今日抽签结果</div>
+                    <div style="font-size: 32px; font-weight: bold; margin: 16px 0; color: #fff;">${todayDraw.gameName}</div>
+
+                    <!-- 计时器显示 -->
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 16px; margin: 16px 0; border: 2px solid rgba(255,255,255,0.5);" id="timer-display-container">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">⏱️ 游玩计时中</div>
+                        <div style="font-size: 48px; font-weight: bold; color: #fff; font-family: monospace;" id="game-timer-display">${formatTime(remainingSeconds)}</div>
+                        <div style="font-size: 12px; opacity: 0.8; margin-top: 8px;" id="timer-status">
+                            ${timerData.isPaused ? '计时已暂停' : '计时进行中...'}
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button class="btn" onclick="pauseGameTimer('${todayDraw.gameId}')" id="timer-pause-btn" style="background: rgba(255,255,255,0.3); color: #fff; font-size: 12px; padding: 6px 16px; margin-right: 8px;">${timerData.isPaused ? '继续' : '暂停'}</button>
+                            <button class="btn" onclick="stopGameTimer('${todayDraw.gameId}')" style="background: rgba(255,255,255,0.3); color: #fff; font-size: 12px; padding: 6px 16px;">结束计时</button>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 16px; margin-bottom: 16px; opacity: 0.9;">
+                        今天第 ${todayDraw.daysPlayed} 天 / 共 ${targetDays} 天
+                        ${todayDraw.isRedownload ? '<span style="font-size: 12px; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">重新下载</span>' : ''}
+                    </div>
+                    <div class="progress-bar" style="background: rgba(255,255,255,0.3); margin: 16px auto; max-width: 300px;">
+                        <div class="progress-fill" style="width: ${progressPercent}%; background: #fff;"></div>
+                    </div>
+                    <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">
+                        ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
+                    </div>
+
+                    <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
+                        计时器正在后台运行，切换页面不会丢失
+                    </div>
+                </div>
+            `;
+
+            // 刷新游戏列表和统计
+            renderGamesList();
+            renderGameStats();
+            renderGameDrawHistoryList();
+            return;
+        }
+    }
+
     // 计算建议游玩时长
     let playTimeText = '30分钟';
     if (remainingDays <= 1) {
@@ -7539,16 +7658,12 @@ function showTodayDrawResult(todayDraw) {
     } else if (remainingDays >= 3) {
         playTimeText = '20分钟';
     }
-    
-    // 检查今天是否已完成
-    const today = getCurrentDate();
-    const isCompletedToday = todayDraw.completedToday === today;
-    
+
     container.innerHTML = `
         <div style="animation: fadeIn 0.5s ease;">
             <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 今日抽签结果</div>
             <div style="font-size: 32px; font-weight: bold; margin: 16px 0; color: #fff;">${todayDraw.gameName}</div>
-            
+
             <!-- 建议游玩时长 -->
             <div style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 16px; margin: 16px 0; border: 2px solid rgba(255,255,255,0.5);">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">⏱️ 建议游玩时长</div>
@@ -7557,7 +7672,7 @@ function showTodayDrawResult(todayDraw) {
                     ${remainingDays <= 1 ? '即将完成，建议多玩一会' : remainingDays >= 3 ? '刚开始，适当体验即可' : '正常游玩'}
                 </div>
             </div>
-            
+
             <div style="font-size: 16px; margin-bottom: 16px; opacity: 0.9;">
                 今天第 ${todayDraw.daysPlayed} 天 / 共 ${targetDays} 天
                 ${todayDraw.isRedownload ? '<span style="font-size: 12px; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; margin-left: 8px;">重新下载</span>' : ''}
@@ -7568,7 +7683,7 @@ function showTodayDrawResult(todayDraw) {
             <div style="font-size: 14px; opacity: 0.8; margin-top: 8px;">
                 ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
             </div>
-            
+
             <!-- 完成按钮 -->
             ${!isCompletedToday ? `
             <button class="btn" onclick="completeTodayGame()" style="background: rgba(255,255,255,0.9); color: #667eea; font-weight: bold; font-size: 16px; margin-top: 16px; padding: 12px 32px; border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
@@ -7579,17 +7694,24 @@ function showTodayDrawResult(todayDraw) {
                 ✅ 今日已完成
             </div>
             `}
-            
+
             <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
                 ${isCompletedToday ? '明天再来抽签吧' : '玩够了就点击完成按钮'}
             </div>
         </div>
     `;
-    
+
     // 刷新游戏列表和统计
     renderGamesList();
     renderGameStats();
     renderGameDrawHistoryList();
+}
+
+// 格式化时间（秒 -> MM:SS）
+function formatTime(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 // 标记今日游戏已完成
@@ -8038,6 +8160,51 @@ function renderYearlyGoal() {
                 `}
             </div>
 
+            <!-- 手机数量推荐 -->
+            ${(() => {
+                const recommendation = DataManager.calculateRecommendedPhones();
+                if (recommendation.recommendedPhones > 0) {
+                    return `
+                        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 2px solid #fbbf24;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <span style="font-size: 14px; font-weight: 600; color: #92400e;">📱 手机数量建议</span>
+                                <span style="font-size: 20px; font-weight: 700; color: #b45309;">+${recommendation.recommendedPhones}部</span>
+                            </div>
+                            <div style="font-size: 12px; color: #78350f; margin-bottom: 12px; line-height: 1.5;">
+                                ${recommendation.reason}
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 16px; font-weight: 700; color: #b45309;">${recommendation.currentPhones}</div>
+                                    <div style="font-size: 10px; color: #92400e;">当前手机</div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 16px; font-weight: 700; color: #b45309;">${recommendation.requiredPhones}</div>
+                                    <div style="font-size: 10px; color: #92400e;">建议总数</div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                    <div style="font-size: 16px; font-weight: 700; color: #b45309;">${recommendation.avgAppsPerPhone}</div>
+                                    <div style="font-size: 10px; color: #92400e;">平均每部软件</div>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" style="width: 100%;" onclick="showAddRecommendedPhonesModal(${recommendation.recommendedPhones})">
+                                一键添加${recommendation.recommendedPhones}部手机
+                            </button>
+                        </div>
+                    `;
+                } else if (recommendation.currentPhones > 0) {
+                    return `
+                        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #bbf7d0 100%); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 2px solid #86efac;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 16px;">✅</span>
+                                <span style="font-size: 13px; color: #166534;">${recommendation.reason}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                return '';
+            })()}
+
             <!-- 软件目标分配 -->
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
                 📊 各软件目标分配
@@ -8079,7 +8246,7 @@ function renderYearlyGoal() {
                 <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; cursor: pointer;" onclick="openDailyGoalModal('${app.appId}')">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 12px; color: var(--text-secondary);">#${index + 1}</span>
+                            <span style="font-size: 11px; background: ${rankColor}15; color: ${rankColor}; padding: 2px 8px; border-radius: 12px; font-weight: 600;">${index + 1}</span>
                             <span style="font-weight: 600; font-size: 14px;">${app.appName}</span>
                             <span style="font-size: 11px; color: var(--text-secondary);">(${app.phoneName})</span>
                         </div>
@@ -8299,6 +8466,59 @@ function viewYearlyGoalDetail() {
         ],
         true
     );
+}
+
+// 显示添加推荐手机数量的弹窗
+function showAddRecommendedPhonesModal(count) {
+    const html = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 48px; margin-bottom: 12px;">📱</div>
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">添加 ${count} 部新手机</div>
+            <div style="font-size: 13px; color: var(--text-secondary);">
+                系统将自动创建 ${count} 部手机，每部手机包含推荐数量的软件位
+            </div>
+        </div>
+        <div style="background: var(--bg-secondary); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">手机命名规则</div>
+            <div style="font-size: 13px;">手机 1、手机 2、手机 3...</div>
+        </div>
+    `;
+
+    showModal(
+        '添加推荐手机',
+        html,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: `添加 ${count} 部手机`,
+                class: 'btn-primary',
+                action: () => {
+                    addRecommendedPhones(count);
+                    closeModal();
+                }
+            }
+        ]
+    );
+}
+
+// 添加推荐数量的手机
+function addRecommendedPhones(count) {
+    const recommendation = DataManager.calculateRecommendedPhones();
+    const currentCount = recommendation.currentPhones;
+
+    for (let i = 1; i <= count; i++) {
+        const phoneNumber = currentCount + i;
+        DataManager.addPhone(`手机 ${phoneNumber}`);
+    }
+
+    showToast(`成功添加 ${count} 部手机`, 'success');
+
+    // 刷新页面显示
+    renderDashboard();
 }
 
 // ==================== 每日目标功能 ====================
