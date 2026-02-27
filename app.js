@@ -4144,6 +4144,12 @@ function renderAppEarningAnalysis() {
             const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : app.gap <= 0 ? '✅' : '🟢';
             const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : app.gap <= 0 ? '#22c55e' : '#3b82f6';
             const gapText = app.gap <= 0 ? '已完成' : `差额 ¥${app.gap.toFixed(2)}`;
+            
+            // 计算今日达标状态
+            const isTodayAchieved = app.todayEarned >= app.dailyNeed;
+            const todayStatusIcon = isTodayAchieved ? '✅' : '⏳';
+            const todayStatusColor = isTodayAchieved ? '#22c55e' : '#f59e0b';
+            const todayStatusText = isTodayAchieved ? '今日已达标' : '今日未达标';
 
             html += `
                 <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
@@ -4164,8 +4170,16 @@ function renderAppEarningAnalysis() {
                         </div>
                         <div style="text-align: right;">
                             ${app.gap > 0 ? `
-                                <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
-                                <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
+                                        <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                                    </div>
+                                    <div style="text-align: right; padding-left: 8px; border-left: 1px solid var(--border-color);">
+                                        <div style="font-size: 10px; color: ${todayStatusColor};">${todayStatusText}</div>
+                                        <div style="font-size: 12px; font-weight: 600; color: ${todayStatusColor};">${todayStatusIcon} ¥${app.todayEarned.toFixed(2)}</div>
+                                    </div>
+                                </div>
                             ` : `
                                 <div style="font-size: 12px; color: #22c55e; font-weight: 600;">✓ 已达标</div>
                             `}
