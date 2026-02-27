@@ -7983,7 +7983,10 @@ document.addEventListener('visibilitychange', () => {
                 if (remaining <= 0) {
                     onTimerComplete(gameTimerState.gameId);
                 } else {
-                    showToast('计时器已同步', 'info');
+                    // 只在游戏管理页面显示同步提示
+                    if (currentPage === 'games' && document.getElementById('game-timer-display')) {
+                        showToast('计时器已同步', 'info');
+                    }
                 }
             }
         }
