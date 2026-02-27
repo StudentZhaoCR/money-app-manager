@@ -7788,108 +7788,127 @@ let gameTimerState = {
     originalDuration: 0 // 原始时长（分钟）
 };
 
-// 启动游戏计时器
+// 启动游戏计时器（支持后台运行）
 function startGameTimer(gameId, durationMinutes) {
     // 清除之前的计时器
     stopGameTimerInternal();
-    
+
     const timerData = DataManager.getGameTimer(gameId);
-    let remainingSeconds;
-    
+    let startTime;
+    let pausedDuration = 0;
+    let isPaused = false;
+    let pausedTime = null;
+
     if (timerData && !timerData.isCompleted) {
-        // 恢复已有计时器（支持跨天）
-        remainingSeconds = Math.floor(DataManager.calculateRemainingTime(timerData) / 1000);
-        if (remainingSeconds <= 0) {
-            remainingSeconds = durationMinutes * 60;
-        }
+        // 恢复已有计时器
+        startTime = new Date(timerData.startTime);
+        pausedDuration = timerData.pausedDuration || 0;
+        isPaused = timerData.isPaused || false;
+        pausedTime = timerData.pausedTime ? new Date(timerData.pausedTime) : null;
     } else {
         // 新建计时器
-        remainingSeconds = durationMinutes * 60;
+        startTime = new Date();
     }
-    
-    gameTimerState.gameId = gameId;
-    gameTimerState.remainingSeconds = remainingSeconds;
-    gameTimerState.originalDuration = durationMinutes;
-    gameTimerState.isPaused = false;
-    gameTimerState.pausedTime = null;
-    
-    // 保存计时器状态
+
+    // 保存计时器状态到 localStorage（用于后台计时）
     const newTimerData = {
         gameId: gameId,
-        startTime: new Date().toISOString(),
-        duration: Math.ceil(remainingSeconds / 60),
-        originalDuration: durationMinutes, // 保存原始时长
-        isPaused: false,
+        startTime: startTime.toISOString(),
+        duration: durationMinutes,
+        originalDuration: durationMinutes,
+        isPaused: isPaused,
         isCompleted: false,
-        pausedDuration: 0 // 累计暂停时长（毫秒）
+        pausedDuration: pausedDuration,
+        pausedTime: pausedTime ? pausedTime.toISOString() : null,
+        lastUpdateTime: new Date().toISOString() // 最后更新时间
     };
     DataManager.saveGameTimer(gameId, newTimerData);
-    
+
+    // 更新全局状态
+    gameTimerState.gameId = gameId;
+    gameTimerState.originalDuration = durationMinutes;
+    gameTimerState.isPaused = isPaused;
+    gameTimerState.pausedTime = pausedTime;
+
     // 立即更新显示
-    updateTimerDisplay(remainingSeconds);
-    
-    // 启动倒计时
+    updateTimerDisplayFromStorage();
+
+    // 启动定时器（每秒更新显示，但实际计算基于时间戳）
     gameTimerState.intervalId = setInterval(() => {
         if (!gameTimerState.isPaused) {
-            gameTimerState.remainingSeconds--;
-            updateTimerDisplay(gameTimerState.remainingSeconds);
-            
-            // 保存当前剩余时间
-            const currentTimer = DataManager.getGameTimer(gameId);
-            if (currentTimer) {
-                currentTimer.remainingSeconds = gameTimerState.remainingSeconds;
-                DataManager.saveGameTimer(gameId, currentTimer);
-            }
-            
+            updateTimerDisplayFromStorage();
+
             // 检查是否结束
-            if (gameTimerState.remainingSeconds <= 0) {
+            const remaining = DataManager.calculateRemainingTime(DataManager.getGameTimer(gameId));
+            if (remaining <= 0) {
                 onTimerComplete(gameId);
             }
         }
     }, 1000);
-    
-    console.log(`游戏计时器已启动: ${gameId}, 剩余 ${remainingSeconds} 秒`);
+
+    console.log(`游戏计时器已启动: ${gameId}, 时长 ${durationMinutes} 分钟`);
+}
+
+// 从存储中计算并更新计时器显示（支持后台运行）
+function updateTimerDisplayFromStorage() {
+    const timerData = DataManager.getGameTimer(gameTimerState.gameId);
+    if (!timerData) return;
+
+    const remainingMs = DataManager.calculateRemainingTime(timerData);
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+    updateTimerDisplay(remainingSeconds);
+
+    // 更新最后更新时间
+    timerData.lastUpdateTime = new Date().toISOString();
+    DataManager.saveGameTimer(gameTimerState.gameId, timerData);
 }
 
 // 暂停/恢复游戏计时器
 function pauseGameTimer(gameId) {
     if (gameTimerState.gameId !== gameId) return;
-    
+
     const timerData = DataManager.getGameTimer(gameId);
     if (!timerData) return;
-    
+
     const pauseBtn = document.getElementById('timer-pause-btn');
     const statusEl = document.getElementById('timer-status');
-    
+
     if (gameTimerState.isPaused) {
         // 恢复计时
         gameTimerState.isPaused = false;
-        
+
         // 计算暂停时长
         if (gameTimerState.pausedTime) {
-            const pausedDuration = Date.now() - gameTimerState.pausedTime;
+            const now = Date.now();
+            const pausedDuration = now - gameTimerState.pausedTime.getTime();
             timerData.pausedDuration = (timerData.pausedDuration || 0) + pausedDuration;
             gameTimerState.pausedTime = null;
         }
-        
+
         timerData.isPaused = false;
+        timerData.pausedTime = null;
+        timerData.lastUpdateTime = new Date().toISOString();
         DataManager.saveGameTimer(gameId, timerData);
-        
+
         if (pauseBtn) pauseBtn.textContent = '暂停';
         if (statusEl) statusEl.textContent = '计时进行中...';
-        
+
         showToast('计时器已恢复', 'info');
     } else {
         // 暂停计时
+        const now = new Date();
         gameTimerState.isPaused = true;
-        gameTimerState.pausedTime = Date.now();
-        
+        gameTimerState.pausedTime = now;
+
         timerData.isPaused = true;
+        timerData.pausedTime = now.toISOString();
+        timerData.lastUpdateTime = now.toISOString();
         DataManager.saveGameTimer(gameId, timerData);
-        
+
         if (pauseBtn) pauseBtn.textContent = '继续';
         if (statusEl) statusEl.textContent = '计时已暂停';
-        
+
         showToast('计时器已暂停', 'info');
     }
 }
