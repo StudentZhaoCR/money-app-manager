@@ -1232,6 +1232,156 @@ class DataManager {
         return summary;
     }
 
+    // ==================== 每日目标缺口记录功能 ====================
+
+    // 获取或初始化每日缺口记录
+    static getDailyGapRecords() {
+        const data = this.loadData();
+        if (!data.dailyGapRecords) {
+            data.dailyGapRecords = {};
+            this.saveData(data);
+        }
+        return data.dailyGapRecords;
+    }
+
+    // 记录每日缺口
+    static recordDailyGap(date, targetAmount, earnedAmount) {
+        const data = this.loadData();
+        if (!data.dailyGapRecords) {
+            data.dailyGapRecords = {};
+        }
+
+        const gap = Math.max(0, targetAmount - earnedAmount);
+
+        data.dailyGapRecords[date] = {
+            date: date,
+            targetAmount: targetAmount,
+            earnedAmount: earnedAmount,
+            gap: gap,
+            isAchieved: earnedAmount >= targetAmount,
+            recordedAt: new Date().toISOString()
+        };
+
+        this.saveData(data);
+        return data.dailyGapRecords[date];
+    }
+
+    // 获取指定日期的缺口记录
+    static getDailyGap(date) {
+        const records = this.getDailyGapRecords();
+        return records[date] || null;
+    }
+
+    // 获取所有缺口记录统计
+    static getDailyGapStats() {
+        const records = this.getDailyGapRecords();
+        const recordList = Object.values(records);
+
+        if (recordList.length === 0) {
+            return {
+                totalDays: 0,
+                achievedDays: 0,
+                missedDays: 0,
+                totalGap: 0,
+                totalTarget: 0,
+                totalEarned: 0,
+                achievementRate: 0,
+                records: []
+            };
+        }
+
+        const achievedDays = recordList.filter(r => r.isAchieved).length;
+        const missedDays = recordList.filter(r => !r.isAchieved).length;
+        const totalGap = recordList.reduce((sum, r) => sum + r.gap, 0);
+        const totalTarget = recordList.reduce((sum, r) => sum + r.targetAmount, 0);
+        const totalEarned = recordList.reduce((sum, r) => sum + r.earnedAmount, 0);
+
+        return {
+            totalDays: recordList.length,
+            achievedDays: achievedDays,
+            missedDays: missedDays,
+            totalGap: totalGap,
+            totalTarget: totalTarget,
+            totalEarned: totalEarned,
+            achievementRate: ((totalEarned / totalTarget) * 100).toFixed(1),
+            records: recordList.sort((a, b) => new Date(b.date) - new Date(a.date))
+        };
+    }
+
+    // 计算全年目标的每日需赚金额
+    static calculateYearlyDailyTarget() {
+        const goal = this.getYearlyGoal();
+        const data = this.loadData();
+
+        if (goal.amount <= 0) {
+            return {
+                yearlyGoal: 0,
+                dailyTarget: 0,
+                daysRemaining: 365,
+                totalEarned: 0,
+                remainingAmount: 0,
+                isValid: false
+            };
+        }
+
+        // 计算今年已赚取金额
+        let totalEarned = 0;
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                totalEarned += app.withdrawn || 0;
+                totalEarned += app.historicalWithdrawn || 0;
+                totalEarned += app.balance || 0;
+            });
+        });
+
+        // 计算剩余金额
+        const remainingAmount = Math.max(0, goal.amount - totalEarned);
+
+        // 计算今年剩余天数
+        const now = new Date();
+        const yearEnd = new Date(now.getFullYear(), 11, 31);
+        const daysRemaining = Math.max(1, Math.ceil((yearEnd - now) / (1000 * 60 * 60 * 24)));
+
+        // 计算每天需赚金额
+        const dailyTarget = remainingAmount / daysRemaining;
+
+        return {
+            year: goal.year,
+            yearlyGoal: goal.amount,
+            dailyTarget: dailyTarget,
+            daysRemaining: daysRemaining,
+            totalEarned: totalEarned,
+            remainingAmount: remainingAmount,
+            isValid: true
+        };
+    }
+
+    // 检查并记录今日缺口（应在每天结束时调用）
+    static checkAndRecordTodayGap() {
+        const dailyTarget = this.calculateYearlyDailyTarget();
+        if (!dailyTarget.isValid) return null;
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // 检查今天是否已经记录过
+        const existingRecord = this.getDailyGap(today);
+        if (existingRecord) return existingRecord;
+
+        // 计算今日实际收益
+        const data = this.loadData();
+        let todayEarned = 0;
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.dailyEarnings && app.dailyEarnings[today]) {
+                    todayEarned += parseFloat(app.dailyEarnings[today]) || 0;
+                }
+            });
+        });
+
+        // 记录今日缺口
+        return this.recordDailyGap(today, dailyTarget.dailyTarget, todayEarned);
+    }
+
     // 计算推荐添加的手机数量
     static calculateRecommendedPhones() {
         const data = this.loadData();
@@ -8332,6 +8482,73 @@ function renderYearlyGoal() {
                 `}
             </div>
 
+            <!-- 每日目标缺口记录 -->
+            ${(() => {
+                const dailyTarget = DataManager.calculateYearlyDailyTarget();
+                const gapStats = DataManager.getDailyGapStats();
+                
+                if (!dailyTarget.isValid) return '';
+                
+                const today = new Date().toISOString().split('T')[0];
+                const todayRecord = DataManager.getDailyGap(today);
+                
+                return `
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 2px solid #fbbf24;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span style="font-size: 14px; font-weight: 600; color: #92400e;">📅 每日目标追踪</span>
+                            <button class="btn btn-sm" onclick="showDailyGapDetailModal()" style="font-size: 11px; padding: 4px 12px; background: rgba(255,255,255,0.5);">查看详情</button>
+                        </div>
+                        
+                        <div style="background: rgba(255,255,255,0.5); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-size: 12px; color: #78350f;">每天需赚</span>
+                                <span style="font-size: 20px; font-weight: 700; color: #b45309;">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
+                            </div>
+                            <div style="font-size: 11px; color: #92400e;">
+                                剩余${dailyTarget.daysRemaining}天 · 还需¥${dailyTarget.remainingAmount.toFixed(2)}
+                            </div>
+                        </div>
+                        
+                        ${gapStats.totalDays > 0 ? `
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                <div style="font-size: 16px; font-weight: 700; color: #22c55e;">${gapStats.achievedDays}</div>
+                                <div style="font-size: 10px; color: #92400e;">达标天数</div>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                <div style="font-size: 16px; font-weight: 700; color: #ef4444;">${gapStats.missedDays}</div>
+                                <div style="font-size: 10px; color: #92400e;">未达标天数</div>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
+                                <div style="font-size: 16px; font-weight: 700; color: #b45309;">¥${gapStats.totalGap.toFixed(2)}</div>
+                                <div style="font-size: 10px; color: #92400e;">累计缺口</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        ${todayRecord ? `
+                        <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; border-radius: 8px; padding: 10px; border-left: 3px solid ${todayRecord.isAchieved ? '#22c55e' : '#ef4444'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 12px; font-weight: 600; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
+                                    ${todayRecord.isAchieved ? '✅ 今日已达标' : '❌ 今日未达标'}
+                                </span>
+                                <span style="font-size: 11px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
+                                    ${todayRecord.isAchieved ? `超额¥${(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `缺口¥${todayRecord.gap.toFixed(2)}`}
+                                </span>
+                            </div>
+                            <div style="font-size: 11px; color: #78350f; margin-top: 4px;">
+                                目标: ¥${todayRecord.targetAmount.toFixed(2)} · 实际: ¥${todayRecord.earnedAmount.toFixed(2)}
+                            </div>
+                        </div>
+                        ` : `
+                        <div style="background: rgba(255,255,255,0.3); border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 12px; color: #92400e;">今日尚未记录</span>
+                        </div>
+                        `}
+                    </div>
+                `;
+            })()}
+
             <!-- 手机数量推荐 -->
             ${(() => {
                 const recommendation = DataManager.calculateRecommendedPhones();
@@ -8513,6 +8730,72 @@ function loadYearlyGoalSettings() {
     if (yearSelect) yearSelect.value = goal.year;
     if (amountInput) amountInput.value = goal.amount > 0 ? goal.amount : '';
     if (autoDistributeCheckbox) autoDistributeCheckbox.checked = goal.autoDistribute;
+}
+
+// 显示每日目标缺口详情弹窗
+function showDailyGapDetailModal() {
+    const gapStats = DataManager.getDailyGapStats();
+    const dailyTarget = DataManager.calculateYearlyDailyTarget();
+
+    let recordsHtml = '';
+    if (gapStats.records.length === 0) {
+        recordsHtml = '<div style="text-align: center; padding: 20px; color: var(--text-secondary);">暂无记录</div>';
+    } else {
+        recordsHtml = gapStats.records.map(record => {
+            const isAchieved = record.isAchieved;
+            const bgColor = isAchieved ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const borderColor = isAchieved ? '#22c55e' : '#ef4444';
+            const textColor = isAchieved ? '#166534' : '#991b1b';
+            
+            return `
+                <div style="background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 13px; font-weight: 600; color: ${textColor};">${record.date}</span>
+                        <span style="font-size: 12px; color: ${textColor};">${isAchieved ? '✅ 已达标' : '❌ 未达标'}</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 11px; color: var(--text-secondary);">
+                        <div>目标: ¥${record.targetAmount.toFixed(2)}</div>
+                        <div>实际: ¥${record.earnedAmount.toFixed(2)}</div>
+                        <div style="color: ${textColor}; font-weight: 600;">${isAchieved ? '超额' : '缺口'}: ¥${record.gap.toFixed(2)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const html = `
+        <div style="max-height: 60vh; overflow-y: auto;">
+            <!-- 统计概览 -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; margin-bottom: 16px;">
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <div style="font-size: 24px; font-weight: bold;">¥${dailyTarget.dailyTarget.toFixed(2)}</div>
+                    <div style="font-size: 12px; opacity: 0.9;">每天需赚</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; font-size: 12px;">
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
+                        <div style="font-weight: bold; font-size: 14px;">${gapStats.achievedDays}</div>
+                        <div style="opacity: 0.8;">达标天数</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
+                        <div style="font-weight: bold; font-size: 14px;">${gapStats.missedDays}</div>
+                        <div style="opacity: 0.8;">未达标天数</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
+                        <div style="font-weight: bold; font-size: 14px;">¥${gapStats.totalGap.toFixed(2)}</div>
+                        <div style="opacity: 0.8;">累计缺口</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 记录列表 -->
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
+                📋 历史记录 (${gapStats.totalDays}天)
+            </div>
+            ${recordsHtml}
+        </div>
+    `;
+
+    showModal('每日目标缺口详情', html, [{ text: '关闭', class: 'btn-secondary', action: closeModal }]);
 }
 
 // 查看年度目标详情
