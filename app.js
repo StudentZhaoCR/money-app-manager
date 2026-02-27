@@ -2707,6 +2707,7 @@ class DataManager {
 
         // 分析每个软件
         const appAnalysis = [];
+        const today = new Date().toISOString().split('T')[0];
 
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
@@ -2735,6 +2736,11 @@ class DataManager {
                 // 计算完成百分比（基于目标金额）
                 const completionPercent = targetAmount > 0 ? (currentBalance / targetAmount * 100) : 0;
 
+                // 计算今日收益
+                const todayEarned = app.dailyEarnings && app.dailyEarnings[today] 
+                    ? parseFloat(app.dailyEarnings[today]) || 0 
+                    : 0;
+
                 appAnalysis.push({
                     phoneName: phone.name,
                     appName: app.name,
@@ -2750,7 +2756,8 @@ class DataManager {
                     perAppTarget,
                     totalPendingAmount,
                     totalAvailableFunds,
-                    totalNeedToEarn
+                    totalNeedToEarn,
+                    todayEarned
                 });
             });
         });
