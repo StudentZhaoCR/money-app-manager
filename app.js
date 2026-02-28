@@ -1552,6 +1552,158 @@ class DataManager {
         return this.recordDailyGap(today, dailyTarget.dailyTarget, todayEarned);
     }
 
+    // ==================== 资产管理功能 ====================
+
+    // 预定义资产分类
+    static getAssetCategories() {
+        return [
+            { id: 'electronics', name: '电子产品', icon: '💻', keywords: ['手机', 'iPhone', '华为', '小米', 'OPPO', 'vivo', '三星', '荣耀', '一加', '魅族', '电脑', '笔记本', '平板', 'iPad', '耳机', '相机', '显示器', '键盘', '鼠标', '充电器', '数据线'] },
+            { id: 'furniture', name: '家具家电', icon: '🛋️', keywords: ['沙发', '床', '桌子', '椅子', '衣柜', '冰箱', '洗衣机', '空调', '电视', '灯具'] },
+            { id: 'clothing', name: '服装鞋包', icon: '👔', keywords: ['衣服', '裤子', '鞋子', '包包', '帽子', '围巾', '手套', '袜子'] },
+            { id: 'food', name: '食品酒水', icon: '🍔', keywords: ['食品', '零食', '饮料', '酒水', '茶叶', '咖啡'] },
+            { id: 'beauty', name: '美妆护肤', icon: '💄', keywords: ['化妆品', '护肤品', '香水', '口红', '面膜', '洗发水', '沐浴露'] },
+            { id: 'sports', name: '运动户外', icon: '⚽', keywords: ['运动', '健身', '球拍', '球鞋', '帐篷', '背包', '自行车'] },
+            { id: 'books', name: '图书文具', icon: '📚', keywords: ['书', '笔记本', '笔', '文具', '杂志', '教材'] },
+            { id: 'pets', name: '宠物用品', icon: '🐱', keywords: ['宠物', '猫粮', '狗粮', '猫砂', '玩具', '笼子'] },
+            { id: 'tools', name: '工具器材', icon: '🔧', keywords: ['工具', '螺丝刀', '锤子', '电钻', '梯子', '五金'] },
+            { id: 'other', name: '其他', icon: '📦', keywords: [] }
+        ];
+    }
+
+    // 自动识别分类
+    static autoDetectCategory(itemName) {
+        const categories = this.getAssetCategories();
+        const lowerName = itemName.toLowerCase();
+        
+        for (const category of categories) {
+            if (category.id === 'other') continue;
+            for (const keyword of category.keywords) {
+                if (lowerName.includes(keyword.toLowerCase())) {
+                    return category.id;
+                }
+            }
+        }
+        return 'other';
+    }
+
+    // 获取资产列表
+    static getAssets() {
+        const assets = localStorage.getItem('moneyApp_assets');
+        return assets ? JSON.parse(assets) : [];
+    }
+
+    // 保存资产列表
+    static saveAssets(assets) {
+        localStorage.setItem('moneyApp_assets', JSON.stringify(assets));
+    }
+
+    // 添加资产
+    static addAsset(assetData) {
+        const assets = this.getAssets();
+        const category = assetData.category || this.autoDetectCategory(assetData.name);
+        
+        const newAsset = {
+            id: Date.now().toString(),
+            name: assetData.name,
+            price: parseFloat(assetData.price) || 0,
+            purchaseDate: assetData.purchaseDate,
+            category: category,
+            note: assetData.note || '',
+            createdAt: new Date().toISOString()
+        };
+        
+        assets.push(newAsset);
+        this.saveAssets(assets);
+        return newAsset;
+    }
+
+    // 编辑资产
+    static editAsset(assetId, assetData) {
+        const assets = this.getAssets();
+        const index = assets.findIndex(a => a.id === assetId);
+        
+        if (index >= 0) {
+            const category = assetData.category || this.autoDetectCategory(assetData.name);
+            assets[index] = {
+                ...assets[index],
+                name: assetData.name,
+                price: parseFloat(assetData.price) || 0,
+                purchaseDate: assetData.purchaseDate,
+                category: category,
+                note: assetData.note || '',
+                updatedAt: new Date().toISOString()
+            };
+            this.saveAssets(assets);
+            return assets[index];
+        }
+        return null;
+    }
+
+    // 删除资产
+    static deleteAsset(assetId) {
+        const assets = this.getAssets();
+        const filtered = assets.filter(a => a.id !== assetId);
+        this.saveAssets(filtered);
+        return filtered;
+    }
+
+    // 计算资产统计
+    static calculateAssetStats() {
+        const assets = this.getAssets();
+        const categories = this.getAssetCategories();
+        const now = new Date();
+        
+        let totalValue = 0;
+        let totalDays = 0;
+        const categoryStats = {};
+        
+        // 初始化分类统计
+        categories.forEach(cat => {
+            categoryStats[cat.id] = {
+                ...cat,
+                count: 0,
+                totalValue: 0,
+                totalDays: 0,
+                dailyCost: 0
+            };
+        });
+        
+        assets.forEach(asset => {
+            const purchaseDate = new Date(asset.purchaseDate);
+            const daysOwned = Math.max(1, Math.floor((now - purchaseDate) / (1000 * 60 * 60 * 24)));
+            const dailyCost = asset.price / daysOwned;
+            
+            totalValue += asset.price;
+            totalDays += daysOwned;
+            
+            const catId = asset.category || 'other';
+            if (categoryStats[catId]) {
+                categoryStats[catId].count++;
+                categoryStats[catId].totalValue += asset.price;
+                categoryStats[catId].totalDays += daysOwned;
+                categoryStats[catId].dailyCost += dailyCost;
+            }
+        });
+        
+        const totalDailyCost = totalValue > 0 && totalDays > 0 ? totalValue / (totalDays / assets.length || 1) : 0;
+        
+        return {
+            totalAssets: assets.length,
+            totalValue: totalValue,
+            totalDailyCost: totalDailyCost,
+            categoryStats: Object.values(categoryStats).filter(c => c.count > 0),
+            assets: assets.map(asset => {
+                const purchaseDate = new Date(asset.purchaseDate);
+                const daysOwned = Math.max(1, Math.floor((now - purchaseDate) / (1000 * 60 * 60 * 24)));
+                return {
+                    ...asset,
+                    daysOwned: daysOwned,
+                    dailyCost: asset.price / daysOwned
+                };
+            }).sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate))
+        };
+    }
+
     // 清空所有数据
     static clearAllData() {
         localStorage.removeItem(PHONES_KEY);
@@ -1559,6 +1711,7 @@ class DataManager {
         localStorage.removeItem(EXPENSES_KEY);
         localStorage.removeItem(SETTINGS_KEY);
         localStorage.removeItem(DATA_KEY);
+        localStorage.removeItem('moneyApp_assets');
         return { phones: [], installments: [], expenses: [], settings: {} };
     }
 
@@ -3776,6 +3929,7 @@ function showPage(pageName) {
     if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
     if (pageName === 'games') renderGamesPage();
+    if (pageName === 'assets') renderAssetsPage();
     
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(page => {
@@ -7143,6 +7297,324 @@ let currentGamePhoneId = null;
 
 // 今天的抽签结果（内存中存储，不保存到localStorage）
 let todayDrawResult = null;
+
+// ==================== 资产管理页面 ====================
+
+// 渲染资产管理页面
+function renderAssetsPage() {
+    // 更新日期
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+    const assetsDateEl = document.getElementById('assets-current-date');
+    if (assetsDateEl) {
+        assetsDateEl.textContent = dateStr;
+    }
+    
+    // 渲染资产统计
+    renderAssetsStats();
+    
+    // 渲染资产列表
+    renderAssetsList();
+    
+    // 渲染分类统计
+    renderAssetsCategory();
+}
+
+// 渲染资产统计
+function renderAssetsStats() {
+    const container = document.getElementById('assets-stats-content');
+    if (!container) return;
+    
+    const stats = DataManager.calculateAssetStats();
+    
+    if (stats.totalAssets === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 48px; margin-bottom: 16px;">💼</div>
+                <div style="font-size: 16px; margin-bottom: 8px;">暂无资产记录</div>
+                <div style="font-size: 13px; color: var(--text-secondary);">
+                    点击"添加资产"按钮记录您的物品
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
+                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">总资产价值</div>
+                <div style="font-size: 24px; font-weight: 700;">¥${stats.totalValue.toFixed(2)}</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
+                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">资产数量</div>
+                <div style="font-size: 24px; font-weight: 700;">${stats.totalAssets}件</div>
+            </div>
+        </div>
+        <div style="background: var(--bg-cream); border-radius: 12px; padding: 16px; margin-top: 12px; text-align: center;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">平均每日成本</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--primary-color);">¥${stats.totalDailyCost.toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                （基于持有天数计算）
+            </div>
+        </div>
+    `;
+}
+
+// 渲染资产列表
+function renderAssetsList() {
+    const container = document.getElementById('assets-list-content');
+    if (!container) return;
+    
+    const stats = DataManager.calculateAssetStats();
+    const categories = DataManager.getAssetCategories();
+    
+    if (stats.assets.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = stats.assets.map(asset => {
+        const category = categories.find(c => c.id === asset.category) || { name: '其他', icon: '📦' };
+        return `
+            <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--primary-color);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">${category.icon}</span>
+                        <div>
+                            <div style="font-weight: 600; font-size: 14px;">${asset.name}</div>
+                            <div style="font-size: 11px; color: var(--text-secondary);">${category.name}</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: 700; font-size: 16px; color: var(--primary-color);">¥${asset.price.toFixed(2)}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">¥${asset.dailyCost.toFixed(2)}/天</div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary);">
+                    <span>购买于 ${asset.purchaseDate} · 已持有${asset.daysOwned}天</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-sm btn-secondary" onclick="editAsset('${asset.id}')">编辑</button>
+                        <button class="btn btn-sm" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;" onclick="deleteAsset('${asset.id}')">删除</button>
+                    </div>
+                </div>
+                ${asset.note ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">${asset.note}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// 渲染分类统计
+function renderAssetsCategory() {
+    const container = document.getElementById('assets-category-content');
+    if (!container) return;
+    
+    const stats = DataManager.calculateAssetStats();
+    
+    if (stats.categoryStats.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无分类数据</div>';
+        return;
+    }
+    
+    container.innerHTML = stats.categoryStats.map(cat => `
+        <div style="display: flex; align-items: center; padding: 12px; background: var(--bg-secondary); border-radius: 10px; margin-bottom: 8px;">
+            <span style="font-size: 24px; margin-right: 12px;">${cat.icon}</span>
+            <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <span style="font-weight: 600;">${cat.name}</span>
+                    <span style="font-weight: 700; color: var(--primary-color);">¥${cat.totalValue.toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
+                    <span>${cat.count}件物品</span>
+                    <span>¥${cat.dailyCost.toFixed(2)}/天</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 打开添加资产弹窗
+function openAddAssetModal() {
+    const categories = DataManager.getAssetCategories();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    showModal(
+        '➕ 添加资产',
+        `
+            <div class="form-group">
+                <label class="form-label">物品名称</label>
+                <input type="text" id="asset-name" class="form-input" placeholder="例如：iPhone 15 Pro">
+            </div>
+            <div class="form-group">
+                <label class="form-label">购买价格 (元)</label>
+                <input type="number" id="asset-price" class="form-input" placeholder="输入价格" step="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">购买日期</label>
+                <input type="text" id="asset-date" class="form-input" value="${todayStr}" placeholder="例如：2026-02-28" maxlength="10">
+                <div class="form-hint">格式：YYYY-MM-DD</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">分类</label>
+                <select id="asset-category" class="form-input">
+                    <option value="">自动识别</option>
+                    ${categories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">备注 (可选)</label>
+                <input type="text" id="asset-note" class="form-input" placeholder="例如：工作用途、生日礼物等">
+            </div>
+        `,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: '添加',
+                class: 'btn-primary',
+                action: () => {
+                    const name = document.getElementById('asset-name').value.trim();
+                    const price = parseFloat(document.getElementById('asset-price').value);
+                    const date = document.getElementById('asset-date').value;
+                    const category = document.getElementById('asset-category').value;
+                    const note = document.getElementById('asset-note').value.trim();
+                    
+                    if (!name) {
+                        showToast('请输入物品名称', 'error');
+                        return;
+                    }
+                    if (!price || price <= 0) {
+                        showToast('请输入有效的价格', 'error');
+                        return;
+                    }
+                    if (!date) {
+                        showToast('请输入购买日期', 'error');
+                        return;
+                    }
+                    // 验证日期格式
+                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    if (!dateRegex.test(date)) {
+                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
+                        return;
+                    }
+                    
+                    DataManager.addAsset({
+                        name,
+                        price,
+                        purchaseDate: date,
+                        category,
+                        note
+                    });
+                    
+                    showToast('资产添加成功！');
+                    renderAssetsPage();
+                    closeModal();
+                }
+            }
+        ]
+    );
+}
+
+// 编辑资产
+function editAsset(assetId) {
+    const assets = DataManager.getAssets();
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+    
+    const categories = DataManager.getAssetCategories();
+    
+    showModal(
+        '✏️ 编辑资产',
+        `
+            <div class="form-group">
+                <label class="form-label">物品名称</label>
+                <input type="text" id="asset-name" class="form-input" value="${asset.name}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">购买价格 (元)</label>
+                <input type="number" id="asset-price" class="form-input" value="${asset.price.toFixed(2)}" step="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">购买日期</label>
+                <input type="text" id="asset-date" class="form-input" value="${asset.purchaseDate}" placeholder="例如：2026-02-28" maxlength="10">
+                <div class="form-hint">格式：YYYY-MM-DD</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">分类</label>
+                <select id="asset-category" class="form-input">
+                    <option value="">自动识别</option>
+                    ${categories.map(c => `<option value="${c.id}" ${asset.category === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">备注 (可选)</label>
+                <input type="text" id="asset-note" class="form-input" value="${asset.note || ''}">
+            </div>
+        `,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: '保存',
+                class: 'btn-primary',
+                action: () => {
+                    const name = document.getElementById('asset-name').value.trim();
+                    const price = parseFloat(document.getElementById('asset-price').value);
+                    const date = document.getElementById('asset-date').value;
+                    const category = document.getElementById('asset-category').value;
+                    const note = document.getElementById('asset-note').value.trim();
+                    
+                    if (!name) {
+                        showToast('请输入物品名称', 'error');
+                        return;
+                    }
+                    if (!price || price <= 0) {
+                        showToast('请输入有效的价格', 'error');
+                        return;
+                    }
+                    if (!date) {
+                        showToast('请输入购买日期', 'error');
+                        return;
+                    }
+                    // 验证日期格式
+                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    if (!dateRegex.test(date)) {
+                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
+                        return;
+                    }
+                    
+                    DataManager.editAsset(assetId, {
+                        name,
+                        price,
+                        purchaseDate: date,
+                        category,
+                        note
+                    });
+                    
+                    showToast('资产更新成功！');
+                    renderAssetsPage();
+                    closeModal();
+                }
+            }
+        ]
+    );
+}
+
+// 删除资产
+function deleteAsset(assetId) {
+    if (!confirm('确定要删除这个资产吗？')) return;
+    
+    DataManager.deleteAsset(assetId);
+    showToast('资产已删除');
+    renderAssetsPage();
+}
 
 // 渲染游戏管理页面
 function renderGamesPage() {

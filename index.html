@@ -320,6 +320,49 @@
             </div>
         </div>
 
+        <!-- 资产管理页面 -->
+        <div class="page" id="page-assets">
+            <div class="date-container">
+                <span class="current-date" id="assets-current-date"></span>
+            </div>
+
+            <!-- 资产统计卡片 -->
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">💼 资产概览</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="assets-stats-content">
+                    <!-- 资产统计内容将由JS生成 -->
+                </div>
+            </div>
+
+            <!-- 资产列表 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📋 资产清单</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="assets-list-content">
+                    <!-- 资产列表内容将由JS生成 -->
+                </div>
+                <div class="mt-4">
+                    <button class="btn btn-primary w-full" onclick="openAddAssetModal()">➕ 添加资产</button>
+                </div>
+            </div>
+
+            <!-- 分类统计 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📊 分类统计</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="assets-category-content">
+                    <!-- 分类统计内容将由JS生成 -->
+                </div>
+            </div>
+        </div>
+
         <!-- 设置页面 -->
         <div class="page" id="page-settings">
             <div class="date-container">
@@ -549,6 +592,10 @@
         <div class="tab-item" data-page="games" onclick="showPage('games')">
             <span class="tab-icon">🎮</span>
             <span class="tab-text">游戏管理</span>
+        </div>
+        <div class="tab-item" data-page="assets" onclick="showPage('assets')">
+            <span class="tab-icon">💼</span>
+            <span class="tab-text">资产管理</span>
         </div>
         <div class="tab-item" data-page="settings" onclick="showPage('settings')">
             <span class="tab-icon">⚙️</span>
