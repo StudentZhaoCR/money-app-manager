@@ -1474,7 +1474,7 @@ class DataManager {
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         
         let totalRemaining = 0;
-        let nearestDueDate = null;
+        let lastDueDate = null;  // 最后一期还款日期
         
         installments.forEach(inst => {
             if (!inst.paid && inst.dueDate >= todayStr) {
@@ -1483,26 +1483,26 @@ class DataManager {
                 if (remaining > 0) {
                     totalRemaining += remaining;
                     
-                    // 找到最近的还款日
-                    if (!nearestDueDate || inst.dueDate < nearestDueDate) {
-                        nearestDueDate = inst.dueDate;
+                    // 找到最后一期的还款日（最晚的日期）
+                    if (!lastDueDate || inst.dueDate > lastDueDate) {
+                        lastDueDate = inst.dueDate;
                     }
                 }
             }
         });
         
-        if (totalRemaining <= 0 || !nearestDueDate) {
+        if (totalRemaining <= 0 || !lastDueDate) {
             return {
                 dailyNeeded: 0,
                 totalRemaining: 0,
-                nearestDueDate: null,
+                lastDueDate: null,
                 daysUntilDue: 0,
                 hasRepayment: false
             };
         }
         
-        // 计算距离最近还款日的天数
-        const dueDate = new Date(nearestDueDate);
+        // 计算距离最后一期还款日的天数
+        const dueDate = new Date(lastDueDate);
         const today = new Date(todayStr);
         const daysUntilDue = Math.max(1, Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)));
         
@@ -1511,7 +1511,7 @@ class DataManager {
         return {
             dailyNeeded: dailyNeeded,
             totalRemaining: totalRemaining,
-            nearestDueDate: nearestDueDate,
+            lastDueDate: lastDueDate,
             daysUntilDue: daysUntilDue,
             hasRepayment: true
         };
@@ -9988,7 +9988,7 @@ function renderYearlyGoal() {
                                 <span style="font-size: 14px; font-weight: 700; color: #991b1b;">¥${dailyTarget.repaymentNeeded.toFixed(2)}/天</span>
                             </div>
                             <div style="font-size: 9px; color: #991b1b; margin-top: 2px;">
-                                剩余¥${dailyTarget.repaymentInfo.totalRemaining.toFixed(2)} · ${dailyTarget.repaymentInfo.daysUntilDue}天后到期
+                                剩余¥${dailyTarget.repaymentInfo.totalRemaining.toFixed(2)} · ${dailyTarget.repaymentInfo.daysUntilDue}天到期(${dailyTarget.repaymentInfo.lastDueDate})
                             </div>
                         </div>
                         ` : ''}
