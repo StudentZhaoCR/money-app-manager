@@ -1404,6 +1404,119 @@ class DataManager {
         };
     }
 
+    // 计算最近7天平均收益
+    static calculateLast7DaysAverage() {
+        const data = this.loadData();
+        const now = new Date();
+        let totalEarnings = 0;
+        let daysCount = 0;
+        
+        // 计算最近7天
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            
+            let dayEarnings = 0;
+            data.phones.forEach(phone => {
+                phone.apps.forEach(app => {
+                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
+                        dayEarnings += app.dailyEarnings[dateStr];
+                    }
+                });
+            });
+            
+            if (dayEarnings > 0) {
+                totalEarnings += dayEarnings;
+                daysCount++;
+            }
+        }
+        
+        return {
+            totalEarnings: totalEarnings,
+            daysCount: daysCount,
+            avgDailyEarnings: daysCount > 0 ? totalEarnings / daysCount : 0
+        };
+    }
+
+    // 计算历史最高日收益
+    static calculateMaxDailyEarnings() {
+        const data = this.loadData();
+        let maxEarnings = 0;
+        const dailyTotals = {};
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.dailyEarnings) {
+                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
+                        if (amount > 0) {
+                            dailyTotals[date] = (dailyTotals[date] || 0) + amount;
+                        }
+                    });
+                }
+            });
+        });
+        
+        Object.values(dailyTotals).forEach(amount => {
+            if (amount > maxEarnings) {
+                maxEarnings = amount;
+            }
+        });
+        
+        return maxEarnings;
+    }
+
+    // 计算还款所需日赚金额
+    static calculateRepaymentDailyNeeded() {
+        const data = this.loadData();
+        const installments = data.installments || [];
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        let totalRemaining = 0;
+        let nearestDueDate = null;
+        
+        installments.forEach(inst => {
+            if (!inst.paid && inst.dueDate >= todayStr) {
+                // 计算该还款计划的剩余金额
+                const remaining = inst.amount - (inst.paidAmount || 0);
+                if (remaining > 0) {
+                    totalRemaining += remaining;
+                    
+                    // 找到最近的还款日
+                    if (!nearestDueDate || inst.dueDate < nearestDueDate) {
+                        nearestDueDate = inst.dueDate;
+                    }
+                }
+            }
+        });
+        
+        if (totalRemaining <= 0 || !nearestDueDate) {
+            return {
+                dailyNeeded: 0,
+                totalRemaining: 0,
+                nearestDueDate: null,
+                daysUntilDue: 0,
+                hasRepayment: false
+            };
+        }
+        
+        // 计算距离最近还款日的天数
+        const dueDate = new Date(nearestDueDate);
+        const today = new Date(todayStr);
+        const daysUntilDue = Math.max(1, Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)));
+        
+        const dailyNeeded = totalRemaining / daysUntilDue;
+        
+        return {
+            dailyNeeded: dailyNeeded,
+            totalRemaining: totalRemaining,
+            nearestDueDate: nearestDueDate,
+            daysUntilDue: daysUntilDue,
+            hasRepayment: true
+        };
+    }
+
     // 计算目标完成情况（不限时目标）
     static calculateGoalProgress() {
         const goal = this.getYearlyGoal();
@@ -1458,10 +1571,13 @@ class DataManager {
         };
     }
 
-    // 计算每日目标（基于历史平均值）
+    // 计算每日目标（智能动态目标）
     static calculateDailyTarget() {
         const goal = this.getYearlyGoal();
         const avgStats = this.calculateAverageDailyEarnings();
+        const last7DaysStats = this.calculateLast7DaysAverage();
+        const maxDailyEarnings = this.calculateMaxDailyEarnings();
+        const repaymentStats = this.calculateRepaymentDailyNeeded();
         
         if (goal.amount <= 0) {
             return {
@@ -1471,14 +1587,71 @@ class DataManager {
             };
         }
         
-        // 每日目标 = 历史平均日收益（作为参考目标）
-        // 如果历史平均为0，使用一个默认值（比如10元）
-        const dailyTarget = avgStats.avgDailyEarnings > 0 ? avgStats.avgDailyEarnings : 10;
+        // 1. 计算还款所需日赚（如果有还款计划）
+        const repaymentNeeded = repaymentStats.hasRepayment ? repaymentStats.dailyNeeded : 0;
+        
+        // 2. 计算动态激励目标
+        let dynamicTarget = 0;
+        let dynamicFactor = 1.0;
+        let performanceLevel = 'normal';
+        
+        if (avgStats.avgDailyEarnings > 0) {
+            const historyAvg = avgStats.avgDailyEarnings;
+            const last7Avg = last7DaysStats.avgDailyEarnings;
+            
+            // 根据最近7天表现确定动态系数
+            if (last7Avg >= historyAvg * 1.2) {
+                // 表现优秀：保持高水平
+                dynamicFactor = 1.0;
+                dynamicTarget = last7Avg;
+                performanceLevel = 'excellent';
+            } else if (last7Avg >= historyAvg) {
+                // 表现正常：稍微激励
+                dynamicFactor = 1.1;
+                dynamicTarget = historyAvg * 1.1;
+                performanceLevel = 'normal';
+            } else if (last7Avg >= historyAvg * 0.5) {
+                // 表现下滑：鼓励恢复
+                dynamicFactor = 0.9;
+                dynamicTarget = historyAvg * 0.9;
+                performanceLevel = 'declining';
+            } else if (last7Avg > 0) {
+                // 表现很差：降低目标建立信心
+                dynamicFactor = 0.7;
+                dynamicTarget = historyAvg * 0.7;
+                performanceLevel = 'poor';
+            } else {
+                // 最近7天无数据，使用历史平均
+                dynamicFactor = 1.0;
+                dynamicTarget = historyAvg;
+                performanceLevel = 'no_recent_data';
+            }
+        } else {
+            // 无历史数据，使用默认值
+            dynamicTarget = 10;
+            performanceLevel = 'new_user';
+        }
+        
+        // 3. 综合计算最终目标
+        // 取还款所需和动态目标的较大值
+        let finalTarget = Math.max(repaymentNeeded, dynamicTarget);
+        
+        // 4. 设置保底和上限
+        const minTarget = 5;  // 最低保底5元
+        const maxTarget = Math.max(maxDailyEarnings * 1.2, repaymentNeeded * 1.5, 100);  // 上限
+        
+        finalTarget = Math.max(minTarget, Math.min(maxTarget, finalTarget));
         
         return {
-            dailyTarget: dailyTarget,
+            dailyTarget: finalTarget,
             avgDailyEarnings: avgStats.avgDailyEarnings,
+            last7DaysAvg: last7DaysStats.avgDailyEarnings,
+            maxDailyEarnings: maxDailyEarnings,
             daysWithData: avgStats.daysCount,
+            dynamicFactor: dynamicFactor,
+            performanceLevel: performanceLevel,
+            repaymentNeeded: repaymentNeeded,
+            repaymentInfo: repaymentStats,
             isValid: true
         };
     }
@@ -7312,6 +7485,398 @@ function restoreFromCode() {
     ]);
 }
 
+// 显示系统介绍
+function showSystemIntroduction() {
+    const sections = [
+        {
+            id: 'overview',
+            title: '📋 系统概述',
+            icon: '📋',
+            content: `
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">系统定位</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        本系统是一个综合性的个人财务管理工具，专门设计用于管理通过赚钱软件获得的收入，
+                        同时整合个人真实财产（工资、支出等），实现资金的统一管理和分析。
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">核心设计理念</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="margin-bottom: 4px;">• <b>分离管理</b>：软件收入与个人财产分开记录</div>
+                        <div style="margin-bottom: 4px;">• <b>灵活流转</b>：支持软件收入提现到个人钱包</div>
+                        <div style="margin-bottom: 4px;">• <b>智能分析</b>：自动计算收益、目标、缺口等</div>
+                        <div>• <b>动态目标</b>：根据历史表现和还款计划智能调整每日目标</div>
+                    </div>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <div>• <b>仪表盘</b>：底部导航栏第1个图标 📊</div>
+                        <div>• <b>手机管理</b>：底部导航栏第2个图标 📱</div>
+                        <div>• <b>资产管理</b>：底部导航栏第4个图标 💼</div>
+                        <div>• <b>游戏管理</b>：底部导航栏第5个图标 🎮</div>
+                        <div>• <b>设置</b>：底部导航栏第6个图标 ⚙️</div>
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'phones',
+            title: '📱 手机管理逻辑',
+            icon: '📱',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>手机管理页面</b>：底部导航栏第2个图标 📱<br>
+                        或点击仪表盘中的"管理手机"按钮
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">数据结构</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        手机 → 软件 → 收益记录<br>
+                        每台手机可以安装多个赚钱软件，每个软件独立记录余额和收益历史。
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">收益计算逻辑</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <b>总赚取</b> = 已提现金额 + 历史提现 + 当前余额
+                        </div>
+                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px;">
+                            <b>每日收益</b> = 当日余额增加额（自动计算）
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">快速操作</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        • 点击手机名称展开/收起软件列表<br>
+                        • 点击"+"按钮快速添加软件<br>
+                        • 点击软件余额可直接编辑<br>
+                        • 达标日历显示每日目标完成情况
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'daily-target',
+            title: '🎯 每日目标逻辑',
+            icon: '🎯',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>每日目标追踪</b>：仪表盘页面 - 收益目标卡片下方<br>
+                        或点击"查看详情"按钮查看完整记录
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">目标计算公式</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                            <b>每日目标</b> = max(还款所需, 动态激励目标, 5元保底)
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">动态系数规则</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                            <tr style="background: var(--bg-cream);">
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">🌟 优秀</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">近7天 ≥ 历史平均×1.2</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">保持高水平</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">💪 正常</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">历史平均 ≤ 近7天 < 历史平均×1.2</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">激励提升10%</td>
+                            </tr>
+                            <tr style="background: var(--bg-cream);">
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">📈 下滑</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">历史平均×0.5 ≤ 近7天 < 历史平均</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">鼓励恢复90%</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">💪 加油</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">近7天 < 历史平均×0.5</td>
+                                <td style="padding: 6px; border: 1px solid var(--border-color);">建立信心70%</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">缺口抵扣机制</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        超额的收益会自动累积，用于抵扣未来的缺口。<br>
+                        例如：第1天超额5元，第2天缺口3元，则抵扣后实际缺口为0。
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'goal-distribution',
+            title: '📊 软件目标分配逻辑',
+            icon: '📊',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>收益目标弹窗</b>：仪表盘页面 - 点击"🎯 收益目标"卡片<br>
+                        或点击"📊 详情"按钮查看各软件目标分配
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">排名机制</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        软件按<b>今年实际收益</b>从低到高排名（收益低的排名靠前）
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">表现系数</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: rgba(34, 197, 94, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <b>后33%（收益低）</b>：系数 0.5 ~ 0.8 → 降低目标
+                        </div>
+                        <div style="background: rgba(59, 130, 246, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <b>中间34%</b>：系数 0.9 ~ 1.1 → 接近基础目标
+                        </div>
+                        <div style="background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 6px;">
+                            <b>前33%（收益高）</b>：系数 1.2 ~ 1.5 → 提高目标
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">日目标计算</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px;">
+                            软件日目标 = (总目标 × 软件表现系数) / 软件数量 / 估算天数
+                        </div>
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'personal-finance',
+            title: '💎 个人财务逻辑',
+            icon: '💎',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>个人财务概览</b>：仪表盘页面 - 第2个卡片 💎<br>
+                        包含：记收入、记支出、提现功能按钮
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">资金池设计</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="margin-bottom: 8px;"><b>软件资金池</b>：所有赚钱软件的余额总和</div>
+                        <div style="margin-bottom: 8px;"><b>个人资金池</b>：工资、奖金等真实收入</div>
+                        <div><b>固定资产</b>：已购买的资产价值</div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">资金流转</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: rgba(34, 197, 94, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <b>提现</b>：软件余额 → 个人钱包
+                        </div>
+                        <div style="background: rgba(239, 68, 68, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <b>支出</b>：从个人钱包扣除
+                        </div>
+                        <div style="background: rgba(59, 130, 246, 0.1); padding: 8px; border-radius: 6px;">
+                            <b>收入</b>：工资等进入个人钱包
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">总资产计算</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px;">
+                            <b>总资产</b> = 个人钱包 + 软件余额 + 资产价值
+                        </div>
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'assets',
+            title: '💼 资产管理逻辑',
+            icon: '💼',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>资产管理页面</b>：底部导航栏第4个图标 💼<br>
+                        包含：资产概览、资产清单、分类统计
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">自动分类机制</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        系统根据物品名称中的关键词自动识别分类：<br>
+                        • 输入"iPhone" → 电子产品<br>
+                        • 输入"猫粮" → 宠物用品<br>
+                        • 输入"跑步机" → 运动户外<br>
+                        支持100+个关键词识别
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">每日成本计算</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px;">
+                            <b>每日成本</b> = 购买价格 / 持有天数<br>
+                            持有天数 = 今天 - 购买日期
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">分类统计</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        自动按分类汇总：物品数量、总价值、每日成本
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'games',
+            title: '🎮 游戏管理逻辑',
+            icon: '🎮',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>游戏管理页面</b>：底部导航栏第5个图标 🎮<br>
+                        包含：游戏抽签、游戏列表、抽签历史
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">智能抽签算法</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        综合考虑以下因素计算权重：<br>
+                        • <b>进度系数</b>：快完成的游戏权重更高<br>
+                        • <b>冷落系数</b>：长时间未抽到的权重增加<br>
+                        • <b>连续系数</b>：昨天玩过的降低权重<br>
+                        • <b>新游戏优先</b>：daysPlayed=0的游戏10倍权重
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">历史记录规则</div>
+                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+                        • 只有标记完成的记录才保存<br>
+                        • 未标记的记录第二天自动清除<br>
+                        • 7天完成的记录1天后自动删除
+                    </div>
+                </div>
+            `
+        },
+        {
+            id: 'data-flow',
+            title: '🔄 数据流转图',
+            icon: '🔄',
+            content: `
+                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
+                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
+                        <b>系统介绍</b>：设置页面 - 点击"📚 查看系统介绍"按钮<br>
+                        本页面展示了系统各功能的逻辑和位置
+                    </div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="font-weight: 600; margin-bottom: 12px; color: var(--primary-color);">完整数据流程</div>
+                    <div style="font-size: 12px; line-height: 2; color: var(--text-secondary);">
+                        <div style="background: rgba(102, 126, 234, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                            <b>1. 记录收益</b><br>
+                            手机软件 → 编辑余额 → 系统自动计算日收益
+                        </div>
+                        <div style="background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                            <b>2. 计算目标</b><br>
+                            历史数据 + 还款计划 → 智能每日目标
+                        </div>
+                        <div style="background: rgba(34, 197, 94, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+                            <b>3. 资金流转</b><br>
+                            软件提现 → 个人钱包 → 记录支出
+                        </div>
+                        <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px;">
+                            <b>4. 统计分析</b><br>
+                            所有数据汇总 → 仪表盘展示
+                        </div>
+                    </div>
+                </div>
+            `
+        }
+    ];
+    
+    let currentSection = 0;
+    
+    function renderContent() {
+        const section = sections[currentSection];
+        return `
+            <div style="max-height: 70vh; overflow-y: auto; padding-right: 8px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--border-color);">
+                    <span style="font-size: 32px;">${section.icon}</span>
+                    <div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">${section.title}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">${currentSection + 1} / ${sections.length}</div>
+                    </div>
+                </div>
+                <div style="font-size: 14px; line-height: 1.8;">
+                    ${section.content}
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="changeSection(-1)" ${currentSection === 0 ? 'disabled' : ''}>← 上一页</button>
+                    <button class="btn btn-secondary" style="flex: 1;" onclick="changeSection(1)" ${currentSection === sections.length - 1 ? 'disabled' : ''}>下一页 →</button>
+                </div>
+                <div style="display: flex; justify-content: center; gap: 6px; margin-top: 12px;">
+                    ${sections.map((_, idx) => `
+                        <div style="width: 8px; height: 8px; border-radius: 50%; background: ${idx === currentSection ? 'var(--primary-color)' : 'var(--border-color)'}; cursor: pointer;" onclick="goToSection(${idx})"></div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    window.changeSection = function(delta) {
+        currentSection += delta;
+        if (currentSection < 0) currentSection = 0;
+        if (currentSection >= sections.length) currentSection = sections.length - 1;
+        updateModalContent();
+    };
+    
+    window.goToSection = function(index) {
+        currentSection = index;
+        updateModalContent();
+    };
+    
+    function updateModalContent() {
+        const modalBody = document.querySelector('#modal .modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = renderContent();
+        }
+    }
+    
+    showModal(
+        '📚 系统功能介绍',
+        renderContent(),
+        [
+            {
+                text: '关闭',
+                class: 'btn-secondary',
+                action: () => {
+                    delete window.changeSection;
+                    delete window.goToSection;
+                    closeModal();
+                }
+            }
+        ]
+    );
+}
+
 // 清空所有数据
 function clearAllData() {
     if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
@@ -9385,103 +9950,103 @@ function renderYearlyGoal() {
                 const todayRecord = DataManager.getDailyGap(today);
                 
                 return `
-                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 2px solid #fbbf24;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <span style="font-size: 14px; font-weight: 600; color: #92400e;">📅 每日目标追踪</span>
-                            <button class="btn btn-sm" onclick="showDailyGapDetailModal()" style="font-size: 11px; padding: 4px 12px; background: rgba(255,255,255,0.5);">查看详情</button>
+                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 2px solid #fbbf24;">
+                        <!-- 标题行 -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span style="font-size: 13px; font-weight: 600; color: #92400e;">📅 每日目标追踪</span>
+                            <button class="btn btn-sm" onclick="showDailyGapDetailModal()" style="font-size: 10px; padding: 3px 8px; background: rgba(255,255,255,0.5);">详情</button>
                         </div>
                         
-                        <div style="background: rgba(255,255,255,0.5); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="font-size: 12px; color: #78350f;">历史平均日收益</span>
-                                <span style="font-size: 20px; font-weight: 700; color: #b45309;">¥${dailyTarget.avgDailyEarnings.toFixed(2)}</span>
+                        <!-- 今日目标金额 -->
+                        <div style="background: rgba(255,255,255,0.5); border-radius: 10px; padding: 10px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-size: 11px; color: #78350f;">今日目标</span>
+                                <span style="font-size: 20px; font-weight: 700; color: #b45309;">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
                             </div>
-                            <div style="font-size: 11px; color: #92400e;">
-                                基于${dailyTarget.daysWithData}天数据 · 目标: ¥${goalProgress.targetAmount.toFixed(0)}
+                            <div style="font-size: 10px; color: #92400e;">
+                                ${dailyTarget.performanceLevel === 'excellent' ? '🌟 表现优秀' : 
+                                  dailyTarget.performanceLevel === 'normal' ? '💪 正常发挥' :
+                                  dailyTarget.performanceLevel === 'declining' ? '📈 鼓励恢复' :
+                                  dailyTarget.performanceLevel === 'poor' ? '💪 加油努力' :
+                                  dailyTarget.performanceLevel === 'new_user' ? '🎯 新手目标' : '基于历史数据'}
                             </div>
                         </div>
                         
-                        ${goalProgress.estimatedDaysNeeded > 0 ? `
-                        <div style="background: rgba(255,255,255,0.5); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="font-size: 12px; color: #78350f;">预计完成天数</span>
-                                <span style="font-size: 20px; font-weight: 700; color: #b45309;">${goalProgress.estimatedDaysNeeded}天</span>
+                        <!-- 历史数据小字 -->
+                        ${dailyTarget.avgDailyEarnings > 0 ? `
+                        <div style="margin-bottom: 10px; font-size: 10px; color: #92400e; text-align: center;">
+                            历史平均: ¥${dailyTarget.avgDailyEarnings.toFixed(2)}
+                            ${dailyTarget.last7DaysAvg > 0 ? ` | 近7天: ¥${dailyTarget.last7DaysAvg.toFixed(2)}` : ''}
+                        </div>
+                        ` : ''}
+                        
+                        <!-- 还款需求（紧凑版） -->
+                        ${dailyTarget.repaymentNeeded > 0 ? `
+                        <div style="background: rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 8px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 10px; color: #991b1b;">💰 还款所需</span>
+                                <span style="font-size: 14px; font-weight: 700; color: #991b1b;">¥${dailyTarget.repaymentNeeded.toFixed(2)}/天</span>
                             </div>
-                            <div style="font-size: 11px; color: #92400e;">
-                                还需¥${goalProgress.remainingAmount.toFixed(2)} · 已完成${goalProgress.progressPercent.toFixed(1)}%
+                            <div style="font-size: 9px; color: #991b1b; margin-top: 2px;">
+                                剩余¥${dailyTarget.repaymentInfo.totalRemaining.toFixed(2)} · ${dailyTarget.repaymentInfo.daysUntilDue}天后到期
                             </div>
                         </div>
                         ` : ''}
                         
+                        <!-- 统计信息（紧凑网格布局） -->
                         ${gapStats.totalDays > 0 ? `
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;">
-                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
-                                <div style="font-size: 16px; font-weight: 700; color: #22c55e;">${gapStats.achievedDays}</div>
-                                <div style="font-size: 10px; color: #92400e;">达标天数</div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;">
+                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px; text-align: center;">
+                                <div style="font-size: 14px; font-weight: 700; color: #22c55e;">${gapStats.achievedDays}</div>
+                                <div style="font-size: 9px; color: #92400e;">达标</div>
                             </div>
-                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
-                                <div style="font-size: 16px; font-weight: 700; color: #ef4444;">${gapStats.missedDays}</div>
-                                <div style="font-size: 10px; color: #92400e;">未达标天数</div>
+                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px; text-align: center;">
+                                <div style="font-size: 14px; font-weight: 700; color: #ef4444;">${gapStats.missedDays}</div>
+                                <div style="font-size: 9px; color: #92400e;">未达标</div>
                             </div>
                         </div>
                         
+                        <!-- 超额/缺口信息（单行显示） -->
                         ${gapStats.totalSurplus > 0 ? `
-                        <div style="background: rgba(255,255,255,0.5); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="font-size: 11px; color: #92400e;">累计超额</span>
-                                <span style="font-size: 14px; font-weight: 600; color: #22c55e;">¥${gapStats.totalSurplus.toFixed(2)}</span>
-                            </div>
-                            ${gapStats.totalGap > 0 ? `
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="font-size: 11px; color: #92400e;">抵扣缺口</span>
-                                <span style="font-size: 14px; font-weight: 600; color: #b45309;">-¥${(gapStats.totalSurplus - gapStats.remainingSurplus).toFixed(2)}</span>
-                            </div>
-                            ` : ''}
-                            ${gapStats.remainingSurplus > 0 ? `
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 11px; color: #92400e;">剩余超额</span>
-                                <span style="font-size: 14px; font-weight: 600; color: #22c55e;">¥${gapStats.remainingSurplus.toFixed(2)}</span>
-                            </div>
-                            ` : ''}
+                        <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 10px; color: #92400e; display: flex; justify-content: space-between;">
+                            <span>超额: <b style="color: #22c55e;">¥${gapStats.totalSurplus.toFixed(2)}</b></span>
+                            ${gapStats.remainingSurplus > 0 ? `<span>剩余: <b style="color: #22c55e;">¥${gapStats.remainingSurplus.toFixed(2)}</b></span>` : ''}
                         </div>
                         ` : ''}
                         
                         ${gapStats.netGap > 0 ? `
-                        <div style="background: rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #ef4444;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 11px; color: #991b1b;">抵扣后缺口</span>
-                                <span style="font-size: 16px; font-weight: 700; color: #991b1b;">¥${gapStats.netGap.toFixed(2)}</span>
-                            </div>
+                        <div style="background: rgba(239, 68, 68, 0.2); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; border-left: 2px solid #ef4444; font-size: 10px; color: #991b1b; display: flex; justify-content: space-between;">
+                            <span>缺口</span>
+                            <b>¥${gapStats.netGap.toFixed(2)}</b>
                         </div>
-                        ` : gapStats.remainingSurplus > 0 ? `
-                        <div style="background: rgba(34, 197, 94, 0.2); border-radius: 8px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #22c55e;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 11px; color: #166534;">超额结余</span>
-                                <span style="font-size: 16px; font-weight: 700; color: #166534;">¥${gapStats.remainingSurplus.toFixed(2)}</span>
-                            </div>
+                        ` : gapStats.remainingSurplus > 0 && gapStats.totalSurplus === 0 ? `
+                        <div style="background: rgba(34, 197, 94, 0.2); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; border-left: 2px solid #22c55e; font-size: 10px; color: #166534; display: flex; justify-content: space-between;">
+                            <span>结余</span>
+                            <b>¥${gapStats.remainingSurplus.toFixed(2)}</b>
                         </div>
                         ` : ''}
                         ` : ''}
                         
+                        <!-- 今日状态 -->
                         ${todayRecord ? `
-                        <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; border-radius: 8px; padding: 10px; border-left: 3px solid ${todayRecord.isAchieved ? '#22c55e' : '#ef4444'};">
+                        <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; border-radius: 6px; padding: 8px; border-left: 2px solid ${todayRecord.isAchieved ? '#22c55e' : '#ef4444'};">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 12px; font-weight: 600; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
-                                    ${todayRecord.isAchieved ? '✅ 今日已达标' : '❌ 今日未达标'}
+                                <span style="font-size: 11px; font-weight: 600; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
+                                    ${todayRecord.isAchieved ? '✅ 已达标' : '❌ 未达标'}
                                 </span>
-                                <span style="font-size: 11px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
-                                    ${todayRecord.isAchieved ? `超额¥${(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `缺口¥${todayRecord.gap.toFixed(2)}`}
+                                <span style="font-size: 10px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
+                                    ${todayRecord.isAchieved ? `+¥${(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `-¥${todayRecord.gap.toFixed(2)}`}
                                 </span>
                             </div>
-                            <div style="font-size: 11px; color: #78350f; margin-top: 4px;">
-                                目标: ¥${todayRecord.targetAmount.toFixed(2)} · 实际: ¥${todayRecord.earnedAmount.toFixed(2)}
+                            <div style="font-size: 9px; color: #78350f; margin-top: 2px;">
+                                目标¥${todayRecord.targetAmount.toFixed(2)} · 实际¥${todayRecord.earnedAmount.toFixed(2)}
                             </div>
                         </div>
                         ` : `
-                        <div style="background: rgba(255,255,255,0.3); border-radius: 8px; padding: 10px; text-align: center;">
-                            <span style="font-size: 12px; color: #92400e;">今日尚未记录</span>
-                            <div style="font-size: 10px; color: #92400e; margin-top: 4px;">
-                                请修改软件余额来记录今日收益
+                        <div style="background: rgba(255,255,255,0.3); border-radius: 6px; padding: 8px; text-align: center;">
+                            <span style="font-size: 11px; color: #92400e;">今日尚未记录</span>
+                            <div style="font-size: 9px; color: #92400e; margin-top: 2px;">
+                                修改软件余额记录收益
                             </div>
                         </div>
                         `}
@@ -9527,45 +10092,49 @@ function renderYearlyGoal() {
             const dailyStats = DataManager.calculateAppAchievementStats(app.appId);
             
             html += `
-                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; cursor: pointer;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 11px; background: ${rankColor}15; color: ${rankColor}; padding: 2px 8px; border-radius: 12px; font-weight: 600;">${index + 1}</span>
-                            <span style="font-weight: 600; font-size: 14px;">${app.appName}</span>
-                            <span style="font-size: 11px; color: var(--text-secondary);">(${app.phoneName})</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span style="font-size: 10px; padding: 2px 6px; border-radius: 8px; background: ${rankColor}20; color: ${rankColor};">
-                                ${rankBadge} · 系数${app.performanceFactor?.toFixed(2) || '1.00'}
-                            </span>
-                            <span style="font-size: 12px; padding: 2px 8px; border-radius: 10px; background: ${isCompleted ? '#dcfce7' : hasAllocation ? '#fce7f3' : '#fee2e2'}; color: ${isCompleted ? '#166534' : hasAllocation ? '#be185d' : '#991b1b'};">
-                                ${hasAllocation ? '受助' : isCompleted ? '达标' : '进行中'}
-                            </span>
-                        </div>
+                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px; margin-bottom: 8px; border-left: 3px solid ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; cursor: pointer;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')">
+                    <!-- 第一行：排名 + 软件名 + 手机名 -->
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <span style="font-size: 10px; background: ${rankColor}15; color: ${rankColor}; padding: 1px 6px; border-radius: 10px; font-weight: 600; flex-shrink: 0;">${index + 1}</span>
+                        <span style="font-weight: 600; font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${app.appName}</span>
+                        <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0;">(${app.phoneName})</span>
                     </div>
                     
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: var(--text-secondary);">
+                    <!-- 第二行：状态标签（换行显示） -->
+                    <div style="display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap;">
+                        <span style="font-size: 9px; padding: 1px 5px; border-radius: 6px; background: ${rankColor}20; color: ${rankColor};">
+                            ${rankBadge}
+                        </span>
+                        <span style="font-size: 9px; padding: 1px 5px; border-radius: 6px; background: ${isCompleted ? '#dcfce7' : hasAllocation ? '#fce7f3' : '#fee2e2'}; color: ${isCompleted ? '#166534' : hasAllocation ? '#be185d' : '#991b1b'};">
+                            ${hasAllocation ? '受助' : isCompleted ? '达标' : '进行中'}
+                        </span>
+                    </div>
+                    
+                    <!-- 第三行：目标金额 -->
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary);">
                         <span>年目标: ¥${app.adjustedTarget.toFixed(2)}</span>
                         <span>已赚: ¥${app.totalEarned.toFixed(2)}</span>
                     </div>
                     
-                    <div style="background: var(--border-color); border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 8px;">
-                        <div style="background: ${isCompleted ? '#38ef7d' : rankColor}; height: 100%; width: ${appProgress}%; transition: width 0.3s ease; border-radius: 6px;"></div>
+                    <!-- 进度条 -->
+                    <div style="background: var(--border-color); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 6px;">
+                        <div style="background: ${isCompleted ? '#38ef7d' : rankColor}; height: 100%; width: ${appProgress}%; transition: width 0.3s ease; border-radius: 4px;"></div>
                     </div>
                     
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
-                        <span>剩余: ¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</span>
-                        <span>进度: ${appProgress}%</span>
+                    <!-- 第四行：剩余和进度 -->
+                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">
+                        <span>剩: ¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</span>
+                        <span>${appProgress}%</span>
                     </div>
                     
-                    <!-- 每日目标信息 -->
-                    <div style="background: ${dailyStats.todayAchieved ? '#f0fdf4' : '#fef3c7'}; border-radius: 6px; padding: 8px; margin-top: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                    <!-- 每日目标信息（紧凑版） -->
+                    <div style="background: ${dailyStats.todayAchieved ? '#f0fdf4' : '#fef3c7'}; border-radius: 5px; padding: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px;">
                             <span style="color: var(--text-secondary);">
-                                📅 日目标: <strong style="color: var(--text-primary);">¥${dailyTarget.toFixed(2)}</strong>
+                                日目标: <strong style="color: var(--text-primary);">¥${dailyTarget.toFixed(2)}</strong>
                             </span>
-                            <span style="color: ${dailyStats.todayAchieved ? '#166534' : '#92400e'}; font-weight: 500;">
-                                ${dailyStats.todayAchieved ? '✅ 今日已达标' : '⏳ 今日未达标'} · 累计${dailyStats.achievedDays}天
+                            <span style="color: ${dailyStats.todayAchieved ? '#166534' : '#92400e'}; font-size: 9px;">
+                                ${dailyStats.todayAchieved ? '✅ 已达标' : '⏳ 未达标'} · ${dailyStats.achievedDays}天
                             </span>
                         </div>
                     </div>
