@@ -113,20 +113,16 @@ function showModal(title, body, buttons, enableScroll = false) {
 function closeModal() {
     const modal = document.getElementById('modal');
     
-    // 移除show类触发淡出动画
+    // 立即隐藏，不使用动画
+    modal.style.display = 'none';
     modal.classList.remove('show');
+    modal.style.zIndex = ''; // 恢复默认z-index
     
-    // 动画结束后完全隐藏
-    setTimeout(() => {
-        modal.style.display = 'none';
-        modal.style.zIndex = ''; // 恢复默认z-index
-        
-        // 清空按钮容器，移除事件监听器
-        document.getElementById('modal-buttons').innerHTML = '';
-        
-        // 重置模态框状态
-        modalIsShowing = false;
-    }, 300); // 与CSS过渡时间匹配
+    // 清空按钮容器，移除事件监听器
+    document.getElementById('modal-buttons').innerHTML = '';
+    
+    // 重置模态框状态
+    modalIsShowing = false;
 }
 
 // 显示提示消息
@@ -4044,10 +4040,8 @@ function openPhoneDrawModal() {
 // 关闭手机抽签弹窗
 function closePhoneDrawModal() {
     const modal = document.getElementById('phone-draw-modal');
+    modal.style.display = 'none';
     modal.classList.remove('show');
-    setTimeout(() => {
-        modal.style.display = 'none';
-    }, 300);
 }
 
 // 显示手机抽签历史
@@ -8450,12 +8444,8 @@ function openGameResultPopup(result) {
 // 关闭抽签结果弹窗
 function closeGameResultPopup() {
     const popup = document.getElementById('game-result-popup');
+    popup.style.display = 'none';
     popup.classList.remove('show');
-    
-    // 等待动画结束后隐藏
-    setTimeout(() => {
-        popup.style.display = 'none';
-    }, 300);
 }
 
 // 点击弹窗背景关闭
@@ -9981,14 +9971,14 @@ function renderYearlyGoal() {
                         ` : ''}
                         
                         <!-- 还款需求（紧凑版） -->
-                        ${dailyTarget.repaymentNeeded > 0 ? `
+                        ${dailyTarget.repaymentNeeded > 0 && dailyTarget.repaymentInfo ? `
                         <div style="background: rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 8px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <span style="font-size: 10px; color: #991b1b;">💰 还款所需</span>
                                 <span style="font-size: 14px; font-weight: 700; color: #991b1b;">¥${dailyTarget.repaymentNeeded.toFixed(2)}/天</span>
                             </div>
                             <div style="font-size: 9px; color: #991b1b; margin-top: 2px;">
-                                剩余¥${dailyTarget.repaymentInfo.totalRemaining.toFixed(2)} · ${dailyTarget.repaymentInfo.daysUntilDue}天到期(${dailyTarget.repaymentInfo.lastDueDate})
+                                剩余¥${(dailyTarget.repaymentInfo.totalRemaining || 0).toFixed(2)} · ${dailyTarget.repaymentInfo.daysUntilDue || 0}天到期${dailyTarget.repaymentInfo.lastDueDate ? '(' + dailyTarget.repaymentInfo.lastDueDate + ')' : ''}
                             </div>
                         </div>
                         ` : ''}
@@ -10368,8 +10358,8 @@ function viewYearlyGoalDetail() {
                         <div style="opacity: 0.8;">剩余</div>
                     </div>
                     <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
-                        <div style="font-weight: bold; font-size: 14px;">¥${distribution.avgMonthlyNeeded.toFixed(2)}</div>
-                        <div style="opacity: 0.8;">月均目标</div>
+                        <div style="font-weight: bold; font-size: 14px;">¥${(distribution.avgDailyEarnings ? distribution.avgDailyEarnings * 30 : 0).toFixed(2)}</div>
+                        <div style="opacity: 0.8;">月均收益</div>
                     </div>
                 </div>
             </div>
@@ -10441,13 +10431,10 @@ function openDailyGoalModal(appId, phoneId) {
 // 关闭每日目标弹窗
 function closeDailyGoalModal() {
     const modal = document.getElementById('daily-goal-modal');
+    modal.style.display = 'none';
     modal.classList.remove('show');
-    
-    setTimeout(() => {
-        modal.style.display = 'none';
-        currentDailyGoalAppId = null;
-        currentDailyGoalPhoneId = null;
-    }, 300);
+    currentDailyGoalAppId = null;
+    currentDailyGoalPhoneId = null;
 }
 
 // 渲染每日目标内容（简化版 - 仅日历）
