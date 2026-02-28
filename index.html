@@ -9,10 +9,23 @@
     <meta name="apple-mobile-web-app-title" content="赚钱助手">
     <title>赚钱软件管理系统</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192x192.png">
-    <!-- Chart.js for data visualization -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js for data visualization - 异步加载 -->
+    <script>
+        // 异步加载 Chart.js，避免阻塞页面渲染
+        window.loadChartJs = function() {
+            return new Promise((resolve, reject) => {
+                if (window.Chart) {
+                    resolve(window.Chart);
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                script.onload = () => resolve(window.Chart);
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        };
+    </script>
 </head>
 <body>
     <!-- 导航栏 -->
@@ -86,14 +99,14 @@
                 </div>
             </div>
 
-            <!-- 年度目标面板 -->
+            <!-- 收益目标面板 -->
             <div class="card mt-4" id="yearly-goal-card">
                 <div class="section-header">
-                    <div class="section-title">🎯 年度收益目标</div>
+                    <div class="section-title">🎯 收益目标</div>
                     <div class="section-divider"></div>
                 </div>
                 <div id="yearly-goal-content">
-                    <!-- 年度目标内容将由JS生成 -->
+                    <!-- 目标内容将由JS生成 -->
                 </div>
             </div>
 
@@ -149,22 +162,6 @@
                 </div>
                 <div id="app-earnings-ranking-content">
                     <!-- 排行内容将由JS生成 -->
-                </div>
-            </div>
-
-            <!-- 提现趋势图表 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📈 提现趋势</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <canvas id="incomeChart" style="max-height: 300px;"></canvas>
-                </div>
-                <div class="flex gap-4 justify-center">
-                    <button class="btn btn-secondary" onclick="updateChartPeriod('week')">近7天</button>
-                    <button class="btn btn-secondary" onclick="updateChartPeriod('month')">近30天</button>
-                    <button class="btn btn-secondary" onclick="updateChartPeriod('year')">全年</button>
                 </div>
             </div>
 
@@ -294,7 +291,6 @@
                 <div class="form-group">
                     <label class="form-label">当前手机</label>
                     <select id="game-phone-select" class="form-input" onchange="onGamePhoneChange()">
-                        <option value="">全部手机</option>
                     </select>
                 </div>
             </div>
@@ -406,23 +402,15 @@
                 </div>
             </div>
 
-                <!-- 年度目标设置 -->
+                <!-- 收益目标设置 -->
                 <div class="settings-card card mb-4">
                     <div class="settings-card-header">
                         <span class="settings-icon">🎯</span>
-                        <span class="settings-title">年度收益目标</span>
+                        <span class="settings-title">收益目标</span>
                     </div>
                     <div class="form-group mb-2">
-                        <label class="form-label" style="font-size: 12px;">目标年份</label>
-                        <select id="yearly-goal-year" class="form-input" style="font-size: 13px;">
-                            <option value="2025">2025年</option>
-                            <option value="2026">2026年</option>
-                            <option value="2027">2027年</option>
-                        </select>
-                    </div>
-                    <div class="form-group mb-2">
-                        <label class="form-label" style="font-size: 12px;">年度目标金额 (元)</label>
-                        <input type="number" id="yearly-goal-amount" class="form-input" placeholder="输入年度目标金额" step="0.01" style="font-size: 13px;">
+                        <label class="form-label" style="font-size: 12px;">目标金额 (元)</label>
+                        <input type="number" id="yearly-goal-amount" class="form-input" placeholder="输入目标金额（不限时）" step="0.01" style="font-size: 13px;">
                     </div>
                     <div class="form-group mb-3">
                         <label class="form-label" style="font-size: 12px; display: flex; align-items: center; gap: 8px;">
