@@ -84,6 +84,9 @@ function showModal(title, body, buttons, enableScroll = false) {
     // 设置模态框显示状态
     modalIsShowing = true;
     
+    // 设置更高的z-index，确保在其他弹窗之上
+    modal.style.zIndex = '2000';
+    
     // 先设置为flex，然后添加show类触发动画
     modal.style.display = 'flex';
     // 使用setTimeout确保DOM更新后再添加类
@@ -116,6 +119,7 @@ function closeModal() {
     // 动画结束后完全隐藏
     setTimeout(() => {
         modal.style.display = 'none';
+        modal.style.zIndex = ''; // 恢复默认z-index
         
         // 清空按钮容器，移除事件监听器
         document.getElementById('modal-buttons').innerHTML = '';
@@ -1300,6 +1304,8 @@ class DataManager {
                 achievedDays: 0,
                 missedDays: 0,
                 totalGap: 0,
+                totalSurplus: 0,
+                netGap: 0,
                 totalTarget: 0,
                 totalEarned: 0,
                 achievementRate: 0,
@@ -1307,21 +1313,65 @@ class DataManager {
             };
         }
 
-        const achievedDays = recordList.filter(r => r.isAchieved).length;
-        const missedDays = recordList.filter(r => !r.isAchieved).length;
-        const totalGap = recordList.reduce((sum, r) => sum + r.gap, 0);
-        const totalTarget = recordList.reduce((sum, r) => sum + r.targetAmount, 0);
-        const totalEarned = recordList.reduce((sum, r) => sum + r.earnedAmount, 0);
+        // 按日期排序（从早到晚）
+        const sortedRecords = recordList.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // 计算累计超额和缺口（超额可以抵扣后续缺口）
+        let cumulativeSurplus = 0;
+        let totalGap = 0;
+        let totalSurplus = 0;
+        
+        const processedRecords = sortedRecords.map(r => {
+            const gap = r.gap || 0;
+            const surplus = r.earnedAmount > r.targetAmount ? r.earnedAmount - r.targetAmount : 0;
+            
+            if (surplus > 0) {
+                // 有超额，累加到累计超额
+                cumulativeSurplus += surplus;
+                totalSurplus += surplus;
+            }
+            
+            let adjustedGap = 0;
+            if (gap > 0) {
+                // 有缺口，先用累计超额抵扣
+                if (cumulativeSurplus >= gap) {
+                    // 超额足够抵扣
+                    cumulativeSurplus -= gap;
+                    adjustedGap = 0;
+                } else {
+                    // 超额不够，抵扣部分
+                    adjustedGap = gap - cumulativeSurplus;
+                    cumulativeSurplus = 0;
+                }
+                totalGap += adjustedGap;
+            }
+            
+            return {
+                ...r,
+                adjustedGap: adjustedGap,
+                surplus: surplus,
+                remainingSurplus: cumulativeSurplus
+            };
+        });
+
+        const achievedDays = processedRecords.filter(r => r.adjustedGap === 0 && r.earnedAmount >= r.targetAmount).length;
+        const missedDays = processedRecords.filter(r => r.adjustedGap > 0).length;
+        const totalTarget = processedRecords.reduce((sum, r) => sum + r.targetAmount, 0);
+        const totalEarned = processedRecords.reduce((sum, r) => sum + r.earnedAmount, 0);
+        const netGap = totalGap - cumulativeSurplus; // 最终缺口（考虑剩余超额）
 
         return {
-            totalDays: recordList.length,
+            totalDays: processedRecords.length,
             achievedDays: achievedDays,
             missedDays: missedDays,
             totalGap: totalGap,
+            totalSurplus: totalSurplus,
+            netGap: Math.max(0, netGap),
+            remainingSurplus: cumulativeSurplus,
             totalTarget: totalTarget,
             totalEarned: totalEarned,
             achievementRate: ((totalEarned / totalTarget) * 100).toFixed(1),
-            records: recordList.sort((a, b) => new Date(b.date) - new Date(a.date))
+            records: processedRecords.sort((a, b) => new Date(b.date) - new Date(a.date))
         };
     }
 
@@ -1570,6 +1620,7 @@ class DataManager {
                 app.lastUpdated = new Date().toISOString();
                 
                 // 记录余额变化（只记录增加的情况，提现不算）
+                let todayTotalEarnings = 0;
                 if (newBalance > oldBalance) {
                     if (!app.balanceHistory) {
                         app.balanceHistory = [];
@@ -1602,8 +1653,39 @@ class DataManager {
                         app.dailyEarnings = {};
                     }
                     app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
+                    todayTotalEarnings = app.dailyEarnings[today];
                     
                     console.log('更新 dailyEarnings:', app.dailyEarnings);
+                    
+                    // 计算今日所有软件的总收益
+                    let allAppsTodayEarnings = 0;
+                    data.phones.forEach(p => {
+                        p.apps.forEach(a => {
+                            if (a.dailyEarnings && a.dailyEarnings[today]) {
+                                allAppsTodayEarnings += a.dailyEarnings[today];
+                            }
+                        });
+                    });
+                    
+                    // 检查是否达到日目标（基于总收益）
+                    const dailyTarget = this.calculateDailyTarget();
+                    console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTarget.dailyTarget, isValid: dailyTarget.isValid });
+                    
+                    // 总是返回今日收益信息
+                    app._todayEarnings = allAppsTodayEarnings;
+                    
+                    if (dailyTarget.isValid) {
+                        app._dailyTarget = dailyTarget.dailyTarget;
+                        if (allAppsTodayEarnings >= dailyTarget.dailyTarget) {
+                            // 达到日目标
+                            app._dailyTargetAchieved = true;
+                            console.log('达到日目标！');
+                        } else {
+                            // 未达到日目标
+                            app._dailyTargetAchieved = false;
+                            console.log('未达到日目标');
+                        }
+                    }
                 } else {
                     console.log('余额未增加，不记录:', { oldBalance, newBalance });
                 }
@@ -1966,8 +2048,18 @@ class DataManager {
             let guaranteedWeight = 1;
             if (notDrawnFor3Days) guaranteedWeight = 5; // 3天未抽到：5倍权重
             
+            // 5. 新游戏优先：daysPlayed为0的游戏给予最高权重
+            let newGameWeight = 1;
+            if (game.daysPlayed === 0) {
+                newGameWeight = 10; // 新游戏10倍权重，确保优先被抽中
+            } else if (game.daysPlayed === 1) {
+                newGameWeight = 5;  // 第2天5倍权重
+            } else if (game.daysPlayed === 2) {
+                newGameWeight = 3;  // 第3天3倍权重
+            }
+            
             // 计算总权重
-            const totalWeight = progressWeight * coldWeight * consecutiveWeight * guaranteedWeight;
+            const totalWeight = progressWeight * coldWeight * consecutiveWeight * guaranteedWeight * newGameWeight;
             
             return {
                 ...game,
@@ -1976,7 +2068,8 @@ class DataManager {
                     progress: progressWeight,
                     cold: coldWeight,
                     consecutive: consecutiveWeight,
-                    guaranteed: guaranteedWeight
+                    guaranteed: guaranteedWeight,
+                    newGame: newGameWeight
                 }
             };
         });
@@ -3249,62 +3342,6 @@ class DataManager {
         };
     }
 
-    // 计算每天提现预测
-    static calculateDailyWithdrawalForecast() {
-        const data = this.loadData();
-        const now = new Date();
-
-        // 获取最近7天的提现记录
-        const last7Days = [];
-        for (let i = 0; i < 7; i++) {
-            const date = new Date(now);
-            date.setDate(date.getDate() - i);
-            last7Days.push(date.toISOString().split('T')[0]);
-        }
-
-        // 统计每天的提现金额
-        const dailyWithdrawals = {};
-        data.phones.forEach(phone => {
-            phone.apps.forEach(app => {
-                if (app.withdrawals) {
-                    app.withdrawals.forEach(w => {
-                        if (last7Days.includes(w.date)) {
-                            if (!dailyWithdrawals[w.date]) {
-                                dailyWithdrawals[w.date] = 0;
-                            }
-                            dailyWithdrawals[w.date] += w.amount;
-                        }
-                    });
-                }
-            });
-        });
-
-        // 计算平均值
-        const daysWithWithdrawals = Object.keys(dailyWithdrawals).length;
-        const totalWithdrawn = Object.values(dailyWithdrawals).reduce((sum, amount) => sum + amount, 0);
-        const averageDaily = daysWithWithdrawals > 0 ? totalWithdrawn / daysWithWithdrawals : 0;
-
-        // 计算今天已提现
-        const today = now.toISOString().split('T')[0];
-        const todayWithdrawn = dailyWithdrawals[today] || 0;
-
-        // 预测今天还能提现多少（基于可以提现的软件）
-        const plan = this.getSmartWithdrawalPlan();
-        let projectedToday = todayWithdrawn;
-        plan.canWithdraw.forEach(app => {
-            projectedToday += app.minWithdraw || 0;
-        });
-
-        return {
-            averageDaily,
-            todayWithdrawn,
-            projectedToday,
-            daysWithWithdrawals,
-            totalWithdrawn,
-            canWithdrawCount: plan.canWithdraw.length,
-            nearThresholdCount: plan.nearThreshold.length
-        };
-    }
 }
 
 // 全局状态
@@ -3898,9 +3935,6 @@ function renderDashboard() {
     // 渲染收入日历
     renderIncomeCalendar();
     
-    // 渲染收入预测
-    renderIncomePrediction();
-    
     // 渲染软件提现排行
     renderAppRanking();
     
@@ -3909,9 +3943,6 @@ function renderDashboard() {
     
     // 渲染软件赚取分析
     renderAppEarningAnalysis();
-    
-    // 渲染每天提现预测
-    renderDailyWithdrawalForecast();
     
     // 渲染年度目标
     renderYearlyGoal();
@@ -4016,70 +4047,6 @@ function showTotalEarningsDetail() {
     showModal('总赚取详情', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
-}
-
-// ==================== 每天提现预测 ====================
-
-// 渲染每天提现预测
-function renderDailyWithdrawalForecast() {
-    const card = document.getElementById('daily-withdrawal-forecast-card');
-    const content = document.getElementById('daily-withdrawal-forecast-content');
-    if (!card || !content) return;
-
-    const forecast = DataManager.calculateDailyWithdrawalForecast();
-    if (forecast.daysWithWithdrawals === 0 && forecast.canWithdrawCount === 0) {
-        card.style.display = 'none';
-        return;
-    }
-
-    card.style.display = 'block';
-
-    let html = `
-        <div style="margin-bottom: 16px;">
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; text-align: center;">
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">7天平均</div>
-                    <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${forecast.averageDaily.toFixed(2)}</div>
-                </div>
-                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; text-align: center;">
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">今天已提现</div>
-                    <div style="font-size: 18px; font-weight: 700; color: var(--success-color);">¥${forecast.todayWithdrawn.toFixed(2)}</div>
-                </div>
-            </div>
-    `;
-
-    // 今天预测
-    if (forecast.canWithdrawCount > 0) {
-        html += `
-            <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border-radius: 8px; padding: 12px; border-left: 3px solid var(--primary-color);">
-                <div style="font-size: 12px; font-weight: 600; color: var(--primary-color); margin-bottom: 8px;">
-                    📈 今天预测
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="font-size: 13px; color: var(--text-primary);">预计今天可提现</div>
-                        <div style="font-size: 11px; color: var(--text-secondary);">基于${forecast.canWithdrawCount}个可提现软件</div>
-                    </div>
-                    <div style="font-size: 20px; font-weight: 700; color: var(--primary-color);">¥${forecast.projectedToday.toFixed(2)}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    // 建议
-    if (forecast.nearThresholdCount > 0) {
-        html += `
-            <div style="background: rgba(245, 158, 11, 0.1); border-radius: 8px; padding: 12px; margin-top: 12px; border-left: 3px solid #f59e0b;">
-                <div style="font-size: 12px; color: #d97706;">
-                    💡 有 ${forecast.nearThresholdCount} 个软件接近提现门槛，建议优先操作！
-                </div>
-            </div>
-        `;
-    }
-
-    html += `</div>`;
-
-    content.innerHTML = html;
 }
 
 // ==================== 智能建议助手 ====================
@@ -4612,87 +4579,6 @@ function showAppDetailModal(appId) {
     showModal('软件详情', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
-}
-
-// ==================== 提现预测功能 ====================
-
-// 渲染提现预测
-function renderIncomePrediction() {
-    const card = document.getElementById('income-prediction-card');
-    const content = document.getElementById('income-prediction-content');
-    if (!card || !content) return;
-
-    const data = DataManager.loadData();
-    const prediction = calculateWithdrawalPrediction(data);
-
-    if (!prediction || prediction.dailyAverage <= 0) {
-        card.style.display = 'none';
-        return;
-    }
-
-    card.style.display = 'block';
-    content.innerHTML = `
-        <div class="prediction-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
-            <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
-                <div style="font-size: 24px; margin-bottom: 8px;">📈</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">日均提现</div>
-                <div style="font-size: 18px; font-weight: 700; color: var(--success-color);">¥${prediction.dailyAverage.toFixed(2)}</div>
-            </div>
-            <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
-                <div style="font-size: 24px; margin-bottom: 8px;">🎯</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预计本月</div>
-                <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${prediction.monthlyEstimate.toFixed(2)}</div>
-            </div>
-            <div style="padding: 16px; background: var(--bg-cream); border-radius: var(--radius-md);">
-                <div style="font-size: 24px; margin-bottom: 8px;">🏆</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预计全年</div>
-                <div style="font-size: 18px; font-weight: 700; color: var(--accent-color);">¥${prediction.yearlyEstimate.toFixed(2)}</div>
-            </div>
-        </div>
-        <div style="margin-top: 16px; padding: 12px; background: var(--bg-cream); border-radius: var(--radius-md); font-size: 13px; color: var(--text-secondary); text-align: center;">
-            💡 基于最近7天的平均提现计算，仅供参考
-        </div>
-    `;
-}
-
-// 计算提现预测
-function calculateWithdrawalPrediction(data) {
-    const today = new Date();
-    let totalWithdrawal = 0;
-    let daysWithData = 0;
-
-    // 计算最近7天的平均提现
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-
-        let dayWithdrawal = 0;
-        data.phones.forEach(phone => {
-            phone.apps.forEach(app => {
-                if (app.withdrawals) {
-                    app.withdrawals.forEach(w => {
-                        if (w.date === dateStr) {
-                            dayWithdrawal += w.amount;
-                        }
-                    });
-                }
-            });
-        });
-
-        if (dayWithdrawal > 0) {
-            totalWithdrawal += dayWithdrawal;
-            daysWithData++;
-        }
-    }
-    
-    if (daysWithData === 0) return null;
-
-    const dailyAverage = totalWithdrawal / daysWithData;
-    const monthlyEstimate = dailyAverage * 30;
-    const yearlyEstimate = dailyAverage * 365;
-
-    return { dailyAverage, monthlyEstimate, yearlyEstimate };
 }
 
 // ==================== 软件提现排行功能 ====================
@@ -5668,14 +5554,34 @@ function openEditAppModal(phoneId, appId) {
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
-                    DataManager.editApp(phoneId, appId, {
+                    const result = DataManager.editApp(phoneId, appId, {
                         name,
                         balance,
                         minWithdraw,
                         historicalWithdrawn
                     });
                     renderPhones();
-                    showToast('软件已更新！');
+                    
+                    // 检查是否达到日目标
+                    const phone = result.phones.find(p => p.id === phoneId);
+                    const app = phone ? phone.apps.find(a => a.id === appId) : null;
+                    if (app && app._todayEarnings !== undefined) {
+                        if (app._dailyTargetAchieved) {
+                            showToast(`🎉 恭喜！今日收益¥${app._todayEarnings.toFixed(2)}，已达到日目标¥${app._dailyTarget.toFixed(2)}！`, 'success');
+                        } else if (app._dailyTarget) {
+                            const remaining = app._dailyTarget - app._todayEarnings;
+                            showToast(`今日收益¥${app._todayEarnings.toFixed(2)}，距离日目标¥${app._dailyTarget.toFixed(2)}还差¥${remaining.toFixed(2)}`, 'info');
+                        } else {
+                            showToast(`今日收益¥${app._todayEarnings.toFixed(2)}`, 'info');
+                        }
+                        // 清除标记
+                        delete app._dailyTargetAchieved;
+                        delete app._todayEarnings;
+                        delete app._dailyTarget;
+                        DataManager.saveData(result);
+                    } else {
+                        showToast('软件已更新！');
+                    }
                 }
                 closeModal();
             }
@@ -8419,7 +8325,7 @@ function renderYearlyGoal() {
                         ` : ''}
                         
                         ${gapStats.totalDays > 0 ? `
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px;">
                             <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
                                 <div style="font-size: 16px; font-weight: 700; color: #22c55e;">${gapStats.achievedDays}</div>
                                 <div style="font-size: 10px; color: #92400e;">达标天数</div>
@@ -8428,11 +8334,44 @@ function renderYearlyGoal() {
                                 <div style="font-size: 16px; font-weight: 700; color: #ef4444;">${gapStats.missedDays}</div>
                                 <div style="font-size: 10px; color: #92400e;">未达标天数</div>
                             </div>
-                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
-                                <div style="font-size: 16px; font-weight: 700; color: #b45309;">¥${gapStats.totalGap.toFixed(2)}</div>
-                                <div style="font-size: 10px; color: #92400e;">累计缺口</div>
+                        </div>
+                        
+                        ${gapStats.totalSurplus > 0 ? `
+                        <div style="background: rgba(255,255,255,0.5); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 11px; color: #92400e;">累计超额</span>
+                                <span style="font-size: 14px; font-weight: 600; color: #22c55e;">¥${gapStats.totalSurplus.toFixed(2)}</span>
+                            </div>
+                            ${gapStats.totalGap > 0 ? `
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 11px; color: #92400e;">抵扣缺口</span>
+                                <span style="font-size: 14px; font-weight: 600; color: #b45309;">-¥${(gapStats.totalSurplus - gapStats.remainingSurplus).toFixed(2)}</span>
+                            </div>
+                            ` : ''}
+                            ${gapStats.remainingSurplus > 0 ? `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 11px; color: #92400e;">剩余超额</span>
+                                <span style="font-size: 14px; font-weight: 600; color: #22c55e;">¥${gapStats.remainingSurplus.toFixed(2)}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        ` : ''}
+                        
+                        ${gapStats.netGap > 0 ? `
+                        <div style="background: rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #ef4444;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 11px; color: #991b1b;">抵扣后缺口</span>
+                                <span style="font-size: 16px; font-weight: 700; color: #991b1b;">¥${gapStats.netGap.toFixed(2)}</span>
                             </div>
                         </div>
+                        ` : gapStats.remainingSurplus > 0 ? `
+                        <div style="background: rgba(34, 197, 94, 0.2); border-radius: 8px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #22c55e;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 11px; color: #166534;">超额结余</span>
+                                <span style="font-size: 16px; font-weight: 700; color: #166534;">¥${gapStats.remainingSurplus.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        ` : ''}
                         ` : ''}
                         
                         ${todayRecord ? `
@@ -8499,7 +8438,7 @@ function renderYearlyGoal() {
             const dailyStats = DataManager.calculateAppAchievementStats(app.appId);
             
             html += `
-                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; cursor: pointer;" onclick="openDailyGoalModal('${app.appId}')">
+                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; cursor: pointer;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 11px; background: ${rankColor}15; color: ${rankColor}; padding: 2px 8px; border-radius: 12px; font-weight: 600;">${index + 1}</span>
@@ -8635,7 +8574,7 @@ function showDailyGapDetailModal() {
                     <div style="font-size: 24px; font-weight: bold;">¥${dailyTarget.dailyTarget.toFixed(2)}</div>
                     <div style="font-size: 12px; opacity: 0.9;">每天需赚</div>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; font-size: 12px;">
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; text-align: center; font-size: 12px; margin-bottom: 12px;">
                     <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
                         <div style="font-weight: bold; font-size: 14px;">${gapStats.achievedDays}</div>
                         <div style="opacity: 0.8;">达标天数</div>
@@ -8644,11 +8583,40 @@ function showDailyGapDetailModal() {
                         <div style="font-weight: bold; font-size: 14px;">${gapStats.missedDays}</div>
                         <div style="opacity: 0.8;">未达标天数</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px;">
-                        <div style="font-weight: bold; font-size: 14px;">¥${gapStats.totalGap.toFixed(2)}</div>
-                        <div style="opacity: 0.8;">累计缺口</div>
-                    </div>
                 </div>
+                
+                ${gapStats.totalSurplus > 0 ? `
+                <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                        <span>累计超额</span>
+                        <span style="color: #90EE90;">¥${gapStats.totalSurplus.toFixed(2)}</span>
+                    </div>
+                    ${gapStats.totalGap > 0 ? `
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                        <span>抵扣缺口</span>
+                        <span>-¥${(gapStats.totalSurplus - gapStats.remainingSurplus).toFixed(2)}</span>
+                    </div>
+                    ` : ''}
+                    ${gapStats.remainingSurplus > 0 ? `
+                    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                        <span>剩余超额</span>
+                        <span style="color: #90EE90;">¥${gapStats.remainingSurplus.toFixed(2)}</span>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+                
+                ${gapStats.netGap > 0 ? `
+                <div style="background: rgba(255,0,0,0.2); border-radius: 8px; padding: 10px; text-align: center;">
+                    <div style="font-size: 11px; opacity: 0.9;">抵扣后缺口</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #FFD700;">¥${gapStats.netGap.toFixed(2)}</div>
+                </div>
+                ` : gapStats.remainingSurplus > 0 ? `
+                <div style="background: rgba(0,255,0,0.2); border-radius: 8px; padding: 10px; text-align: center;">
+                    <div style="font-size: 11px; opacity: 0.9;">超额结余</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #90EE90;">¥${gapStats.remainingSurplus.toFixed(2)}</div>
+                </div>
+                ` : ''}
             </div>
 
             <!-- 记录列表 -->
@@ -8789,14 +8757,16 @@ function viewYearlyGoalDetail() {
 
 // ==================== 每日目标功能 ====================
 
-// 当前查看每日目标的软件ID
+// 当前查看每日目标的软件ID和手机ID
 let currentDailyGoalAppId = null;
+let currentDailyGoalPhoneId = null;
 let currentDailyGoalCalendarMonth = new Date().getMonth();
 let currentDailyGoalCalendarYear = new Date().getFullYear();
 
 // 打开每日目标弹窗
-function openDailyGoalModal(appId) {
+function openDailyGoalModal(appId, phoneId) {
     currentDailyGoalAppId = appId;
+    currentDailyGoalPhoneId = phoneId;
     currentDailyGoalCalendarMonth = new Date().getMonth();
     currentDailyGoalCalendarYear = new Date().getFullYear();
     
@@ -8818,6 +8788,7 @@ function closeDailyGoalModal() {
     setTimeout(() => {
         modal.style.display = 'none';
         currentDailyGoalAppId = null;
+        currentDailyGoalPhoneId = null;
     }, 300);
 }
 
@@ -8883,6 +8854,13 @@ function renderDailyGoalContent() {
             <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
                 ${stats.todayAchieved ? `超额完成: +¥${(stats.todayEarning - goal.amount).toFixed(2)}` : `还需: ¥${(goal.amount - stats.todayEarning).toFixed(2)}`}
             </div>
+            ${currentDailyGoalPhoneId ? `
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid ${stats.todayAchieved ? '#86efac' : '#fecaca'};">
+                <button class="btn btn-sm btn-primary" onclick="quickEditBalanceFromGoal()" style="width: 100%;">
+                    💰 快速编辑余额
+                </button>
+            </div>
+            ` : ''}
         </div>
         
         <!-- 达标日历 -->
@@ -9002,6 +8980,89 @@ function markTodayAchievement(achieved) {
     showToast(achieved ? '✅ 今日已标记为达标' : '✗ 今日已标记为未达标', achieved ? 'success' : 'info');
     
     renderDailyGoalContent();
+}
+
+// 从达标日历弹窗快速编辑余额
+function quickEditBalanceFromGoal() {
+    if (!currentDailyGoalAppId || !currentDailyGoalPhoneId) {
+        showToast('无法编辑余额：缺少软件或手机信息', 'error');
+        return;
+    }
+    
+    // 获取当前余额
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === currentDailyGoalPhoneId);
+    const app = phone ? phone.apps.find(a => a.id === currentDailyGoalAppId) : null;
+    
+    if (!app) {
+        showToast('未找到软件信息', 'error');
+        return;
+    }
+    
+    const currentBalance = app.balance || 0;
+    
+    // 显示编辑余额弹窗
+    showModal(
+        '💰 快速编辑余额',
+        `
+            <div class="form-group">
+                <label class="form-label">当前余额: ¥${currentBalance.toFixed(2)}</label>
+                <input type="number" id="quick-edit-balance-input" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" placeholder="输入新余额">
+                <div class="form-hint">修改余额后会自动计算今日收益</div>
+            </div>
+        `,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: '保存',
+                class: 'btn-primary',
+                action: () => {
+                    const newBalance = parseFloat(document.getElementById('quick-edit-balance-input').value) || 0;
+                    
+                    if (newBalance !== currentBalance) {
+                        const result = DataManager.editApp(currentDailyGoalPhoneId, currentDailyGoalAppId, {
+                            name: app.name,
+                            balance: newBalance,
+                            minWithdraw: app.minWithdraw || 0,
+                            historicalWithdrawn: app.historicalWithdrawn || 0
+                        });
+                        
+                        // 检查是否达到日目标
+                        const updatedPhone = result.phones.find(p => p.id === currentDailyGoalPhoneId);
+                        const updatedApp = updatedPhone ? updatedPhone.apps.find(a => a.id === currentDailyGoalAppId) : null;
+                        
+                        if (updatedApp && updatedApp._todayEarnings !== undefined) {
+                            if (updatedApp._dailyTargetAchieved) {
+                                showToast(`🎉 恭喜！今日收益¥${updatedApp._todayEarnings.toFixed(2)}，已达到日目标¥${updatedApp._dailyTarget.toFixed(2)}！`, 'success');
+                            } else if (updatedApp._dailyTarget) {
+                                const remaining = updatedApp._dailyTarget - updatedApp._todayEarnings;
+                                showToast(`今日收益¥${updatedApp._todayEarnings.toFixed(2)}，距离日目标¥${updatedApp._dailyTarget.toFixed(2)}还差¥${remaining.toFixed(2)}`, 'info');
+                            } else {
+                                showToast(`今日收益¥${updatedApp._todayEarnings.toFixed(2)}`, 'info');
+                            }
+                            
+                            // 清除标记
+                            delete updatedApp._dailyTargetAchieved;
+                            delete updatedApp._todayEarnings;
+                            delete updatedApp._dailyTarget;
+                            DataManager.saveData(result);
+                        } else {
+                            showToast('余额已更新！');
+                        }
+                        
+                        // 刷新日历显示
+                        renderDailyGoalContent();
+                    }
+                    
+                    closeModal();
+                }
+            }
+        ]
+    );
 }
 
 // 切换月份
