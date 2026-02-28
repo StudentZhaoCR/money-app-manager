@@ -1984,41 +1984,26 @@ class DataManager {
         // 使用加权随机选择
         const selectedGame = this.weightedRandomSelect(weightedGames);
         
-        // 保存抽签历史
+        // 不再立即保存到历史记录，只返回结果
+        // 历史记录只在标记完成时保存
         const targetDays = selectedGame.targetDays || 7;
-        const savedPhoneId = phoneId || null;
         
         console.log('智能抽签结果:', {
             date: today,
             gameName: selectedGame.name,
             weight: selectedGame.weight,
             weightDetails: selectedGame.weightDetails,
-            phoneId: savedPhoneId,
+            phoneId: phoneId,
             daysPlayed: selectedGame.daysPlayed
         });
         
-        drawHistory.unshift({
-            date: today,
-            gameId: selectedGame.id,
-            gameName: selectedGame.name,
-            phoneId: savedPhoneId,
-            daysPlayed: selectedGame.daysPlayed,
-            remainingDays: targetDays - selectedGame.daysPlayed,
-            targetDays: targetDays,
-            isRedownload: selectedGame.isRedownload || false,
-            weight: selectedGame.weight,
-            weightDetails: selectedGame.weightDetails
-        });
-        
-        // 只保留最近30天的记录
-        if (drawHistory.length > 30) {
-            drawHistory.pop();
-        }
-        
-        this.saveGameDrawHistory(drawHistory);
-        console.log('保存后的历史记录:', drawHistory);
-        
-        return selectedGame;
+        // 返回结果，包含临时ID用于后续标记完成
+        return {
+            ...selectedGame,
+            _drawDate: today,
+            _phoneId: phoneId,
+            _remainingDays: targetDays - selectedGame.daysPlayed
+        };
     }
     
     // 加权随机选择算法
@@ -2050,6 +2035,61 @@ class DataManager {
         console.log('保存到localStorage的抽签历史:', jsonString);
         localStorage.setItem(GAME_DRAW_HISTORY_KEY, jsonString);
         console.log('保存完成，key:', GAME_DRAW_HISTORY_KEY);
+    }
+    
+    // 添加已完成的抽签记录
+    static addCompletedDrawHistory(phoneId, game, drawDate) {
+        const history = this.getGameDrawHistory();
+        const targetDays = game.targetDays || 7;
+        
+        history.unshift({
+            date: drawDate,
+            gameId: game.id,
+            gameName: game.name,
+            phoneId: phoneId,
+            daysPlayed: game.daysPlayed,
+            remainingDays: targetDays - game.daysPlayed,
+            targetDays: targetDays,
+            isRedownload: game.isRedownload || false,
+            completed: true,
+            completedAt: new Date().toISOString()
+        });
+        
+        this.saveGameDrawHistory(history);
+        console.log('已保存完成的抽签记录:', history[0]);
+        return history[0];
+    }
+    
+    // 清理抽签历史：删除未完成的旧记录和已完成的7天记录
+    static cleanupGameDrawHistory() {
+        const history = this.getGameDrawHistory();
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        const filteredHistory = history.filter(record => {
+            // 保留已完成的记录
+            if (record.completed) {
+                // 检查是否7天都完成了（daysPlayed >= targetDays）
+                const targetDays = record.targetDays || 7;
+                if (record.daysPlayed >= targetDays) {
+                    // 7天完成的记录，检查是否已经完成超过1天
+                    const completedDate = record.completedAt ? new Date(record.completedAt) : new Date(record.date);
+                    const daysSinceCompleted = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24));
+                    return daysSinceCompleted < 1; // 只保留1天内完成的记录
+                }
+                return true; // 未完成7天的记录保留
+            }
+            
+            // 删除未完成的旧记录（不是今天的）
+            return record.date === today;
+        });
+        
+        if (filteredHistory.length !== history.length) {
+            this.saveGameDrawHistory(filteredHistory);
+            console.log('清理后的抽签历史:', filteredHistory);
+        }
+        
+        return filteredHistory;
     }
 
     // 获取游戏统计（可按手机ID筛选）
@@ -7195,6 +7235,9 @@ document.getElementById('modal').addEventListener('click', function(e) {
 // 当前选中的手机ID
 let currentGamePhoneId = null;
 
+// 今天的抽签结果（内存中存储，不保存到localStorage）
+let todayDrawResult = null;
+
 // 渲染游戏管理页面
 function renderGamesPage() {
     // 更新日期
@@ -7269,27 +7312,15 @@ function resetDrawArea() {
     const container = document.getElementById('today-game-result');
     if (!container) return;
     
-    // 检查今天是否已经抽签（使用模拟日期）
+    // 清理旧的抽签历史
+    DataManager.cleanupGameDrawHistory();
+    
+    // 检查今天是否已经抽签（使用内存变量）
     const today = getCurrentDate();
-    const drawHistory = DataManager.getGameDrawHistory();
-    const currentPhoneId = currentGamePhoneId || null;
     
-    console.log('resetDrawArea - today:', today);
-    console.log('resetDrawArea - currentPhoneId:', currentPhoneId);
-    console.log('resetDrawArea - drawHistory:', drawHistory);
-    
-    const todayDraw = drawHistory.find(h => {
-        const historyPhoneId = h.phoneId || null;
-        const match = h.date === today && historyPhoneId === currentPhoneId;
-        console.log(`检查记录: date=${h.date}, phoneId=${h.phoneId}, match=${match}`);
-        return match;
-    });
-    
-    console.log('resetDrawArea - todayDraw:', todayDraw);
-    
-    if (todayDraw) {
+    if (todayDrawResult && todayDrawResult._drawDate === today && todayDrawResult._phoneId === currentGamePhoneId) {
         // 今天已经抽签过了，显示抽签结果
-        showTodayDrawResult(todayDraw);
+        showTodayDrawResult(todayDrawResult);
     } else {
         // 今天还没抽签，显示抽签按钮
         container.innerHTML = `
@@ -7587,26 +7618,12 @@ function deleteAllCanDeleteGames() {
 function drawTodayGame() {
     const container = document.getElementById('today-game-result');
     
-    // 检查今天是否已经抽签（针对当前手机，使用模拟日期）
+    // 检查今天是否已经抽签（使用内存变量）
     const today = getCurrentDate();
-    const drawHistory = DataManager.getGameDrawHistory();
     
-    // 调试信息
-    console.log('当前手机ID:', currentGamePhoneId);
-    console.log('抽签历史:', drawHistory);
-    
-    // 将空字符串转换为null进行统一比较
-    const currentPhoneId = currentGamePhoneId || null;
-    const todayDraw = drawHistory.find(h => {
-        const historyPhoneId = h.phoneId || null;
-        const match = h.date === today && historyPhoneId === currentPhoneId;
-        console.log(`检查历史记录: date=${h.date}, phoneId=${h.phoneId}, match=${match}`);
-        return match;
-    });
-    
-    if (todayDraw) {
+    if (todayDrawResult && todayDrawResult._drawDate === today && todayDrawResult._phoneId === currentGamePhoneId) {
         // 今天已经抽签过了，显示今天的抽签结果
-        showTodayDrawResult(todayDraw);
+        showTodayDrawResult(todayDrawResult);
         showToast('今天已经抽签过了，显示今日抽签结果');
         return;
     }
@@ -7623,8 +7640,8 @@ function drawTodayGame() {
         return;
     }
     
-    // 抽签历史已经在 DataManager.getTodayGameToPlay 中保存了
-    // 这里不需要重复保存
+    // 保存到内存变量
+    todayDrawResult = result;
     const targetDays = result.targetDays || 7;
     const progressPercent = (result.daysPlayed / targetDays) * 100;
     const remainingDays = targetDays - result.daysPlayed;
@@ -7841,63 +7858,58 @@ function formatTime(totalSeconds) {
 // 标记今日游戏已完成
 function completeTodayGame() {
     const today = getCurrentDate();
-    const drawHistory = DataManager.getGameDrawHistory();
-    const currentPhoneId = currentGamePhoneId || null;
     
-    // 找到今天的抽签记录
-    const todayDrawIndex = drawHistory.findIndex(h => {
-        const historyPhoneId = h.phoneId || null;
-        return h.date === today && historyPhoneId === currentPhoneId;
-    });
-    
-    if (todayDrawIndex >= 0) {
-        const record = drawHistory[todayDrawIndex];
-        
-        // 检查今天是否已经完成过
-        if (record.completedToday === today) {
-            showToast('今天已经标记完成了');
-            return;
-        }
-        
-        // 标记为已完成
-        record.completedToday = today;
-        
-        // 更新游戏的天数
-        const games = DataManager.getDownloadedGames();
-        const game = games.find(g => g.id === record.gameId);
-        if (game && !game.completed) {
-            game.daysPlayed++;
-            game.lastPlayedDate = today;
-            
-            // 检查是否完成全部天数
-            const targetDays = game.targetDays || 7;
-            if (game.daysPlayed >= targetDays) {
-                game.completed = true;
-                game.canDelete = true;
-            }
-            
-            DataManager.saveDownloadedGames(games);
-            
-            // 更新抽签记录中的天数
-            record.daysPlayed = game.daysPlayed;
-            record.remainingDays = targetDays - game.daysPlayed;
-        }
-        
-        DataManager.saveGameDrawHistory(drawHistory);
-        
-        // 显示完成动画
-        showToast('🎉 恭喜完成今日游戏任务！');
-        
-        // 重新渲染抽签结果
-        showTodayDrawResult(record);
-        
-        // 刷新游戏列表和统计
-        renderGamesList();
-        renderGameStats();
-        
-        // 刷新抽签历史
-        renderGameDrawHistoryList();
+    // 检查是否有今天的抽签结果
+    if (!todayDrawResult || todayDrawResult._drawDate !== today || todayDrawResult._phoneId !== currentGamePhoneId) {
+        showToast('今天还没有抽签');
+        return;
     }
+    
+    // 检查今天是否已经完成过
+    if (todayDrawResult._completedToday === today) {
+        showToast('今天已经标记完成了');
+        return;
+    }
+    
+    // 标记为已完成
+    todayDrawResult._completedToday = today;
+    
+    // 更新游戏的天数
+    const games = DataManager.getDownloadedGames(currentGamePhoneId);
+    const game = games.find(g => g.id === todayDrawResult.id);
+    if (game && !game.completed) {
+        game.daysPlayed++;
+        game.lastPlayedDate = today;
+        
+        // 检查是否完成全部天数
+        const targetDays = game.targetDays || 7;
+        if (game.daysPlayed >= targetDays) {
+            game.completed = true;
+            game.canDelete = true;
+        }
+        
+        DataManager.saveDownloadedGames(games);
+        
+        // 更新内存变量中的天数
+        todayDrawResult.daysPlayed = game.daysPlayed;
+        todayDrawResult._remainingDays = targetDays - game.daysPlayed;
+        
+        // 保存到历史记录（只有标记完成才保存）
+        DataManager.addCompletedDrawHistory(currentGamePhoneId, game, today);
+    }
+    
+    // 显示完成动画
+    showToast('🎉 恭喜完成今日游戏任务！');
+    
+    // 重新渲染抽签结果
+    showTodayDrawResult(todayDrawResult);
+    
+    // 刷新游戏列表和统计
+    renderGamesList();
+    renderGameStats();
+    
+    // 刷新抽签历史
+    renderGameDrawHistoryList();
 }
 
 // ==================== 游戏计时器功能 ====================
