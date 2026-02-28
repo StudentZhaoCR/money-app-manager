@@ -1557,15 +1557,116 @@ class DataManager {
     // 预定义资产分类
     static getAssetCategories() {
         return [
-            { id: 'electronics', name: '电子产品', icon: '💻', keywords: ['手机', 'iPhone', '华为', '小米', 'OPPO', 'vivo', '三星', '荣耀', '一加', '魅族', '电脑', '笔记本', '平板', 'iPad', '耳机', '相机', '显示器', '键盘', '鼠标', '充电器', '数据线'] },
-            { id: 'furniture', name: '家具家电', icon: '🛋️', keywords: ['沙发', '床', '桌子', '椅子', '衣柜', '冰箱', '洗衣机', '空调', '电视', '灯具'] },
-            { id: 'clothing', name: '服装鞋包', icon: '👔', keywords: ['衣服', '裤子', '鞋子', '包包', '帽子', '围巾', '手套', '袜子'] },
-            { id: 'food', name: '食品酒水', icon: '🍔', keywords: ['食品', '零食', '饮料', '酒水', '茶叶', '咖啡'] },
-            { id: 'beauty', name: '美妆护肤', icon: '💄', keywords: ['化妆品', '护肤品', '香水', '口红', '面膜', '洗发水', '沐浴露'] },
-            { id: 'sports', name: '运动户外', icon: '⚽', keywords: ['运动', '健身', '球拍', '球鞋', '帐篷', '背包', '自行车'] },
-            { id: 'books', name: '图书文具', icon: '📚', keywords: ['书', '笔记本', '笔', '文具', '杂志', '教材'] },
-            { id: 'pets', name: '宠物用品', icon: '🐱', keywords: ['宠物', '猫粮', '狗粮', '猫砂', '玩具', '笼子'] },
-            { id: 'tools', name: '工具器材', icon: '🔧', keywords: ['工具', '螺丝刀', '锤子', '电钻', '梯子', '五金'] },
+            { 
+                id: 'electronics', 
+                name: '电子产品', 
+                icon: '💻', 
+                keywords: [
+                    // 手机品牌
+                    '手机', 'iPhone', '华为', '小米', 'OPPO', 'vivo', '三星', '荣耀', '一加', '魅族', '红米', 'realme', 'IQOO', '努比亚', '黑鲨', 'ROG',
+                    // 电脑相关
+                    '电脑', '笔记本', 'MacBook', 'ThinkPad', '戴尔', '惠普', '联想', '华硕', '宏碁', '机械革命',
+                    // 平板
+                    '平板', 'iPad', 'MatePad', '小米平板', 'Galaxy Tab',
+                    // 配件
+                    '耳机', 'AirPods', '索尼', 'BOSE', 'Beats', '森海塞尔', '键盘', '鼠标', '显示器', '显示器', '投影仪', '打印机', '扫描仪',
+                    // 数码
+                    '相机', '佳能', '尼康', '索尼', '富士', 'GoPro', '大疆', '无人机', '云台', '稳定器',
+                    // 充电
+                    '充电器', '数据线', '充电宝', '移动电源', '充电头', '快充', '无线充',
+                    // 存储
+                    'U盘', '硬盘', '固态', 'SSD', '移动硬盘', '内存卡', 'TF卡', 'SD卡',
+                    // 游戏
+                    '游戏机', 'Switch', 'PS5', 'PS4', 'Xbox', '游戏手柄', '掌机', 'Steam Deck',
+                    // 智能设备
+                    '智能手表', 'Apple Watch', '华为手表', '小米手环', '智能手环', '智能音箱', '小爱', '天猫精灵', '小度',
+                    // 网络
+                    '路由器', 'WiFi', '网线', '交换机', '光猫'
+                ] 
+            },
+            { 
+                id: 'furniture', 
+                name: '家具家电', 
+                icon: '🛋️', 
+                keywords: [
+                    // 家具
+                    '沙发', '床', '床垫', '桌子', '餐桌', '书桌', '办公桌', '椅子', '办公椅', '电竞椅', '衣柜', '橱柜', '鞋柜', '书架', '置物架', '茶几', '电视柜', '床头柜', '梳妆台', '镜子',
+                    // 家电
+                    '冰箱', '洗衣机', '空调', '电视', '电视机', '热水器', '油烟机', '燃气灶', '微波炉', '烤箱', '电饭煲', '电磁炉', '电水壶', '净水器', '扫地机器人', '吸尘器', '加湿器', '除湿机', '空气净化器', '风扇', '电暖器', '取暖器', '灯具', '台灯', '落地灯', '吊灯', '吸顶灯'
+                ] 
+            },
+            { 
+                id: 'clothing', 
+                name: '服装鞋包', 
+                icon: '👔', 
+                keywords: [
+                    '衣服', 'T恤', '衬衫', '外套', '夹克', '风衣', '大衣', '羽绒服', '毛衣', '卫衣', '裤子', '牛仔裤', '休闲裤', '西裤', '短裤', '裙子', '连衣裙', '半身裙',
+                    '鞋子', '运动鞋', '跑鞋', '篮球鞋', '足球鞋', '休闲鞋', '皮鞋', '靴子', '凉鞋', '拖鞋', '高跟鞋', '帆布鞋',
+                    '包包', '背包', '双肩包', '单肩包', '手提包', '斜挎包', '钱包', '旅行箱', '行李箱', '拉杆箱',
+                    '帽子', '围巾', '手套', '袜子', '内裤', '内衣', '皮带', '领带', '眼镜', '太阳镜', '墨镜', '手表', '首饰', '项链', '戒指', '耳环'
+                ] 
+            },
+            { 
+                id: 'food', 
+                name: '食品酒水', 
+                icon: '🍔', 
+                keywords: [
+                    '食品', '零食', '坚果', '巧克力', '糖果', '饼干', '薯片', '肉干', '果干', '蜜饯',
+                    '饮料', '果汁', '汽水', '可乐', '雪碧', '奶茶', '咖啡', '咖啡豆', '茶叶', '绿茶', '红茶', '乌龙茶', '普洱',
+                    '酒水', '白酒', '红酒', '葡萄酒', '啤酒', '洋酒', '威士忌', '伏特加',
+                    '粮油', '大米', '面粉', '油', '调料', '酱油', '醋', '盐', '糖',
+                    '生鲜', '水果', '蔬菜', '肉类', '海鲜', '鸡蛋', '牛奶', '酸奶'
+                ] 
+            },
+            { 
+                id: 'beauty', 
+                name: '美妆护肤', 
+                icon: '💄', 
+                keywords: [
+                    '化妆品', '护肤品', '洗面奶', '洁面乳', '爽肤水', '乳液', '面霜', '精华', '眼霜', '面膜', '防晒霜', '隔离霜', '粉底', '气垫', 'BB霜', 'CC霜', '遮瑕', '散粉', '粉饼', '腮红', '眼影', '眼线', '睫毛膏', '口红', '唇釉', '唇膏', '卸妆', '化妆棉',
+                    '香水', '古龙水', '香氛',
+                    '洗发', '护发', '洗发水', '护发素', '发膜', '沐浴露', '香皂', '肥皂', '牙膏', '牙刷', '漱口水', '牙线', '剃须刀', '脱毛器',
+                    '美甲', '指甲油', '护甲油'
+                ] 
+            },
+            { 
+                id: 'sports', 
+                name: '运动户外', 
+                icon: '⚽', 
+                keywords: [
+                    '运动', '健身', '瑜伽', '瑜伽垫', '哑铃', '杠铃', '跑步机', '椭圆机', '动感单车', '健身车', '划船机', '综合训练器', '仰卧板', '健腹轮', '弹力带', '阻力带', '跳绳',
+                    '球拍', '羽毛球拍', '网球拍', '乒乓球拍', '篮球', '足球', '排球', '羽毛球', '网球', '乒乓球', '高尔夫球杆',
+                    '球鞋', '跑鞋', '足球鞋', '篮球鞋', '登山鞋', '徒步鞋',
+                    '户外', '帐篷', '睡袋', '背包', '登山包', '户外包', '自行车', '山地车', '公路车', '折叠车', '滑板', '轮滑', '溜冰鞋', '滑雪', '雪板', '冲浪板', '游泳', '泳镜', '泳帽', '救生衣'
+                ] 
+            },
+            { 
+                id: 'books', 
+                name: '图书文具', 
+                icon: '📚', 
+                keywords: [
+                    '书', '图书', '小说', '文学', '历史', '哲学', '经济', '管理', '金融', '投资', '理财', '编程', '计算机', '技术', '教材', '教辅', '考试', '考研', '雅思', '托福', 'GRE', '四六级',
+                    '笔记本', '记事本', '日记本', '手账本',
+                    '笔', '钢笔', '圆珠笔', '中性笔', '铅笔', '彩笔', '马克笔', '荧光笔', '毛笔',
+                    '文具', '橡皮', '尺子', '圆规', '剪刀', '胶水', '胶带', '订书机', '文件夹', '资料册', '便签', '便利贴', '计算器'
+                ] 
+            },
+            { 
+                id: 'pets', 
+                name: '宠物用品', 
+                icon: '🐱', 
+                keywords: [
+                    '宠物', '猫粮', '狗粮', '猫砂', '猫砂盆', '猫爬架', '猫窝', '狗窝', '宠物床', '宠物笼', '笼子', '宠物玩具', '逗猫棒', '磨牙棒', '宠物衣服', '宠物牵引绳', '项圈', '宠物碗', '喂食器', '饮水机', '宠物背包', '宠物航空箱', '宠物梳子', '宠物指甲剪', '宠物沐浴露', '宠物香波'
+                ] 
+            },
+            { 
+                id: 'tools', 
+                name: '工具器材', 
+                icon: '🔧', 
+                keywords: [
+                    '工具', '工具箱', '螺丝刀', '螺丝刀套装', '锤子', '扳手', '钳子', '电钻', '冲击钻', '电锤', '角磨机', '切割机', '电锯', '梯子', '人字梯', '伸缩梯', '五金', '钉子', '螺丝', '螺母', '垫片', '胶带', '电工胶带', '绝缘胶带', '万用表', '测电笔', '水平仪', '卷尺', '钢尺'
+                ] 
+            },
             { id: 'other', name: '其他', icon: '📦', keywords: [] }
         ];
     }
@@ -1645,6 +1746,226 @@ class DataManager {
         const filtered = assets.filter(a => a.id !== assetId);
         this.saveAssets(filtered);
         return filtered;
+    }
+
+    // ==================== 个人财产管理功能 ====================
+
+    // 获取个人财产数据
+    static getPersonalFinance() {
+        const finance = localStorage.getItem('moneyApp_personalFinance');
+        if (finance) {
+            return JSON.parse(finance);
+        }
+        return {
+            wallet: 0,           // 个人钱包余额
+            totalEarned: 0,      // 累计真实收入
+            totalSpent: 0,       // 累计支出
+            incomeSources: [],   // 收入来源记录
+            transfers: [],       // 资金流转记录
+            expenses: []         // 个人支出记录
+        };
+    }
+
+    // 保存个人财产数据
+    static savePersonalFinance(finance) {
+        localStorage.setItem('moneyApp_personalFinance', JSON.stringify(finance));
+    }
+
+    // 添加收入来源（工资、奖金等）
+    static addIncomeSource(sourceData) {
+        const finance = this.getPersonalFinance();
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        const newSource = {
+            id: Date.now().toString(),
+            type: sourceData.type,           // 'salary', 'bonus', 'investment', 'other'
+            typeName: this.getIncomeTypeName(sourceData.type),
+            amount: parseFloat(sourceData.amount) || 0,
+            date: sourceData.date || today,
+            description: sourceData.description || '',
+            createdAt: new Date().toISOString()
+        };
+        
+        finance.incomeSources.push(newSource);
+        finance.wallet += newSource.amount;
+        finance.totalEarned += newSource.amount;
+        
+        this.savePersonalFinance(finance);
+        return newSource;
+    }
+
+    // 获取收入类型名称
+    static getIncomeTypeName(type) {
+        const typeMap = {
+            'salary': '💰 工资收入',
+            'bonus': '🎁 奖金/红包',
+            'investment': '📈 投资收益',
+            'gift': '🎀 礼物',
+            'refund': '💸 退款',
+            'other': '📦 其他收入'
+        };
+        return typeMap[type] || '📦 其他收入';
+    }
+
+    // 从软件提现到个人钱包
+    static transferFromAppsToWallet(amount, description = '') {
+        const finance = this.getPersonalFinance();
+        const appEarnings = this.calculateTotalEarnings();
+        
+        if (amount <= 0) {
+            return { success: false, message: '金额必须大于0' };
+        }
+        
+        // 检查软件总收入是否足够
+        const totalAppBalance = appEarnings.totalBalance;
+        if (amount > totalAppBalance) {
+            return { success: false, message: `软件余额不足，当前可提现：¥${totalAppBalance.toFixed(2)}` };
+        }
+        
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        // 创建转账记录
+        const transfer = {
+            id: Date.now().toString(),
+            type: 'apps_to_wallet',
+            amount: amount,
+            date: today,
+            description: description || '软件收入提现',
+            createdAt: new Date().toISOString()
+        };
+        
+        finance.transfers.push(transfer);
+        finance.wallet += amount;
+        
+        this.savePersonalFinance(finance);
+        
+        return { 
+            success: true, 
+            message: `成功提现 ¥${amount.toFixed(2)} 到个人钱包`,
+            transfer: transfer
+        };
+    }
+
+    // 记录个人支出
+    static addPersonalExpense(expenseData) {
+        const finance = this.getPersonalFinance();
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        const amount = parseFloat(expenseData.amount) || 0;
+        
+        if (amount <= 0) {
+            return { success: false, message: '金额必须大于0' };
+        }
+        
+        if (amount > finance.wallet) {
+            return { success: false, message: `钱包余额不足，当前余额：¥${finance.wallet.toFixed(2)}` };
+        }
+        
+        const newExpense = {
+            id: Date.now().toString(),
+            category: expenseData.category,
+            categoryName: this.getExpenseCategoryName(expenseData.category),
+            amount: amount,
+            date: expenseData.date || today,
+            description: expenseData.description || '',
+            createdAt: new Date().toISOString()
+        };
+        
+        finance.expenses.push(newExpense);
+        finance.wallet -= amount;
+        finance.totalSpent += amount;
+        
+        this.savePersonalFinance(finance);
+        
+        return { 
+            success: true, 
+            message: '支出记录成功',
+            expense: newExpense
+        };
+    }
+
+    // 获取支出分类名称
+    static getExpenseCategoryName(category) {
+        const categoryMap = {
+            'food': '🍔 餐饮',
+            'transport': '🚗 交通',
+            'shopping': '🛍️ 购物',
+            'entertainment': '🎮 娱乐',
+            'housing': '🏠 住房',
+            'medical': '🏥 医疗',
+            'education': '📚 教育',
+            'other': '📦 其他'
+        };
+        return categoryMap[category] || '📦 其他';
+    }
+
+    // 获取支出分类列表
+    static getExpenseCategories() {
+        return [
+            { id: 'food', name: '🍔 餐饮' },
+            { id: 'transport', name: '🚗 交通' },
+            { id: 'shopping', name: '🛍️ 购物' },
+            { id: 'entertainment', name: '🎮 娱乐' },
+            { id: 'housing', name: '🏠 住房' },
+            { id: 'medical', name: '🏥 医疗' },
+            { id: 'education', name: '📚 教育' },
+            { id: 'other', name: '📦 其他' }
+        ];
+    }
+
+    // 计算完整的财务统计
+    static calculateCompleteFinancialStats() {
+        const finance = this.getPersonalFinance();
+        const appEarnings = this.calculateTotalEarnings();
+        const assets = this.calculateAssetStats();
+        
+        // 计算本月收入
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        
+        const monthlyIncome = finance.incomeSources
+            .filter(s => s.date.startsWith(currentMonth))
+            .reduce((sum, s) => sum + s.amount, 0);
+        
+        const monthlyExpenses = finance.expenses
+            .filter(e => e.date.startsWith(currentMonth))
+            .reduce((sum, e) => sum + e.amount, 0);
+        
+        // 计算软件收入本月统计
+        const monthlyAppEarnings = this.calculateMonthlyEarnings(now.getFullYear(), now.getMonth() + 1);
+        
+        return {
+            // 软件资金
+            appEarnings: appEarnings,
+            
+            // 个人资金
+            personalWallet: finance.wallet,
+            personalTotalEarned: finance.totalEarned,
+            personalTotalSpent: finance.totalSpent,
+            
+            // 资产
+            assetsValue: assets.totalValue,
+            assetsCount: assets.totalAssets,
+            
+            // 汇总
+            totalWealth: finance.wallet + appEarnings.totalBalance + assets.totalValue,
+            liquidAssets: finance.wallet + appEarnings.totalBalance,
+            fixedAssets: assets.totalValue,
+            
+            // 本月统计
+            monthlyIncome: monthlyIncome,
+            monthlyExpenses: monthlyExpenses,
+            monthlyAppEarnings: monthlyAppEarnings,
+            monthlyNetSavings: monthlyIncome + monthlyAppEarnings - monthlyExpenses,
+            
+            // 历史记录
+            incomeSources: finance.incomeSources.sort((a, b) => new Date(b.date) - new Date(a.date)),
+            expenses: finance.expenses.sort((a, b) => new Date(b.date) - new Date(a.date)),
+            transfers: finance.transfers.sort((a, b) => new Date(b.date) - new Date(a.date))
+        };
     }
 
     // 计算资产统计
@@ -1946,6 +2267,28 @@ class DataManager {
             appCount: data.phones.reduce((sum, p) => sum + p.apps.length, 0),
             phoneCount: data.phones.length
         };
+    }
+
+    // 计算指定月份的软件收益
+    static calculateMonthlyEarnings(year, month) {
+        const data = this.loadData();
+        let monthlyEarned = 0;
+        const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                // 从 dailyEarnings 中统计
+                if (app.dailyEarnings) {
+                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
+                        if (date.startsWith(monthStr)) {
+                            monthlyEarned += amount;
+                        }
+                    });
+                }
+            });
+        });
+        
+        return monthlyEarned;
     }
 
     // ==================== 游戏计时功能 ====================
@@ -4100,6 +4443,280 @@ function renderDashboard() {
     
     // 渲染年度目标
     renderYearlyGoal();
+    
+    // 渲染个人财务概览
+    renderPersonalFinanceOverview();
+}
+
+// 渲染个人财务概览
+function renderPersonalFinanceOverview() {
+    const container = document.getElementById('personal-finance-content');
+    if (!container) return;
+    
+    const stats = DataManager.calculateCompleteFinancialStats();
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
+                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px;">💰 个人钱包</div>
+                <div style="font-size: 20px; font-weight: 700;">¥${stats.personalWallet.toFixed(2)}</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
+                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px;">💵 软件余额</div>
+                <div style="font-size: 20px; font-weight: 700;">¥${stats.appEarnings.totalBalance.toFixed(2)}</div>
+            </div>
+        </div>
+        
+        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 12px; padding: 16px; color: white; text-align: center; margin-bottom: 16px;">
+            <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">💎 总资产</div>
+            <div style="font-size: 28px; font-weight: 700;">¥${stats.totalWealth.toFixed(2)}</div>
+            <div style="font-size: 11px; opacity: 0.8; margin-top: 4px;">
+                流动资产 ¥${stats.liquidAssets.toFixed(2)} + 固定资产 ¥${stats.fixedAssets.toFixed(2)}
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;">
+            <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">本月收入</div>
+                <div style="font-size: 14px; font-weight: 600; color: #22c55e;">¥${(stats.monthlyIncome + stats.monthlyAppEarnings).toFixed(2)}</div>
+            </div>
+            <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">本月支出</div>
+                <div style="font-size: 14px; font-weight: 600; color: #ef4444;">¥${stats.monthlyExpenses.toFixed(2)}</div>
+            </div>
+            <div style="background: rgba(59, 130, 246, 0.1); border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">本月结余</div>
+                <div style="font-size: 14px; font-weight: 600; color: #3b82f6;">¥${stats.monthlyNetSavings.toFixed(2)}</div>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 8px;">
+            <button class="btn btn-primary" style="flex: 1; font-size: 12px;" onclick="openAddIncomeModal()">➕ 记收入</button>
+            <button class="btn btn-secondary" style="flex: 1; font-size: 12px;" onclick="openAddExpenseModal()">➖ 记支出</button>
+            <button class="btn" style="flex: 1; font-size: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;" onclick="openTransferModal()">💱 提现</button>
+        </div>
+    `;
+}
+
+// 打开记收入弹窗
+function openAddIncomeModal() {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    showModal(
+        '➕ 记录收入',
+        `
+            <div class="form-group">
+                <label class="form-label">收入类型</label>
+                <select id="income-type" class="form-input">
+                    <option value="salary">💰 工资收入</option>
+                    <option value="bonus">🎁 奖金/红包</option>
+                    <option value="investment">📈 投资收益</option>
+                    <option value="gift">🎀 礼物</option>
+                    <option value="refund">💸 退款</option>
+                    <option value="other">📦 其他收入</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">金额 (元)</label>
+                <input type="number" id="income-amount" class="form-input" placeholder="输入金额" step="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">日期</label>
+                <input type="text" id="income-date" class="form-input" value="${todayStr}" placeholder="例如：2026-02-28" maxlength="10">
+                <div class="form-hint">格式：YYYY-MM-DD</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">备注 (可选)</label>
+                <input type="text" id="income-description" class="form-input" placeholder="例如：2月工资">
+            </div>
+        `,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: '保存',
+                class: 'btn-primary',
+                action: () => {
+                    const type = document.getElementById('income-type').value;
+                    const amount = parseFloat(document.getElementById('income-amount').value);
+                    const date = document.getElementById('income-date').value;
+                    const description = document.getElementById('income-description').value.trim();
+                    
+                    if (!amount || amount <= 0) {
+                        showToast('请输入有效的金额', 'error');
+                        return;
+                    }
+                    
+                    // 验证日期格式
+                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    if (!dateRegex.test(date)) {
+                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
+                        return;
+                    }
+                    
+                    DataManager.addIncomeSource({
+                        type,
+                        amount,
+                        date,
+                        description
+                    });
+                    
+                    showToast('收入记录成功！');
+                    renderPersonalFinanceOverview();
+                    closeModal();
+                }
+            }
+        ]
+    );
+}
+
+// 打开记支出弹窗
+function openAddExpenseModal() {
+    const categories = DataManager.getExpenseCategories();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    showModal(
+        '➖ 记录支出',
+        `
+            <div class="form-group">
+                <label class="form-label">支出分类</label>
+                <select id="expense-category" class="form-input">
+                    ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">金额 (元)</label>
+                <input type="number" id="expense-amount" class="form-input" placeholder="输入金额" step="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">日期</label>
+                <input type="text" id="expense-date" class="form-input" value="${todayStr}" placeholder="例如：2026-02-28" maxlength="10">
+                <div class="form-hint">格式：YYYY-MM-DD</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">备注 (可选)</label>
+                <input type="text" id="expense-description" class="form-input" placeholder="例如：午餐">
+            </div>
+        `,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: '保存',
+                class: 'btn-primary',
+                action: () => {
+                    const category = document.getElementById('expense-category').value;
+                    const amount = parseFloat(document.getElementById('expense-amount').value);
+                    const date = document.getElementById('expense-date').value;
+                    const description = document.getElementById('expense-description').value.trim();
+                    
+                    if (!amount || amount <= 0) {
+                        showToast('请输入有效的金额', 'error');
+                        return;
+                    }
+                    
+                    // 验证日期格式
+                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    if (!dateRegex.test(date)) {
+                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
+                        return;
+                    }
+                    
+                    const result = DataManager.addPersonalExpense({
+                        category,
+                        amount,
+                        date,
+                        description
+                    });
+                    
+                    if (result.success) {
+                        showToast(result.message);
+                        renderPersonalFinanceOverview();
+                        closeModal();
+                    } else {
+                        showToast(result.message, 'error');
+                    }
+                }
+            }
+        ]
+    );
+}
+
+// 打开提现弹窗
+function openTransferModal() {
+    const stats = DataManager.calculateCompleteFinancialStats();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    showModal(
+        '💱 软件收入提现',
+        `
+            <div class="form-group">
+                <label class="form-label">可提现金额</label>
+                <div style="font-size: 24px; font-weight: 700; color: var(--primary-color);">¥${stats.appEarnings.totalBalance.toFixed(2)}</div>
+                <div class="form-hint">软件账户总余额</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">提现金额 (元)</label>
+                <input type="number" id="transfer-amount" class="form-input" placeholder="输入提现金额" step="0.01" max="${stats.appEarnings.totalBalance}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">日期</label>
+                <input type="text" id="transfer-date" class="form-input" value="${todayStr}" placeholder="例如：2026-02-28" maxlength="10">
+                <div class="form-hint">格式：YYYY-MM-DD</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">备注 (可选)</label>
+                <input type="text" id="transfer-description" class="form-input" placeholder="例如：提现到银行卡">
+            </div>
+        `,
+        [
+            {
+                text: '取消',
+                class: 'btn-secondary',
+                action: closeModal
+            },
+            {
+                text: '确认提现',
+                class: 'btn-primary',
+                action: () => {
+                    const amount = parseFloat(document.getElementById('transfer-amount').value);
+                    const date = document.getElementById('transfer-date').value;
+                    const description = document.getElementById('transfer-description').value.trim();
+                    
+                    if (!amount || amount <= 0) {
+                        showToast('请输入有效的金额', 'error');
+                        return;
+                    }
+                    
+                    // 验证日期格式
+                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    if (!dateRegex.test(date)) {
+                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
+                        return;
+                    }
+                    
+                    const result = DataManager.transferFromAppsToWallet(amount, description);
+                    
+                    if (result.success) {
+                        showToast(result.message);
+                        renderPersonalFinanceOverview();
+                        closeModal();
+                    } else {
+                        showToast(result.message, 'error');
+                    }
+                }
+            }
+        ]
+    );
 }
 
 // 渲染总赚取金额
