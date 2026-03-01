@@ -3048,6 +3048,20 @@ class DataManager {
         return data;
     }
     
+    static updateGameName(phoneId, gameId, newName) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone && phone.games) {
+            const game = phone.games.find(g => g.id === gameId);
+            if (game) {
+                game.name = newName;
+                this.saveData(data);
+                return true;
+            }
+        }
+        return false;
+    }
+    
     static getGames(phoneId) {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
@@ -4601,58 +4615,6 @@ function renderDashboard() {
     // 渲染年度目标
     renderYearlyGoal();
     
-    // 渲染个人财务概览
-    renderPersonalFinanceOverview();
-}
-
-// 渲染个人财务概览
-function renderPersonalFinanceOverview() {
-    const container = document.getElementById('personal-finance-content');
-    if (!container) return;
-    
-    const stats = DataManager.calculateCompleteFinancialStats();
-    
-    container.innerHTML = `
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
-                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px;">💰 个人钱包</div>
-                <div style="font-size: 20px; font-weight: 700;">¥${stats.personalWallet.toFixed(2)}</div>
-            </div>
-            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
-                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px;">💵 软件余额</div>
-                <div style="font-size: 20px; font-weight: 700;">¥${stats.appEarnings.totalBalance.toFixed(2)}</div>
-            </div>
-        </div>
-        
-        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 12px; padding: 16px; color: white; text-align: center; margin-bottom: 16px;">
-            <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">💎 总资产</div>
-            <div style="font-size: 28px; font-weight: 700;">¥${stats.totalWealth.toFixed(2)}</div>
-            <div style="font-size: 11px; opacity: 0.8; margin-top: 4px;">
-                流动资产 ¥${stats.liquidAssets.toFixed(2)} + 固定资产 ¥${stats.fixedAssets.toFixed(2)}
-            </div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;">
-            <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">本月收入</div>
-                <div style="font-size: 14px; font-weight: 600; color: #22c55e;">¥${(stats.monthlyIncome + stats.monthlyAppEarnings).toFixed(2)}</div>
-            </div>
-            <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">本月支出</div>
-                <div style="font-size: 14px; font-weight: 600; color: #ef4444;">¥${stats.monthlyExpenses.toFixed(2)}</div>
-            </div>
-            <div style="background: rgba(59, 130, 246, 0.1); border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">本月结余</div>
-                <div style="font-size: 14px; font-weight: 600; color: #3b82f6;">¥${stats.monthlyNetSavings.toFixed(2)}</div>
-            </div>
-        </div>
-        
-        <div style="display: flex; gap: 8px;">
-            <button class="btn btn-primary" style="flex: 1; font-size: 12px;" onclick="openAddIncomeModal()">➕ 记收入</button>
-            <button class="btn btn-secondary" style="flex: 1; font-size: 12px;" onclick="openAddExpenseModal()">➖ 记支出</button>
-            <button class="btn" style="flex: 1; font-size: 12px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;" onclick="openTransferModal()">💱 提现</button>
-        </div>
-    `;
 }
 
 // 打开记收入弹窗
@@ -5318,13 +5280,16 @@ function renderAppEarningAnalysis() {
             const todayStatusText = isTodayAchieved ? '今日已达标' : '今日未达标';
 
             html += `
-                <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
+                <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
                             <span style="font-size: 12px;">${statusIcon}</span>
                             <span style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.appName}</span>
                         </div>
-                        <div style="font-size: 11px; color: var(--text-secondary);">${app.daysRemaining}天后还款</div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px;">编辑</button>
+                            <button class="btn btn-sm btn-primary" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px;">提现</button>
+                        </div>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
                         <span>目标: ¥${app.targetAmount.toFixed(2)}</span>
@@ -8193,9 +8158,12 @@ function renderGameList() {
     let html = '';
     games.forEach(game => {
         html += `
-            <div class="game-item">
-                <span class="game-name">${game.name}</span>
-                <button class="btn btn-error btn-sm" onclick="deleteGame('${game.id}')">删除</button>
+            <div class="game-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px;">
+                <span class="game-name" style="flex: 1; font-weight: 500;">${game.name}</span>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn btn-sm" onclick="editGameName('${game.id}', '${game.name}')" style="font-size: 11px; padding: 4px 10px;">修改</button>
+                    <button class="btn btn-error btn-sm" onclick="deleteGame('${game.id}')" style="font-size: 11px; padding: 4px 10px;">删除</button>
+                </div>
             </div>
         `;
     });
@@ -8225,6 +8193,16 @@ function deleteGame(gameId) {
         DataManager.deleteGame(currentGameDrawPhoneId, gameId);
         renderGameList();
         showToast('游戏删除成功', 'success');
+    }
+}
+
+// 修改游戏名称
+function editGameName(gameId, currentName) {
+    const newName = prompt('请输入新的游戏名称：', currentName);
+    if (newName && newName.trim() && newName.trim() !== currentName) {
+        DataManager.updateGameName(currentGameDrawPhoneId, gameId, newName.trim());
+        renderGameList();
+        showToast('游戏名称修改成功', 'success');
     }
 }
 
@@ -9974,9 +9952,12 @@ function renderYearlyGoal() {
                         <div style="background: rgba(255,255,255,0.4); border-radius: 8px; padding: 8px; margin-bottom: 10px;">
                             <div style="font-size: 10px; color: #92400e; margin-bottom: 6px; text-align: center;">目标构成</div>
                             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-                                <div style="background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px; text-align: center;">
+                                <div style="background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px; text-align: center; position: relative;">
                                     <div style="font-size: 9px; color: #64748b; margin-bottom: 2px;">💪 能力目标</div>
                                     <div style="font-size: 13px; font-weight: 700; color: #0369a1;">¥${dailyTarget.abilityTarget.toFixed(2)}</div>
+                                    ${dailyTarget.repaymentNeeded > 0 && dailyTarget.abilityTarget >= dailyTarget.repaymentNeeded ? `
+                                    <div style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: bold;">✓ 达标</div>
+                                    ` : ''}
                                 </div>
                                 ${dailyTarget.repaymentNeeded > 0 ? `
                                 <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 6px; text-align: center;">
