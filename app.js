@@ -3876,16 +3876,7 @@ class DataManager {
             });
         }
 
-        // 已完成软件
-        if (completedApps.length > 0) {
-            advice.push({
-                type: 'success',
-                icon: '✅',
-                title: '已完成目标的软件',
-                message: `${completedApps.length} 个软件已完成还款目标`,
-                detail: completedApps.slice(0, 3).map(a => a.appName).join('、') + (completedApps.length > 3 ? '等' : '')
-            });
-        }
+        // 已完成软件信息将合并到还款周期分析中，不再单独显示
 
         return advice;
     }
@@ -5186,6 +5177,7 @@ function renderAppEarningAnalysis() {
 
     const appAnalysis = DataManager.calculateAppEarningGap();
     const advice = DataManager.generateAppEarningAdvice(appAnalysis);
+    const completedApps = appAnalysis.filter(a => a.status === 'completed');
 
     if (appAnalysis.length === 0) {
         card.style.display = 'none';
@@ -5243,6 +5235,19 @@ function renderAppEarningAnalysis() {
                             <div style="font-size: 11px; color: #64748b; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
                                 ${item.detail}
                             </div>
+                            
+                            <!-- 已完成软件统计 -->
+                            ${completedApps.length > 0 ? `
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1;">
+                                <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #16a34a;">
+                                    <span>✅</span>
+                                    <span><b>${completedApps.length}</b> 个软件已完成目标</span>
+                                </div>
+                                <div style="font-size: 10px; color: #64748b; margin-top: 4px; padding-left: 20px;">
+                                    ${completedApps.slice(0, 2).map(a => a.appName).join('、')}${completedApps.length > 2 ? '等' : ''}
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 `;
