@@ -8879,7 +8879,10 @@ function resetDrawArea() {
         // 今天还没抽签，显示抽签按钮
         container.innerHTML = `
             <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
-            <button class="btn" onclick="drawTodayGame()" style="background: white; color: #11998e; font-weight: bold; font-size: 16px;">🎮 开始抽签</button>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn" onclick="drawTodayGame()" style="background: white; color: #11998e; font-weight: bold; font-size: 16px;">🎮 本机抽签</button>
+                <button class="btn" onclick="showCrossPhoneDrawModal()" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; font-weight: bold; font-size: 16px;">🎲 跨手机抽签</button>
+            </div>
         `;
     }
 }
