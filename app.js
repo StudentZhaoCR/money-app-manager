@@ -2556,6 +2556,18 @@ class DataManager {
     static saveDownloadedGames(games) {
         localStorage.setItem(DOWNLOADED_GAMES_KEY, JSON.stringify(games));
     }
+    
+    // 更新下载的游戏名称
+    static updateDownloadedGameName(gameId, newName) {
+        const games = this.getDownloadedGames();
+        const game = games.find(g => g.id === gameId);
+        if (game) {
+            game.name = newName;
+            this.saveDownloadedGames(games);
+            return true;
+        }
+        return false;
+    }
 
     // 添加新下载的游戏
     static addDownloadedGame(gameName, phoneId = null) {
@@ -8150,6 +8162,8 @@ function renderGameList() {
     const games = DataManager.getGames(currentGameDrawPhoneId);
     const container = document.getElementById('game-list');
     
+    console.log('renderGameList 被调用，游戏数量:', games.length);
+    
     if (games.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无游戏，请添加游戏</div>';
         return;
@@ -8157,6 +8171,7 @@ function renderGameList() {
     
     let html = '';
     games.forEach(game => {
+        console.log('渲染游戏:', game.name, 'ID:', game.id);
         html += `
             <div class="game-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px;">
                 <span class="game-name" style="flex: 1; font-weight: 500;">${game.name}</span>
@@ -8169,6 +8184,7 @@ function renderGameList() {
     });
     
     container.innerHTML = html;
+    console.log('游戏列表 HTML 已生成');
 }
 
 // 添加游戏
@@ -8963,6 +8979,9 @@ function renderGamesList() {
                         <span style="color: ${statusColor}; font-weight: 600; font-size: 14px;">${statusText}</span>
                     </div>
                 </div>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                    <button class="btn btn-sm" onclick="editDownloadedGameName('${game.id}', '${game.name}')" style="font-size: 11px; padding: 4px 12px;">✏️ 修改名称</button>
+                </div>
                 <div class="progress-item">
                     <div class="progress-header" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span>游玩进度</span>
@@ -8982,6 +9001,16 @@ function renderGamesList() {
     }).join('');
     
     container.innerHTML = html;
+}
+
+// 修改下载的游戏名称
+function editDownloadedGameName(gameId, currentName) {
+    const newName = prompt('请输入新的游戏名称：', currentName);
+    if (newName && newName.trim() && newName.trim() !== currentName) {
+        DataManager.updateDownloadedGameName(gameId, newName.trim());
+        renderGamesList();
+        showToast('游戏名称修改成功', 'success');
+    }
 }
 
 // 渲染抽签历史（只显示今天的记录）
@@ -9924,6 +9953,20 @@ function renderYearlyGoal() {
                 const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 const todayRecord = DataManager.getDailyGap(today);
                 
+                // 计算今日实际收益
+                const data = DataManager.loadData();
+                let todayEarned = 0;
+                data.phones.forEach(phone => {
+                    phone.apps.forEach(app => {
+                        if (app.dailyEarnings && app.dailyEarnings[today]) {
+                            todayEarned += parseFloat(app.dailyEarnings[today]) || 0;
+                        }
+                    });
+                });
+                
+                // 判断今日赚取是否达到还款所需
+                const isRepaymentAchieved = dailyTarget.repaymentNeeded > 0 && todayEarned >= dailyTarget.repaymentNeeded;
+                
                 return `
                     <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 2px solid #fbbf24;">
                         <!-- 标题行 -->
@@ -9952,17 +9995,19 @@ function renderYearlyGoal() {
                         <div style="background: rgba(255,255,255,0.4); border-radius: 8px; padding: 8px; margin-bottom: 10px;">
                             <div style="font-size: 10px; color: #92400e; margin-bottom: 6px; text-align: center;">目标构成</div>
                             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-                                <div style="background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px; text-align: center; position: relative;">
+                                <div style="background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px; text-align: center;">
                                     <div style="font-size: 9px; color: #64748b; margin-bottom: 2px;">💪 能力目标</div>
                                     <div style="font-size: 13px; font-weight: 700; color: #0369a1;">¥${dailyTarget.abilityTarget.toFixed(2)}</div>
-                                    ${dailyTarget.repaymentNeeded > 0 && dailyTarget.abilityTarget >= dailyTarget.repaymentNeeded ? `
-                                    <div style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: bold;">✓ 达标</div>
-                                    ` : ''}
                                 </div>
                                 ${dailyTarget.repaymentNeeded > 0 ? `
-                                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 6px; text-align: center;">
-                                    <div style="font-size: 9px; color: #991b1b; margin-bottom: 2px;">💰 还款所需</div>
-                                    <div style="font-size: 13px; font-weight: 700; color: #991b1b;">¥${dailyTarget.repaymentNeeded.toFixed(2)}</div>
+                                <div style="background: ${isRepaymentAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.1)'}; border-radius: 6px; padding: 6px; text-align: center; position: relative;">
+                                    <div style="font-size: 9px; color: ${isRepaymentAchieved ? '#166534' : '#991b1b'}; margin-bottom: 2px;">
+                                        💰 还款所需 ${isRepaymentAchieved ? '✓' : ''}
+                                    </div>
+                                    <div style="font-size: 13px; font-weight: 700; color: ${isRepaymentAchieved ? '#16a34a' : '#991b1b'};">¥${dailyTarget.repaymentNeeded.toFixed(2)}</div>
+                                    ${isRepaymentAchieved ? `
+                                    <div style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; font-size: 9px; padding: 1px 4px; border-radius: 8px; font-weight: bold;">已达标</div>
+                                    ` : ''}
                                 </div>
                                 ` : `
                                 <div style="background: rgba(34, 197, 94, 0.1); border-radius: 6px; padding: 6px; text-align: center;">
