@@ -1567,7 +1567,7 @@ class DataManager {
         };
     }
 
-    // 计算每日目标（智能动态目标）
+    // 计算每日目标（基于能力+还款保底）
     static calculateDailyTarget() {
         const goal = this.getYearlyGoal();
         const avgStats = this.calculateAverageDailyEarnings();
@@ -1583,11 +1583,11 @@ class DataManager {
             };
         }
         
-        // 1. 计算还款所需日赚（如果有还款计划）
+        // 1. 计算还款所需日赚（硬性要求）
         const repaymentNeeded = repaymentStats.hasRepayment ? repaymentStats.dailyNeeded : 0;
         
-        // 2. 计算动态激励目标
-        let dynamicTarget = 0;
+        // 2. 计算历史能力目标（基于赚钱能力）
+        let abilityTarget = 0;
         let dynamicFactor = 1.0;
         let performanceLevel = 'normal';
         
@@ -1599,54 +1599,53 @@ class DataManager {
             if (last7Avg >= historyAvg * 1.2) {
                 // 表现优秀：保持高水平
                 dynamicFactor = 1.0;
-                dynamicTarget = last7Avg;
+                abilityTarget = last7Avg;
                 performanceLevel = 'excellent';
             } else if (last7Avg >= historyAvg) {
                 // 表现正常：稍微激励
                 dynamicFactor = 1.1;
-                dynamicTarget = historyAvg * 1.1;
+                abilityTarget = historyAvg * 1.1;
                 performanceLevel = 'normal';
             } else if (last7Avg >= historyAvg * 0.5) {
                 // 表现下滑：鼓励恢复
                 dynamicFactor = 0.9;
-                dynamicTarget = historyAvg * 0.9;
+                abilityTarget = historyAvg * 0.9;
                 performanceLevel = 'declining';
             } else if (last7Avg > 0) {
                 // 表现很差：降低目标建立信心
                 dynamicFactor = 0.7;
-                dynamicTarget = historyAvg * 0.7;
+                abilityTarget = historyAvg * 0.7;
                 performanceLevel = 'poor';
             } else {
                 // 最近7天无数据，使用历史平均
                 dynamicFactor = 1.0;
-                dynamicTarget = historyAvg;
+                abilityTarget = historyAvg;
                 performanceLevel = 'no_recent_data';
             }
         } else {
             // 无历史数据，使用默认值
-            dynamicTarget = 10;
+            abilityTarget = 10;
             performanceLevel = 'new_user';
         }
         
         // 3. 综合计算最终目标
-        // 取还款所需和动态目标的较大值
-        let finalTarget = Math.max(repaymentNeeded, dynamicTarget);
+        // 取能力目标和还款所需的较大值
+        let finalTarget = Math.max(abilityTarget, repaymentNeeded);
         
-        // 4. 设置保底和上限
-        const minTarget = 5;  // 最低保底5元
-        const maxTarget = Math.max(maxDailyEarnings * 1.2, repaymentNeeded * 1.5, 100);  // 上限
-        
-        finalTarget = Math.max(minTarget, Math.min(maxTarget, finalTarget));
+        // 4. 设置上限（防止目标过高）
+        const maxTarget = Math.max(maxDailyEarnings * 1.2, repaymentNeeded * 1.5, 100);
+        finalTarget = Math.min(finalTarget, maxTarget);
         
         return {
             dailyTarget: finalTarget,
+            abilityTarget: abilityTarget,        // 能力目标
+            repaymentNeeded: repaymentNeeded,    // 还款所需
             avgDailyEarnings: avgStats.avgDailyEarnings,
             last7DaysAvg: last7DaysStats.avgDailyEarnings,
             maxDailyEarnings: maxDailyEarnings,
             daysWithData: avgStats.daysCount,
             dynamicFactor: dynamicFactor,
             performanceLevel: performanceLevel,
-            repaymentNeeded: repaymentNeeded,
             repaymentInfo: repaymentStats,
             isValid: true
         };
@@ -9968,23 +9967,41 @@ function renderYearlyGoal() {
                         </div>
                         
                         <!-- 历史数据小字 -->
+                        <!-- 目标构成说明 -->
+                        <div style="background: rgba(255,255,255,0.4); border-radius: 8px; padding: 8px; margin-bottom: 10px;">
+                            <div style="font-size: 10px; color: #92400e; margin-bottom: 6px; text-align: center;">目标构成</div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+                                <div style="background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px; text-align: center;">
+                                    <div style="font-size: 9px; color: #64748b; margin-bottom: 2px;">💪 能力目标</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #0369a1;">¥${dailyTarget.abilityTarget.toFixed(2)}</div>
+                                </div>
+                                ${dailyTarget.repaymentNeeded > 0 ? `
+                                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 6px; text-align: center;">
+                                    <div style="font-size: 9px; color: #991b1b; margin-bottom: 2px;">💰 还款所需</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #991b1b;">¥${dailyTarget.repaymentNeeded.toFixed(2)}</div>
+                                </div>
+                                ` : `
+                                <div style="background: rgba(34, 197, 94, 0.1); border-radius: 6px; padding: 6px; text-align: center;">
+                                    <div style="font-size: 9px; color: #166534; margin-bottom: 2px;">✅ 无还款</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #166534;">-</div>
+                                </div>
+                                `}
+                            </div>
+                            ${dailyTarget.repaymentNeeded > dailyTarget.abilityTarget ? `
+                            <div style="font-size: 9px; color: #991b1b; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
+                                ⚠️ 还款压力较大，目标按还款需求计算
+                            </div>
+                            ` : dailyTarget.repaymentNeeded > 0 ? `
+                            <div style="font-size: 9px; color: #166534; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
+                                ✅ 能力足够覆盖还款需求
+                            </div>
+                            ` : ''}
+                        </div>
+                        
                         ${dailyTarget.avgDailyEarnings > 0 ? `
-                        <div style="margin-bottom: 10px; font-size: 10px; color: #92400e; text-align: center;">
+                        <div style="margin-bottom: 10px; font-size: 9px; color: #92400e; text-align: center;">
                             历史平均: ¥${dailyTarget.avgDailyEarnings.toFixed(2)}
                             ${dailyTarget.last7DaysAvg > 0 ? ` | 近7天: ¥${dailyTarget.last7DaysAvg.toFixed(2)}` : ''}
-                        </div>
-                        ` : ''}
-                        
-                        <!-- 还款需求（紧凑版） -->
-                        ${dailyTarget.repaymentNeeded > 0 && dailyTarget.repaymentInfo ? `
-                        <div style="background: rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 8px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 10px; color: #991b1b;">💰 还款所需</span>
-                                <span style="font-size: 14px; font-weight: 700; color: #991b1b;">¥${dailyTarget.repaymentNeeded.toFixed(2)}/天</span>
-                            </div>
-                            <div style="font-size: 9px; color: #991b1b; margin-top: 2px;">
-                                剩余¥${(dailyTarget.repaymentInfo.totalRemaining || 0).toFixed(2)} · ${dailyTarget.repaymentInfo.daysUntilDue || 0}天到期${dailyTarget.repaymentInfo.lastDueDate ? '(' + dailyTarget.repaymentInfo.lastDueDate + ')' : ''}
-                            </div>
                         </div>
                         ` : ''}
                         
