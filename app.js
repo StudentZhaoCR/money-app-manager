@@ -4187,6 +4187,9 @@ function init() {
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
+    
+    // 初始化滑动切换页面功能
+    initSwipeNavigation();
 }
 
 // 修复旧版本数据：为没有历史记录的手机初始化历史记录
@@ -4624,7 +4627,7 @@ function renderPersonalFinanceOverview() {
     
     container.innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
+            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
                 <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px;">💰 个人钱包</div>
                 <div style="font-size: 20px; font-weight: 700;">¥${stats.personalWallet.toFixed(2)}</div>
             </div>
@@ -4660,7 +4663,7 @@ function renderPersonalFinanceOverview() {
         <div style="display: flex; gap: 8px;">
             <button class="btn btn-primary" style="flex: 1; font-size: 12px;" onclick="openAddIncomeModal()">➕ 记收入</button>
             <button class="btn btn-secondary" style="flex: 1; font-size: 12px;" onclick="openAddExpenseModal()">➖ 记支出</button>
-            <button class="btn" style="flex: 1; font-size: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;" onclick="openTransferModal()">💱 提现</button>
+            <button class="btn" style="flex: 1; font-size: 12px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;" onclick="openTransferModal()">💱 提现</button>
         </div>
     `;
 }
@@ -8514,7 +8517,7 @@ function renderAssetsStats() {
     
     container.innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
+            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
                 <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">总资产价值</div>
                 <div style="font-size: 24px; font-weight: 700;">¥${stats.totalValue.toFixed(2)}</div>
             </div>
@@ -8875,7 +8878,7 @@ function resetDrawArea() {
         // 今天还没抽签，显示抽签按钮
         container.innerHTML = `
             <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
-            <button class="btn" onclick="drawTodayGame()" style="background: white; color: #667eea; font-weight: bold; font-size: 16px;">🎮 开始抽签</button>
+            <button class="btn" onclick="drawTodayGame()" style="background: white; color: #11998e; font-weight: bold; font-size: 16px;">🎮 开始抽签</button>
         `;
     }
 }
@@ -8900,7 +8903,7 @@ function renderGameStats() {
         <div style="margin-bottom: 16px; padding: 12px; background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
             <div style="font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">${phoneName}</div>
             <div class="stats-row">
-                <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="stat-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
                     <span class="stat-label" style="color: white;">总游戏数</span>
                     <span class="stat-value" style="color: white;">${stat.totalGames}</span>
                 </div>
@@ -9377,7 +9380,7 @@ function showTodayDrawResult(todayDraw) {
 
             <!-- 完成按钮 -->
             ${!isCompletedToday ? `
-            <button class="btn" onclick="completeTodayGame()" style="background: rgba(255,255,255,0.9); color: #667eea; font-weight: bold; font-size: 16px; margin-top: 16px; padding: 12px 32px; border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+            <button class="btn" onclick="completeTodayGame()" style="background: rgba(255,255,255,0.9); color: #11998e; font-weight: bold; font-size: 16px; margin-top: 16px; padding: 12px 32px; border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
                 ✅ 标记今日已完成
             </button>
             ` : `
@@ -9899,7 +9902,7 @@ function renderYearlyGoal() {
     let html = `
         <div style="padding: 16px;">
             <!-- 总体进度 -->
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; color: white; margin-bottom: 20px;">
+            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 20px; color: white; margin-bottom: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <span style="font-size: 14px; opacity: 0.9;">收益目标</span>
                     <span style="font-size: 20px; font-weight: bold;">¥${goal.amount.toFixed(2)}</span>
@@ -10071,7 +10074,7 @@ function renderYearlyGoal() {
                 rankColor = '#38ef7d';
             } else if (app.rank <= Math.ceil(distribution.apps.length * 0.67)) {
                 rankBadge = '📈 良好';
-                rankColor = '#667eea';
+                rankColor = '#11998e';
             } else {
                 rankBadge = '💪 加油';
                 rankColor = '#f093fb';
@@ -10217,7 +10220,7 @@ function showDailyGapDetailModal() {
     const html = `
         <div style="max-height: 60vh; overflow-y: auto;">
             <!-- 统计概览 -->
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; margin-bottom: 16px;">
+            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; color: white; margin-bottom: 16px;">
                 <div style="text-align: center; margin-bottom: 12px;">
                     <div style="font-size: 24px; font-weight: bold;">¥${dailyTarget.dailyTarget.toFixed(2)}</div>
                     <div style="font-size: 12px; opacity: 0.9;">每天需赚</div>
@@ -10338,12 +10341,12 @@ function viewYearlyGoalDetail() {
 
     appsHtml += renderAppGroup(surplusApps, '🚀 超额完成', '#38ef7d');
     appsHtml += renderAppGroup(deficitApps, '📈 仍需努力', '#f093fb');
-    appsHtml += renderAppGroup(balancedApps, '✅ 刚好达标', '#667eea');
+    appsHtml += renderAppGroup(balancedApps, '✅ 刚好达标', '#11998e');
 
     const bodyHtml = `
         <div style="max-height: 60vh; overflow-y: auto;">
             <!-- 总体概况 -->
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; margin-bottom: 20px;">
+            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; color: white; margin-bottom: 20px;">
                 <div style="text-align: center; margin-bottom: 12px;">
                     <div style="font-size: 24px; font-weight: bold;">¥${goal.amount.toFixed(2)}</div>
                     <div style="font-size: 12px; opacity: 0.9;">${goal.year}年目标</div>
@@ -10467,7 +10470,7 @@ function renderDailyGoalContent() {
     
     let html = `
         <!-- 顶部信息栏 -->
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; margin-bottom: 16px; color: white;">
+        <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; margin-bottom: 16px; color: white;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <div>
                     <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">每日目标</div>
@@ -10806,7 +10809,7 @@ function renderDailyGoalCalendar() {
                 font-size: ${isToday ? '14px' : '12px'};
                 font-weight: ${isToday ? 'bold' : 'normal'};
                 color: ${textColor};
-                border: ${isToday ? '2px solid #667eea' : 'none'};
+                border: ${isToday ? '2px solid #11998e' : 'none'};
                 position: relative;
             " title="${dateStr}${hasRecord ? ' - 收益: ¥' + earnedAmount.toFixed(2) : ' - 无记录'}">
                 <span>${day}</span>
@@ -10858,5 +10861,87 @@ document.addEventListener('DOMContentLoaded', function() {
     restoreGameTimer(); // 恢复计时器状态
     loadYearlyGoalSettings(); // 加载年度目标设置
 });
+
+// 滑动切换页面功能
+function initSwipeNavigation() {
+    const pages = ['dashboard', 'phones', 'stats', 'installments', 'games', 'assets', 'settings'];
+    let currentPageIndex = 0;
+    let touchStartX = 0;
+    let touchEndX = 0;
+    let touchStartY = 0;
+    let touchEndY = 0;
+    const minSwipeDistance = 50; // 最小滑动距离
+    const maxVerticalDistance = 100; // 最大垂直滑动距离（防止斜滑）
+    
+    // 获取当前页面索引
+    function getCurrentPageIndex() {
+        const activeTab = document.querySelector('.tab-item.active');
+        if (activeTab) {
+            const pageName = activeTab.getAttribute('data-page');
+            return pages.indexOf(pageName);
+        }
+        return 0;
+    }
+    
+    // 处理滑动
+    function handleSwipe() {
+        const horizontalDistance = touchEndX - touchStartX;
+        const verticalDistance = Math.abs(touchEndY - touchStartY);
+        
+        // 如果垂直滑动距离太大，不处理
+        if (verticalDistance > maxVerticalDistance) return;
+        
+        currentPageIndex = getCurrentPageIndex();
+        
+        if (Math.abs(horizontalDistance) > minSwipeDistance) {
+            if (horizontalDistance > 0) {
+                // 向右滑动 - 上一页
+                const prevIndex = currentPageIndex > 0 ? currentPageIndex - 1 : pages.length - 1;
+                showPage(pages[prevIndex]);
+            } else {
+                // 向左滑动 - 下一页
+                const nextIndex = currentPageIndex < pages.length - 1 ? currentPageIndex + 1 : 0;
+                showPage(pages[nextIndex]);
+            }
+        }
+    }
+    
+    // 触摸事件
+    document.addEventListener('touchstart', function(e) {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+    
+    document.addEventListener('touchend', function(e) {
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipe();
+    }, { passive: true });
+    
+    // 鼠标拖拽（桌面端支持）
+    let isMouseDown = false;
+    
+    document.addEventListener('mousedown', function(e) {
+        // 排除输入框和按钮
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+        
+        isMouseDown = true;
+        touchStartX = e.screenX;
+        touchStartY = e.screenY;
+    });
+    
+    document.addEventListener('mouseup', function(e) {
+        if (!isMouseDown) return;
+        isMouseDown = false;
+        
+        touchEndX = e.screenX;
+        touchEndY = e.screenY;
+        handleSwipe();
+    });
+    
+    document.addEventListener('mouseleave', function() {
+        isMouseDown = false;
+    });
+}
 
 
