@@ -4178,9 +4178,6 @@ function init() {
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
-    
-    // 初始化滑动切换页面功能
-    initSwipeNavigation();
 }
 
 // 修复旧版本数据：为没有历史记录的手机初始化历史记录
@@ -10867,86 +10864,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadYearlyGoalSettings(); // 加载年度目标设置
 });
 
-// 滑动切换页面功能
-function initSwipeNavigation() {
-    const pages = ['dashboard', 'phones', 'stats', 'installments', 'games', 'assets', 'settings'];
-    let currentPageIndex = 0;
-    let touchStartX = 0;
-    let touchEndX = 0;
-    let touchStartY = 0;
-    let touchEndY = 0;
-    const minSwipeDistance = 50; // 最小滑动距离
-    const maxVerticalDistance = 100; // 最大垂直滑动距离（防止斜滑）
-    
-    // 获取当前页面索引
-    function getCurrentPageIndex() {
-        const activeTab = document.querySelector('.tab-item.active');
-        if (activeTab) {
-            const pageName = activeTab.getAttribute('data-page');
-            return pages.indexOf(pageName);
-        }
-        return 0;
-    }
-    
-    // 处理滑动
-    function handleSwipe() {
-        const horizontalDistance = touchEndX - touchStartX;
-        const verticalDistance = Math.abs(touchEndY - touchStartY);
-        
-        // 如果垂直滑动距离太大，不处理
-        if (verticalDistance > maxVerticalDistance) return;
-        
-        currentPageIndex = getCurrentPageIndex();
-        
-        if (Math.abs(horizontalDistance) > minSwipeDistance) {
-            if (horizontalDistance > 0) {
-                // 向右滑动 - 上一页
-                const prevIndex = currentPageIndex > 0 ? currentPageIndex - 1 : pages.length - 1;
-                showPage(pages[prevIndex]);
-            } else {
-                // 向左滑动 - 下一页
-                const nextIndex = currentPageIndex < pages.length - 1 ? currentPageIndex + 1 : 0;
-                showPage(pages[nextIndex]);
-            }
-        }
-    }
-    
-    // 触摸事件
-    document.addEventListener('touchstart', function(e) {
-        touchStartX = e.changedTouches[0].screenX;
-        touchStartY = e.changedTouches[0].screenY;
-    }, { passive: true });
-    
-    document.addEventListener('touchend', function(e) {
-        touchEndX = e.changedTouches[0].screenX;
-        touchEndY = e.changedTouches[0].screenY;
-        handleSwipe();
-    }, { passive: true });
-    
-    // 鼠标拖拽（桌面端支持）
-    let isMouseDown = false;
-    
-    document.addEventListener('mousedown', function(e) {
-        // 排除输入框和按钮
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-        
-        isMouseDown = true;
-        touchStartX = e.screenX;
-        touchStartY = e.screenY;
-    });
-    
-    document.addEventListener('mouseup', function(e) {
-        if (!isMouseDown) return;
-        isMouseDown = false;
-        
-        touchEndX = e.screenX;
-        touchEndY = e.screenY;
-        handleSwipe();
-    });
-    
-    document.addEventListener('mouseleave', function() {
-        isMouseDown = false;
-    });
-}
+// 滑动切换页面功能已禁用
 
 
