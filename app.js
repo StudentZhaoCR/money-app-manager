@@ -654,7 +654,10 @@ function updateAppCard(phoneId, appId) {
     if (!phone) return;
     
     const app = phone.apps.find(a => a.id === appId);
-    if (!app) return;
+    if (!app) {
+        showToast('未找到该软件，请刷新页面后重试', 'error');
+        return;
+    }
     
     // 找到软件卡片元素
     const appCards = document.querySelectorAll('.app-card');
@@ -3812,6 +3815,7 @@ class DataManager {
 
                 appAnalysis.push({
                     phoneName: phone.name,
+                    phoneId: phone.id,
                     appName: app.name,
                     appId: app.id,
                     currentBalance,
@@ -6187,10 +6191,15 @@ function renderTodayApps(data) {
         // 找到app所属的手机ID
         let phoneId = '';
         data.phones.forEach(phone => {
-            if (phone.apps.find(a => a.id === app.id)) {
+            if (phone.apps && phone.apps.find(a => a.id === app.id)) {
                 phoneId = phone.id;
             }
         });
+        
+        // 如果找不到手机ID，尝试使用app.phoneId（如果有的话）
+        if (!phoneId && app.phoneId) {
+            phoneId = app.phoneId;
+        }
         return `
             <div style="position: relative; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); border-radius: 16px; padding: 16px; margin-bottom: 12px; overflow: hidden;">
                 <!-- 背景装饰圆形 -->
@@ -6209,8 +6218,10 @@ function renderTodayApps(data) {
                         <span>次数: <strong style="color: #78350f;">${withdrawalCount}次</strong></span>
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid rgba(120, 53, 15, 0.15);">
+                        ${phoneId ? `
                         <button class="btn btn-sm" onclick="editAppFromTodayFocus('${app.id}', '${phoneId}')" style="font-size: 11px; padding: 5px 14px; background: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.4); color: #78350f; border-radius: 6px;">✏️ 编辑</button>
                         <button class="btn btn-sm" onclick="withdrawAppFromTodayFocus('${app.id}', '${phoneId}')" style="font-size: 11px; padding: 5px 14px; background: rgba(17, 153, 142, 0.3); border: 1px solid rgba(17, 153, 142, 0.4); color: #78350f; border-radius: 6px;">💰 提现</button>
+                        ` : '<span style="font-size: 11px; color: #92400e;">无法编辑</span>'}
                     </div>
                 </div>
             </div>
@@ -6624,6 +6635,30 @@ function openWithdrawModal(phoneId, appId) {
             }
         }
     ]);
+}
+
+// 从软件赚取分析页面编辑软件
+function editAppFromAnalysis(appId, phoneId) {
+    event.stopPropagation();
+    openEditAppModal(phoneId, appId);
+}
+
+// 从今日需要关注页面编辑软件
+function editAppFromTodayFocus(appId, phoneId) {
+    event.stopPropagation();
+    openEditAppModal(phoneId, appId);
+}
+
+// 从软件赚取分析页面提现
+function withdrawAppFromAnalysis(appId, phoneId) {
+    event.stopPropagation();
+    openWithdrawModal(phoneId, appId);
+}
+
+// 从今日需要关注页面提现
+function withdrawAppFromTodayFocus(appId, phoneId) {
+    event.stopPropagation();
+    openWithdrawModal(phoneId, appId);
 }
 
 // 打开批量添加软件到所有手机的模态框

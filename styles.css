@@ -1017,6 +1017,12 @@ html[data-theme="dark"] .theme-item.active {
     box-sizing: border-box;
 }
 
+/* 滚动优化 - 启用GPU加速 */
+html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
 body {
     font-family: var(--font-primary);
     background: var(--gradient-body);
@@ -1028,6 +1034,28 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* 滚动性能优化 */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 优化毛玻璃效果的性能 - 使用will-change */
+[style*="backdrop-filter"],
+[style*="backdrop-filter: blur"] {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* 减少重绘区域 */
+.card, .stat-card, .app-item, [class*="glass"] {
+    contain: layout style paint;
+}
+
+/* 滚动容器优化 */
+.page {
+    contain: layout;
+    min-height: calc(100vh - 200px);
 }
 
 /* 导航栏 */
@@ -1145,8 +1173,11 @@ body {
 
 .stats-row {
     display: flex;
-    gap: 16px;
-    margin-bottom: 16px;
+    gap: 12px;
+    margin-bottom: 12px;
+    margin-left: -8px;
+    margin-right: -8px;
+    width: calc(100% + 16px);
 }
 
 .stats-row:last-child {
