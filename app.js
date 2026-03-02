@@ -5325,14 +5325,14 @@ function renderAppEarningAnalysis() {
                     
                     <!-- 毛玻璃卡片内容 -->
                     <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.25); padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 0;" onclick="showAppDetailModal('${app.appId}')">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 0; overflow: hidden;" onclick="showAppDetailModal('${app.appId}')">
                                 <span style="font-size: 14px; flex-shrink: 0;">${statusIcon}</span>
-                                <span style="font-size: 13px; font-weight: 600; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${app.phoneName} - ${app.appName}</span>
+                                <span style="font-size: 13px; font-weight: 600; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${app.phoneName} - ${app.appName}</span>
                             </div>
                             <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                                <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; white-space: nowrap;">✏️ 编辑</button>
-                                <button class="btn btn-sm" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px; background: rgba(56, 239, 125, 0.3); border: 1px solid rgba(56, 239, 125, 0.4); color: white; white-space: nowrap;">💰 提现</button>
+                                <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; white-space: nowrap; flex-shrink: 0;">✏️ 编辑</button>
+                                <button class="btn btn-sm" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px; background: rgba(56, 239, 125, 0.3); border: 1px solid rgba(56, 239, 125, 0.4); color: white; white-space: nowrap; flex-shrink: 0;">💰 提现</button>
                             </div>
                         </div>
                         <div style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,0.85); margin-bottom: 8px;">
@@ -6208,8 +6208,8 @@ function renderTodayApps(data) {
                 
                 <!-- 毛玻璃卡片内容 -->
                 <div style="position: relative; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 8px;">
-                        <span style="font-size: 14px; font-weight: 600; color: #78350f; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${app.phoneName} - ${app.name}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px;">
+                        <span style="font-size: 14px; font-weight: 600; color: #78350f; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${app.phoneName} - ${app.name}</span>
                         ${dailyTarget && dailyTarget.totalTargetAmount > 0 ? `<span style="font-size: 12px; color: #92400e; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;">需提现: ¥${dailyTarget.perAppTarget.toFixed(2)}</span>` : ''}
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 12px; color: #92400e; margin-bottom: 10px;">
