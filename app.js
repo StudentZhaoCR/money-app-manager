@@ -2660,6 +2660,21 @@ class DataManager {
         return games.filter(g => !g.deleted);
     }
 
+    // 获取已删除的游戏记录
+    static getDeletedGames() {
+        const games = this.getDownloadedGames();
+        return games.filter(g => g.deleted);
+    }
+
+    // 检查游戏是否之前被删除过
+    static checkIfGameWasDeleted(gameName, phoneId) {
+        const deletedGames = this.getDeletedGames();
+        return deletedGames.find(g => 
+            g.name === gameName && 
+            g.phoneId === phoneId
+        );
+    }
+
     // 获取今日要玩的游戏（抽签决定，可按手机ID筛选）
     static getTodayGameToPlay(phoneId = null) {
         const games = this.getDownloadedGames(phoneId);
@@ -4576,29 +4591,29 @@ function renderDashboard() {
                 ? (dailyTarget.totalWithdrawn / dailyTarget.totalTargetAmount * 100).toFixed(1)
                 : 0;
             dailyTargetEl.innerHTML = `
-                <div style="text-align: center; margin-bottom: 12px;">
-                    <div style="font-size: 13px; color: rgba(255,255,255,0.8); margin-bottom: 4px;">还款总目标</div>
-                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">¥${dailyTarget.totalTargetAmount.toFixed(2)}</div>
+                <div style="text-align: center; margin-bottom: 16px;">
+                    <div style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 6px;">还款总目标</div>
+                    <div style="font-size: 32px; font-weight: 700; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${dailyTarget.totalTargetAmount.toFixed(2)}</div>
                 </div>
 
-                <div style="background: rgba(255,255,255,0.2); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px;">
-                    <div style="background: #38ef7d; height: 100%; width: ${Math.min(100, progressPercent)}%; transition: width 0.5s ease; border-radius: 10px;"></div>
+                <div style="background: rgba(255,255,255,0.2); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 16px;">
+                    <div style="background: linear-gradient(90deg, #38ef7d, #11998e); height: 100%; width: ${Math.min(100, progressPercent)}%; transition: width 0.5s ease; border-radius: 10px;"></div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; text-align: center;">
-                    <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 10px;">
-                        <div style="font-size: 18px; font-weight: 700; color: #38ef7d;">¥${dailyTarget.totalWithdrawn.toFixed(2)}</div>
-                        <div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 2px;">已提现</div>
+                    <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 14px; border: 1px solid rgba(255,255,255,0.2);">
+                        <div style="font-size: 20px; font-weight: 700; color: #38ef7d;">¥${dailyTarget.totalWithdrawn.toFixed(2)}</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px;">已提现</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.15); border-radius: 8px; padding: 10px;">
-                        <div style="font-size: 18px; font-weight: 700; color: #ffffff;">¥${dailyTarget.remainingTarget.toFixed(2)}</div>
-                        <div style="font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 2px;">剩余</div>
+                    <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 14px; border: 1px solid rgba(255,255,255,0.2);">
+                        <div style="font-size: 20px; font-weight: 700; color: #ffffff;">¥${dailyTarget.remainingTarget.toFixed(2)}</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px;">剩余</div>
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);">
-                    <span style="font-size: 12px; color: rgba(255,255,255,0.8);">共 ${dailyTarget.totalApps} 个软件</span>
-                    <span style="font-size: 12px; color: rgba(255,255,255,0.8);">每个需 ¥${dailyTarget.perAppTarget.toFixed(2)}</span>
+                <div style="display: flex; justify-content: space-between; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    <span style="font-size: 13px; color: rgba(255,255,255,0.8);">共 ${dailyTarget.totalApps} 个软件</span>
+                    <span style="font-size: 13px; color: rgba(255,255,255,0.8);">每个需 ¥${dailyTarget.perAppTarget.toFixed(2)}</span>
                 </div>
             `;
         } else {
@@ -5161,63 +5176,70 @@ function renderAppEarningAnalysis() {
     // 显示建议
     if (advice.length > 0) {
         advice.forEach(item => {
-            // 还款周期分析使用特殊布局
+            // 还款周期分析使用特殊布局 - 毛玻璃效果
             if (item.title === '还款周期分析' || item.title === '还款资金充足') {
                 const isAchieved = item.todayAchieved;
                 const todayStatusColor = isAchieved ? '#22c55e' : '#f59e0b';
-                const todayStatusBg = isAchieved ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+                const todayStatusBg = isAchieved ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)';
                 
                 html += `
-                    <div style="margin-bottom: 16px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; padding: 16px; border: 1px solid #bae6fd;">
-                        <!-- 标题 -->
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                            <span style="font-size: 20px;">${item.icon}</span>
-                            <span style="font-size: 15px; font-weight: 700; color: #0369a1;">${item.title}</span>
-                        </div>
+                    <div style="margin-bottom: 16px; position: relative; background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%); border-radius: 16px; padding: 20px; overflow: hidden;">
+                        <!-- 背景装饰圆形 -->
+                        <div style="position: absolute; top: -30px; right: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(20px);"></div>
+                        <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(15px);"></div>
                         
-                        <!-- 今日达标状态 -->
-                        <div style="background: ${todayStatusBg}; border-radius: 10px; padding: 12px; margin-bottom: 12px; border-left: 4px solid ${todayStatusColor};">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="font-size: 13px; font-weight: 600; color: ${isAchieved ? '#166534' : '#92400e'};">
-                                    ${isAchieved ? '✅ 今日已达标' : '⏳ 今日未达标'}
-                                </span>
-                                <span style="font-size: 12px; color: ${isAchieved ? '#166534' : '#92400e'};">
-                                    ${isAchieved ? '超额完成' : `还需 ¥${(item.todayTarget - item.todayEarned).toFixed(2)}`}
-                                </span>
-                            </div>
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
-                                    <div style="font-size: 16px; font-weight: 700; color: ${todayStatusColor};">¥${item.todayEarned.toFixed(2)}</div>
-                                    <div style="font-size: 10px; color: #64748b;">今日已赚</div>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 8px; text-align: center;">
-                                    <div style="font-size: 16px; font-weight: 700; color: #0369a1;">¥${item.todayTarget.toFixed(2)}</div>
-                                    <div style="font-size: 10px; color: #64748b;">今日目标</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- 还款信息 -->
-                        <div style="background: rgba(255,255,255,0.6); border-radius: 8px; padding: 12px;">
-                            <div style="font-size: 12px; color: #475569; margin-bottom: 8px; line-height: 1.6;">
-                                ${item.message}
-                            </div>
-                            <div style="font-size: 11px; color: #64748b; padding-top: 8px; border-top: 1px dashed #cbd5e1;">
-                                ${item.detail}
+                        <!-- 毛玻璃卡片内容 -->
+                        <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
+                            <!-- 标题 -->
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                                <span style="font-size: 20px;">${item.icon}</span>
+                                <span style="font-size: 15px; font-weight: 700; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${item.title}</span>
                             </div>
                             
-                            <!-- 已完成软件统计 -->
-                            ${completedApps.length > 0 ? `
-                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1;">
-                                <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #16a34a;">
-                                    <span>✅</span>
-                                    <span><b>${completedApps.length}</b> 个软件已完成目标</span>
+                            <!-- 今日达标状态 - 毛玻璃效果 -->
+                            <div style="background: ${todayStatusBg}; backdrop-filter: blur(5px); border-radius: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid ${isAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(245, 158, 11, 0.3)'};">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-size: 13px; font-weight: 600; color: ${isAchieved ? '#166534' : '#92400e'};">
+                                        ${isAchieved ? '✅ 今日已达标' : '⏳ 今日未达标'}
+                                    </span>
+                                    <span style="font-size: 12px; color: ${isAchieved ? '#166534' : '#92400e'}; font-weight: 600;">
+                                        ${isAchieved ? '超额完成' : `还需 ¥${(item.todayTarget - item.todayEarned).toFixed(2)}`}
+                                    </span>
                                 </div>
-                                <div style="font-size: 10px; color: #64748b; margin-top: 4px; padding-left: 20px;">
-                                    ${completedApps.slice(0, 2).map(a => a.appName).join('、')}${completedApps.length > 2 ? '等' : ''}
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                    <div style="background: rgba(255,255,255,0.25); backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
+                                        <div style="font-size: 18px; font-weight: 700; color: ${isAchieved ? '#166534' : '#92400e'};">¥${item.todayEarned.toFixed(2)}</div>
+                                        <div style="font-size: 10px; color: #78350f; margin-top: 2px;">今日已赚</div>
+                                    </div>
+                                    <div style="background: rgba(255,255,255,0.25); backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
+                                        <div style="font-size: 18px; font-weight: 700; color: #0369a1;">¥${item.todayTarget.toFixed(2)}</div>
+                                        <div style="font-size: 10px; color: #78350f; margin-top: 2px;">今日目标</div>
+                                    </div>
                                 </div>
                             </div>
-                            ` : ''}
+                            
+                            <!-- 还款信息 - 毛玻璃效果 -->
+                            <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.25);">
+                                <div style="font-size: 12px; color: #78350f; margin-bottom: 8px; line-height: 1.6; font-weight: 500;">
+                                    ${item.message}
+                                </div>
+                                <div style="font-size: 11px; color: #92400e; padding-top: 8px; border-top: 1px dashed rgba(120, 53, 15, 0.2);">
+                                    ${item.detail}
+                                </div>
+                                
+                                <!-- 已完成软件统计 -->
+                                ${completedApps.length > 0 ? `
+                                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(120, 53, 15, 0.2);">
+                                    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #166534; font-weight: 600;">
+                                        <span>✅</span>
+                                        <span><b>${completedApps.length}</b> 个软件已完成目标</span>
+                                    </div>
+                                    <div style="font-size: 10px; color: #92400e; margin-top: 4px; padding-left: 20px;">
+                                        ${completedApps.slice(0, 2).map(a => a.appName).join('、')}${completedApps.length > 2 ? '等' : ''}
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -5292,40 +5314,47 @@ function renderAppEarningAnalysis() {
             const todayStatusText = isTodayAchieved ? '今日已达标' : '今日未达标';
 
             html += `
-                <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
-                            <span style="font-size: 12px;">${statusIcon}</span>
-                            <span style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.appName}</span>
+                <div style="position: relative; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 16px; margin-bottom: 12px; overflow: hidden;">
+                    <!-- 背景装饰圆形 -->
+                    <div style="position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(15px);"></div>
+                    <div style="position: absolute; bottom: -15px; left: -15px; width: 50px; height: 50px; background: rgba(255,255,255,0.15); border-radius: 50%; filter: blur(12px);"></div>
+                    
+                    <!-- 毛玻璃卡片内容 -->
+                    <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.25); padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
+                                <span style="font-size: 14px;">${statusIcon}</span>
+                                <span style="font-size: 13px; font-weight: 600; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 10px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white;">✏️ 编辑</button>
+                                <button class="btn btn-sm" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 10px; background: rgba(56, 239, 125, 0.3); border: 1px solid rgba(56, 239, 125, 0.4); color: white;">💰 提现</button>
+                            </div>
                         </div>
-                        <div style="display: flex; gap: 6px;">
-                            <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px;">编辑</button>
-                            <button class="btn btn-sm btn-primary" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px;">提现</button>
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,0.85); margin-bottom: 8px;">
+                            <span>目标: <strong style="color: #ffffff;">¥${app.targetAmount.toFixed(2)}</strong></span>
+                            <span>余额: <strong style="color: #ffffff;">¥${app.currentBalance.toFixed(2)}</strong></span>
                         </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-                        <span>目标: ¥${app.targetAmount.toFixed(2)}</span>
-                        <span>余额: ¥${app.currentBalance.toFixed(2)}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border-color);">
-                        <div>
-                            <span style="font-size: 11px; color: var(--text-secondary);">${gapText}</span>
-                        </div>
-                        <div style="text-align: right;">
-                            ${app.gap > 0 ? `
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <div style="text-align: right;">
-                                        <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
-                                        <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
+                            <div>
+                                <span style="font-size: 11px; color: rgba(255,255,255,0.9);">${gapText}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                ${app.gap > 0 ? `
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 10px; color: rgba(255,255,255,0.8);">每天需赚取</div>
+                                            <div style="font-size: 16px; font-weight: 700; color: ${statusColor}; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${app.dailyNeed.toFixed(2)}</div>
+                                        </div>
+                                        <div style="text-align: right; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.2);">
+                                            <div style="font-size: 10px; color: ${todayStatusColor};">${todayStatusText}</div>
+                                            <div style="font-size: 13px; font-weight: 600; color: ${todayStatusColor};">${todayStatusIcon} ¥${app.todayEarned.toFixed(2)}</div>
+                                        </div>
                                     </div>
-                                    <div style="text-align: right; padding-left: 8px; border-left: 1px solid var(--border-color);">
-                                        <div style="font-size: 10px; color: ${todayStatusColor};">${todayStatusText}</div>
-                                        <div style="font-size: 12px; font-weight: 600; color: ${todayStatusColor};">${todayStatusIcon} ¥${app.todayEarned.toFixed(2)}</div>
-                                    </div>
-                                </div>
-                            ` : `
-                                <div style="font-size: 12px; color: #22c55e; font-weight: 600;">✓ 已达标</div>
-                            `}
+                                ` : `
+                                    <div style="font-size: 13px; color: #38ef7d; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">✓ 已达标</div>
+                                `}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5618,11 +5647,11 @@ function renderAppEarningsRanking() {
 
     let html = '';
 
-    // 今日收益排行
+    // 今日收益排行 - 毛玻璃效果
     if (sortedByToday.some(a => a.today > 0)) {
         html += `
             <div style="margin-bottom: 20px;">
-                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px;">
+                <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
                     📅 今日收益排行
                 </div>
         `;
@@ -5630,13 +5659,17 @@ function renderAppEarningsRanking() {
         sortedByToday.forEach((app, index) => {
             if (app.today > 0) {
                 const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b'];
+                const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
                 html += `
-                    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
-                        <span style="font-size: 18px; width: 28px; text-align: center;">${medals[index] || '•'}</span>
-                        <div style="flex: 1;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: 500; color: var(--text-primary); font-size: 12px;">${app.phoneName} - ${app.appName}</span>
-                                <span style="font-weight: 700; color: var(--success-color); font-size: 14px;">¥${app.today.toFixed(2)}</span>
+                    <div style="position: relative; background: linear-gradient(135deg, rgba(17, 153, 142, 0.3) 0%, rgba(56, 239, 125, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || '•'}</span>
+                            <div style="flex: 1;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
+                                    <span style="font-weight: 800; color: #38ef7d; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${app.today.toFixed(2)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5647,11 +5680,11 @@ function renderAppEarningsRanking() {
         html += `</div>`;
     }
 
-    // 7天平均收益排行
+    // 7天平均收益排行 - 毛玻璃效果
     if (sortedByAvg7.some(a => a.avg7Days > 0)) {
         html += `
             <div>
-                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px;">
+                <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
                     📊 7天平均收益排行
                 </div>
         `;
@@ -5659,16 +5692,20 @@ function renderAppEarningsRanking() {
         sortedByAvg7.forEach((app, index) => {
             if (app.avg7Days > 0) {
                 const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b'];
+                const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
                 html += `
-                    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
-                        <span style="font-size: 18px; width: 28px; text-align: center;">${medals[index] || '•'}</span>
-                        <div style="flex: 1;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: 500; color: var(--text-primary); font-size: 12px;">${app.phoneName} - ${app.appName}</span>
-                                <span style="font-weight: 700; color: var(--primary-color); font-size: 14px;">¥${app.avg7Days.toFixed(2)}/天</span>
-                            </div>
-                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
-                                7天总计: ¥${app.last7Days.toFixed(2)} · 累计: ¥${app.total.toFixed(2)}
+                    <div style="position: relative; background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || '•'}</span>
+                            <div style="flex: 1;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
+                                    <span style="font-weight: 800; color: #a78bfa; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${app.avg7Days.toFixed(2)}/天</span>
+                                </div>
+                                <div style="font-size: 11px; color: rgba(255,255,255,0.85); margin-top: 4px;">
+                                    7天总计: <strong style="color: #ffffff;">¥${app.last7Days.toFixed(2)}</strong> · 累计: <strong style="color: #ffffff;">¥${app.total.toFixed(2)}</strong>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5706,10 +5743,10 @@ function renderIncomeCalendar() {
     const daysInMonth = lastDay.getDate();
     const startDayOfWeek = firstDay.getDay(); // 0 = 周日
 
-    // 星期标题
+    // 星期标题 - 毛玻璃效果
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
     let html = weekDays.map(day => `
-        <div style="text-align: center; font-weight: 600; padding: 8px; color: var(--text-secondary); font-size: 12px;">${day}</div>
+        <div style="text-align: center; font-weight: 700; padding: 8px; color: rgba(255,255,255,0.9); font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${day}</div>
     `).join('');
 
     // 空白格子（上月）
@@ -5727,30 +5764,40 @@ function renderIncomeCalendar() {
         const hasExpense = dayData.expense > 0;
         const hasInstallment = dayData.installment;
 
-        // 构建背景色（使用CSS变量支持暗黑模式）
-        let backgroundColor = 'var(--bg-secondary)';
-        let borderColor = 'var(--border-color)';
-        let textColor = 'var(--text-primary)';
+        // 构建背景色 - 毛玻璃效果
+        let backgroundColor = 'rgba(255,255,255,0.1)';
+        let borderColor = 'rgba(255,255,255,0.2)';
+        let textColor = 'rgba(255,255,255,0.9)';
+        let amountColor = 'rgba(255,255,255,0.8)';
 
         if (hasWithdrawal && hasExpense) {
-            backgroundColor = 'rgba(251, 191, 36, 0.2)'; // 黄色 - 提现和支出都有
-            textColor = 'var(--warning-color)';
+            backgroundColor = 'rgba(251, 191, 36, 0.35)'; // 黄色 - 提现和支出都有
+            borderColor = 'rgba(251, 191, 36, 0.5)';
+            textColor = '#ffffff';
+            amountColor = '#ffffff';
         } else if (hasWithdrawal) {
-            backgroundColor = 'rgba(52, 211, 153, 0.2)'; // 绿色 - 有提现
-            textColor = 'var(--success-color)';
+            backgroundColor = 'rgba(52, 211, 153, 0.35)'; // 绿色 - 有提现
+            borderColor = 'rgba(52, 211, 153, 0.5)';
+            textColor = '#ffffff';
+            amountColor = '#ffffff';
         } else if (hasExpense) {
-            backgroundColor = 'rgba(248, 113, 113, 0.2)'; // 红色 - 有支出
-            textColor = 'var(--error-color)';
+            backgroundColor = 'rgba(248, 113, 113, 0.35)'; // 红色 - 有支出
+            borderColor = 'rgba(248, 113, 113, 0.5)';
+            textColor = '#ffffff';
+            amountColor = '#ffffff';
         } else if (hasInstallment) {
-            backgroundColor = 'rgba(251, 191, 36, 0.2)'; // 黄色 - 还款日
-            textColor = 'var(--warning-color)';
+            backgroundColor = 'rgba(251, 191, 36, 0.35)'; // 黄色 - 还款日
+            borderColor = 'rgba(251, 191, 36, 0.5)';
+            textColor = '#ffffff';
+            amountColor = '#ffffff';
         }
 
         // 判断是否是今天
         const today = new Date().toISOString().split('T')[0];
         const isToday = dateStr === today;
         if (isToday) {
-            borderColor = 'var(--primary-color)';
+            backgroundColor = 'rgba(255,255,255,0.4)';
+            borderColor = '#ffffff';
         }
 
         // 显示提现金额
@@ -5761,7 +5808,7 @@ function renderIncomeCalendar() {
                 aspect-ratio: 1;
                 background: ${backgroundColor};
                 border: 2px solid ${borderColor};
-                border-radius: var(--radius-md);
+                border-radius: 10px;
                 padding: 4px;
                 display: flex;
                 flex-direction: column;
@@ -5769,11 +5816,13 @@ function renderIncomeCalendar() {
                 justify-content: center;
                 cursor: pointer;
                 transition: all 0.2s;
-                font-size: 11px;
-            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"
+                font-size: 12px;
+                backdrop-filter: blur(5px);
+                -webkit-backdrop-filter: blur(5px);
+            " onmouseover="this.style.transform='scale(1.05)'; this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.transform='scale(1)'; this.style.background='${backgroundColor}'"
                onclick="showDayDetail('${dateStr}')">
-                <span style="font-weight: ${isToday ? '700' : '600'}; color: ${isToday ? 'var(--primary-color)' : textColor};">${day}</span>
-                ${displayAmount ? `<span style="font-size: 9px; color: ${textColor}; margin-top: 2px;">${displayAmount}</span>` : ''}
+                <span style="font-weight: ${isToday ? '800' : '700'}; color: ${isToday ? '#8b5cf6' : textColor}; text-shadow: ${isToday ? '0 1px 2px rgba(255,255,255,0.5)' : '0 1px 2px rgba(0,0,0,0.1)'};">${day}</span>
+                ${displayAmount ? `<span style="font-size: 10px; color: ${amountColor}; margin-top: 2px; font-weight: 600;">${displayAmount}</span>` : ''}
             </div>
         `;
     }
@@ -6135,16 +6184,34 @@ function renderTodayApps(data) {
     container.innerHTML = todayApps.map(app => {
         const earned = calculateAppEarned(app);
         const withdrawalCount = app.withdrawals ? app.withdrawals.length : 0;
+        // 找到app所属的手机ID
+        let phoneId = '';
+        data.phones.forEach(phone => {
+            if (phone.apps.find(a => a.id === app.id)) {
+                phoneId = phone.id;
+            }
+        });
         return `
-            <div class="app-item">
-                <div class="app-header">
-                    <span class="app-name">${app.phoneName} - ${app.name}</span>
-                    ${dailyTarget && dailyTarget.totalTargetAmount > 0 ? `<span style="font-size: 12px; color: var(--primary-color); font-weight: 600;">需提现: ¥${dailyTarget.perAppTarget.toFixed(2)}</span>` : ''}
-                </div>
-                <div class="app-info">
-                    <span>余额: ¥${(app.balance || 0).toFixed(2)}</span>
-                    <span>累计提现: ¥${earned.toFixed(2)}</span>
-                    <span>提现次数: ${withdrawalCount}次</span>
+            <div style="position: relative; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); border-radius: 16px; padding: 16px; margin-bottom: 12px; overflow: hidden;">
+                <!-- 背景装饰圆形 -->
+                <div style="position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(15px);"></div>
+                <div style="position: absolute; bottom: -15px; left: -15px; width: 50px; height: 50px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(12px);"></div>
+                
+                <!-- 毛玻璃卡片内容 -->
+                <div style="position: relative; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 14px; font-weight: 600; color: #78350f;">${app.phoneName} - ${app.name}</span>
+                        ${dailyTarget && dailyTarget.totalTargetAmount > 0 ? `<span style="font-size: 12px; color: #92400e; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px;">需提现: ¥${dailyTarget.perAppTarget.toFixed(2)}</span>` : ''}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #92400e; margin-bottom: 10px;">
+                        <span>余额: <strong style="color: #78350f;">¥${(app.balance || 0).toFixed(2)}</strong></span>
+                        <span>累计: <strong style="color: #78350f;">¥${earned.toFixed(2)}</strong></span>
+                        <span>次数: <strong style="color: #78350f;">${withdrawalCount}次</strong></span>
+                    </div>
+                    <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid rgba(120, 53, 15, 0.15);">
+                        <button class="btn btn-sm" onclick="editAppFromTodayFocus('${app.id}', '${phoneId}')" style="font-size: 11px; padding: 5px 14px; background: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.4); color: #78350f; border-radius: 6px;">✏️ 编辑</button>
+                        <button class="btn btn-sm" onclick="withdrawAppFromTodayFocus('${app.id}', '${phoneId}')" style="font-size: 11px; padding: 5px 14px; background: rgba(17, 153, 142, 0.3); border: 1px solid rgba(17, 153, 142, 0.4); color: #78350f; border-radius: 6px;">💰 提现</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -6677,29 +6744,30 @@ function renderStats() {
     container.innerHTML = allAppsWithPhone.map(app => {
         const withdrawn = calculateAppEarned(app);
         const withdrawalCount = app.withdrawals ? app.withdrawals.length : 0;
+        const statusColor = withdrawalCount > 0 ? 'rgba(52, 211, 153, 0.4)' : 'rgba(251, 191, 36, 0.4)';
+        const statusBorder = withdrawalCount > 0 ? 'rgba(52, 211, 153, 0.6)' : 'rgba(251, 191, 36, 0.6)';
+        const statusText = withdrawalCount > 0 ? '#34d399' : '#fbbf24';
         
         return `
-            <div class="app-item" data-app-id="${app.id}">
-                <div class="app-header">
-                    <span class="app-name">${app.phoneName} - ${app.name}</span>
-                    <div class="app-status">
-                        <span class="status-tag ${withdrawalCount > 0 ? 'ready' : 'pending'}">
-                            ${withdrawalCount > 0 ? '有记录' : '新软件'}
-                        </span>
-                    </div>
+            <div style="position: relative; background: rgba(30, 27, 75, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.3);" data-app-id="${app.id}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="font-weight: 700; color: #ffffff; font-size: 14px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">${app.phoneName} - ${app.name}</span>
+                    <span style="font-size: 11px; padding: 4px 12px; border-radius: 12px; background: ${withdrawalCount > 0 ? 'rgba(34, 197, 94, 0.9)' : 'rgba(251, 191, 36, 0.9)'}; border: 1px solid rgba(255,255,255,0.5); color: #1e1b4b; font-weight: 700;">
+                        ${withdrawalCount > 0 ? '有记录' : '新软件'}
+                    </span>
                 </div>
-                <div class="app-stats">
-                    <div class="stat-item stat-balance">
-                        <span class="stat-label">当前余额</span>
-                        <span class="stat-value">¥${(app.balance || 0).toFixed(2)}</span>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    <div style="background: rgba(59, 130, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
+                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">当前余额</span>
+                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${(app.balance || 0).toFixed(2)}</span>
                     </div>
-                    <div class="stat-item stat-earned">
-                        <span class="stat-label">累计提现</span>
-                        <span class="stat-value">¥${withdrawn.toFixed(2)}</span>
+                    <div style="background: rgba(34, 197, 94, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
+                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">累计提现</span>
+                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${withdrawn.toFixed(2)}</span>
                     </div>
-                    <div class="stat-item stat-withdrawn">
-                        <span class="stat-label">提现次数</span>
-                        <span class="stat-value">${withdrawalCount}次</span>
+                    <div style="background: rgba(139, 92, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
+                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">提现次数</span>
+                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">${withdrawalCount}次</span>
                     </div>
                 </div>
             </div>
@@ -9134,11 +9202,26 @@ function addNewGame() {
         return;
     }
     
+    // 检查是否之前删除过这个游戏
+    const deletedGame = DataManager.checkIfGameWasDeleted(gameName, currentGamePhoneId);
+    
+    if (deletedGame) {
+        // 之前删除过，显示提示
+        const confirmAdd = confirm(`⚠️ 提示\n\n游戏 "${gameName}" 之前已被删除（删除日期：${deletedGame.deleteDate}）。\n\n重新添加后只需游玩3天即可删除（首次添加需7天）。\n\n是否继续添加？`);
+        if (!confirmAdd) {
+            return;
+        }
+    }
+    
     // 使用当前选中的手机ID
-    DataManager.addDownloadedGame(gameName, currentGamePhoneId);
+    const game = DataManager.addDownloadedGame(gameName, currentGamePhoneId);
     nameInput.value = '';
     
-    showToast('游戏添加成功！');
+    if (game.isRedownload) {
+        showToast('游戏重新添加成功！只需游玩3天即可删除', 'success');
+    } else {
+        showToast('游戏添加成功！需游玩7天才能删除', 'success');
+    }
     renderGamesPage();
 }
 
@@ -9149,6 +9232,72 @@ function deleteDownloadedGame(gameId) {
         showToast('游戏已删除');
         renderGamesPage();
     }
+}
+
+// 显示已删除游戏记录弹窗
+function showDeletedGamesModal() {
+    const deletedGames = DataManager.getDeletedGames();
+    
+    if (deletedGames.length === 0) {
+        showModal('已删除游戏记录', '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无已删除的游戏记录</div>', [{ text: '关闭', class: 'btn-secondary', action: closeModal }]);
+        return;
+    }
+    
+    // 按删除日期倒序排列
+    const sortedGames = deletedGames.sort((a, b) => new Date(b.deleteDate) - new Date(a.deleteDate));
+    
+    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+    html += '<div style="margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">';
+    html += `共删除 ${deletedGames.length} 个游戏，重新添加后只需游玩3天即可删除`;
+    html += '</div>';
+    
+    html += sortedGames.map(game => {
+        const phone = DataManager.loadData().phones.find(p => p.id === game.phoneId);
+        const phoneName = phone ? phone.name : '未知手机';
+        
+        return `
+            <div style="padding: 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 500; font-size: 14px;">${game.name}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        ${phoneName} | 删除日期: ${game.deleteDate}
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="restoreDeletedGame('${game.id}')" style="font-size: 11px; padding: 4px 12px;">重新添加</button>
+            </div>
+        `;
+    }).join('');
+    
+    html += '</div>';
+    
+    showModal('🗑️ 已删除游戏记录', html, [{ text: '关闭', class: 'btn-secondary', action: closeModal }]);
+}
+
+// 重新添加已删除的游戏
+function restoreDeletedGame(gameId) {
+    const deletedGames = DataManager.getDeletedGames();
+    const game = deletedGames.find(g => g.id === gameId);
+    
+    if (!game) {
+        showToast('游戏记录不存在', 'error');
+        return;
+    }
+    
+    // 检查当前是否已存在同名游戏
+    const existingGames = DataManager.getDownloadedGames();
+    const exists = existingGames.find(g => g.name === game.name && g.phoneId === game.phoneId);
+    
+    if (exists) {
+        showToast(`游戏 "${game.name}" 已存在，无需重新添加`, 'warning');
+        return;
+    }
+    
+    // 重新添加游戏
+    const newGame = DataManager.addDownloadedGame(game.name, game.phoneId);
+    
+    closeModal();
+    showToast(`游戏 "${game.name}" 重新添加成功！只需游玩3天即可删除`, 'success');
+    renderGamesPage();
 }
 
 // 一键删除所有可删除的游戏
@@ -9907,29 +10056,36 @@ function renderYearlyGoal() {
 
     let html = `
         <div style="padding: 16px;">
-            <!-- 总体进度 -->
-            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 20px; color: white; margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <span style="font-size: 14px; opacity: 0.9;">收益目标</span>
-                    <span style="font-size: 20px; font-weight: bold;">¥${goal.amount.toFixed(2)}</span>
+            <!-- 总体进度 - 毛玻璃效果 -->
+            <div style="position: relative; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 16px; padding: 24px; margin-bottom: 20px; overflow: hidden;">
+                <!-- 背景装饰圆形 -->
+                <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(25px);"></div>
+                <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(20px);"></div>
+                
+                <!-- 毛玻璃卡片内容 -->
+                <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">收益目标</span>
+                        <span style="font-size: 22px; font-weight: bold; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${goal.amount.toFixed(2)}</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.25); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                        <div style="background: ${isOverTarget ? '#38ef7d' : 'linear-gradient(90deg, #ffffff, rgba(255,255,255,0.8))'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: rgba(255,255,255,0.9);">
+                        <span>已赚取: <strong style="color: #ffffff;">¥${distribution.totalEarned.toFixed(2)}</strong></span>
+                        <span style="font-weight: 600;">${progressPercent}%</span>
+                    </div>
+                    ${isOverTarget ? `
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
+                        <span style="color: #38ef7d; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">🎉 超额完成! 超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)}</span>
+                    </div>
+                    ` : `
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
+                        <span style="color: rgba(255,255,255,0.9);">剩余: <strong style="color: #ffffff;">¥${distribution.remaining.toFixed(2)}</strong></span>
+                        ${goalProgress.estimatedDaysNeeded > 0 ? `<br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预计还需 ${goalProgress.estimatedDaysNeeded} 天完成</span>` : ''}
+                    </div>
+                    `}
                 </div>
-                <div style="background: rgba(255,255,255,0.3); border-radius: 10px; height: 12px; overflow: hidden; margin-bottom: 12px;">
-                    <div style="background: ${isOverTarget ? '#38ef7d' : '#fff'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px;"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 13px; opacity: 0.9;">
-                    <span>已赚取: ¥${distribution.totalEarned.toFixed(2)}</span>
-                    <span>${progressPercent}%</span>
-                </div>
-                ${isOverTarget ? `
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                    <span style="color: #38ef7d; font-weight: bold;">🎉 超额完成! 超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)}</span>
-                </div>
-                ` : `
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                    <span style="opacity: 0.9;">剩余: ¥${distribution.remaining.toFixed(2)}</span>
-                    ${goalProgress.estimatedDaysNeeded > 0 ? `<br><span style="opacity: 0.9; font-size: 12px;">预计还需 ${goalProgress.estimatedDaysNeeded} 天完成</span>` : ''}
-                </div>
-                `}
             </div>
 
             <!-- 每日目标缺口记录 -->
@@ -9963,64 +10119,70 @@ function renderYearlyGoal() {
                 const isRepaymentAchieved = dailyTarget.repaymentNeeded > 0 && todayEarned >= dailyTarget.repaymentNeeded;
                 
                 return `
-                    <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 2px solid #fbbf24;">
-                        <!-- 标题行 -->
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <span style="font-size: 13px; font-weight: 600; color: #92400e;">📅 每日目标追踪</span>
-                            <button class="btn btn-sm" onclick="showDailyGapDetailModal()" style="font-size: 10px; padding: 3px 8px; background: rgba(255,255,255,0.5);">详情</button>
-                        </div>
+                    <div style="position: relative; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); border-radius: 16px; padding: 20px; margin-bottom: 16px; overflow: hidden;">
+                        <!-- 背景装饰圆形 -->
+                        <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(25px);"></div>
+                        <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(20px);"></div>
                         
-                        <!-- 今日目标金额 -->
-                        <div style="background: rgba(255,255,255,0.5); border-radius: 10px; padding: 10px; margin-bottom: 10px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <span style="font-size: 11px; color: #78350f;">今日目标</span>
-                                <span style="font-size: 20px; font-weight: 700; color: #b45309;">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
+                        <!-- 毛玻璃卡片内容 -->
+                        <div style="position: relative; background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.4); padding: 12px;">
+                            <!-- 标题行 -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <span style="font-size: 13px; font-weight: 600; color: #78350f;">📅 每日目标追踪</span>
+                                <button class="btn btn-sm" onclick="showDailyGapDetailModal()" style="font-size: 10px; padding: 3px 8px; background: rgba(120, 53, 15, 0.1); border: 1px solid rgba(120, 53, 15, 0.2); color: #78350f;">详情</button>
                             </div>
-                            <div style="font-size: 10px; color: #92400e;">
-                                ${dailyTarget.performanceLevel === 'excellent' ? '🌟 表现优秀' : 
-                                  dailyTarget.performanceLevel === 'normal' ? '💪 正常发挥' :
-                                  dailyTarget.performanceLevel === 'declining' ? '📈 鼓励恢复' :
-                                  dailyTarget.performanceLevel === 'poor' ? '💪 加油努力' :
-                                  dailyTarget.performanceLevel === 'new_user' ? '🎯 新手目标' : '基于历史数据'}
-                            </div>
-                        </div>
-                        
-                        <!-- 历史数据小字 -->
-                        <!-- 目标构成说明 -->
-                        <div style="background: rgba(255,255,255,0.4); border-radius: 8px; padding: 8px; margin-bottom: 10px;">
-                            <div style="font-size: 10px; color: #92400e; margin-bottom: 6px; text-align: center;">目标构成</div>
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-                                <div style="background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px; text-align: center;">
-                                    <div style="font-size: 9px; color: #64748b; margin-bottom: 2px;">💪 能力目标</div>
-                                    <div style="font-size: 13px; font-weight: 700; color: #0369a1;">¥${dailyTarget.abilityTarget.toFixed(2)}</div>
+                            
+                            <!-- 今日目标金额 -->
+                            <div style="background: rgba(255,255,255,0.35); border-radius: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.4);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <span style="font-size: 11px; color: #92400e;">今日目标</span>
+                                    <span style="font-size: 20px; font-weight: 700; color: #78350f;">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
                                 </div>
-                                ${dailyTarget.repaymentNeeded > 0 ? `
-                                <div style="background: ${isRepaymentAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.1)'}; border-radius: 6px; padding: 6px; text-align: center; position: relative;">
-                                    <div style="font-size: 9px; color: ${isRepaymentAchieved ? '#166534' : '#991b1b'}; margin-bottom: 2px;">
-                                        💰 还款所需 ${isRepaymentAchieved ? '✓' : ''}
+                                <div style="font-size: 10px; color: #92400e;">
+                                    ${dailyTarget.performanceLevel === 'excellent' ? '🌟 表现优秀' : 
+                                      dailyTarget.performanceLevel === 'normal' ? '💪 正常发挥' :
+                                      dailyTarget.performanceLevel === 'declining' ? '📈 鼓励恢复' :
+                                      dailyTarget.performanceLevel === 'poor' ? '💪 加油努力' :
+                                      dailyTarget.performanceLevel === 'new_user' ? '🎯 新手目标' : '基于历史数据'}
+                                </div>
+                            </div>
+                            
+                            <!-- 历史数据小字 -->
+                            <!-- 目标构成说明 -->
+                            <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.3);">
+                                <div style="font-size: 10px; color: #92400e; margin-bottom: 6px; text-align: center; font-weight: 600;">目标构成</div>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+                                    <div style="background: rgba(255,255,255,0.35); border-radius: 6px; padding: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
+                                        <div style="font-size: 9px; color: #92400e; margin-bottom: 2px;">💪 能力目标</div>
+                                        <div style="font-size: 13px; font-weight: 700; color: #78350f;">¥${dailyTarget.abilityTarget.toFixed(2)}</div>
                                     </div>
-                                    <div style="font-size: 13px; font-weight: 700; color: ${isRepaymentAchieved ? '#16a34a' : '#991b1b'};">¥${dailyTarget.repaymentNeeded.toFixed(2)}</div>
-                                    ${isRepaymentAchieved ? `
-                                    <div style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; font-size: 9px; padding: 1px 4px; border-radius: 8px; font-weight: bold;">已达标</div>
-                                    ` : ''}
+                                    ${dailyTarget.repaymentNeeded > 0 ? `
+                                    <div style="background: ${isRepaymentAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.35)'}; border-radius: 6px; padding: 6px; text-align: center; position: relative; border: 1px solid rgba(255,255,255,0.3);">
+                                        <div style="font-size: 9px; color: ${isRepaymentAchieved ? '#166534' : '#92400e'}; margin-bottom: 2px;">
+                                            💰 还款所需 ${isRepaymentAchieved ? '✓' : ''}
+                                        </div>
+                                        <div style="font-size: 13px; font-weight: 700; color: ${isRepaymentAchieved ? '#166534' : '#78350f'};">¥${dailyTarget.repaymentNeeded.toFixed(2)}</div>
+                                        ${isRepaymentAchieved ? `
+                                        <div style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; font-size: 9px; padding: 1px 4px; border-radius: 8px; font-weight: bold;">已达标</div>
+                                        ` : ''}
+                                    </div>
+                                    ` : `
+                                    <div style="background: rgba(34, 197, 94, 0.2); border-radius: 6px; padding: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
+                                        <div style="font-size: 9px; color: #92400e; margin-bottom: 2px;">✅ 无还款</div>
+                                        <div style="font-size: 13px; font-weight: 700; color: #78350f;">-</div>
+                                    </div>
+                                    `}
                                 </div>
-                                ` : `
-                                <div style="background: rgba(34, 197, 94, 0.1); border-radius: 6px; padding: 6px; text-align: center;">
-                                    <div style="font-size: 9px; color: #166534; margin-bottom: 2px;">✅ 无还款</div>
-                                    <div style="font-size: 13px; font-weight: 700; color: #166534;">-</div>
+                                ${dailyTarget.repaymentNeeded > dailyTarget.abilityTarget ? `
+                                <div style="font-size: 9px; color: #991b1b; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(120, 53, 15, 0.3);">
+                                    ⚠️ 还款压力较大，目标按还款需求计算
                                 </div>
-                                `}
+                                ` : dailyTarget.repaymentNeeded > 0 ? `
+                                <div style="font-size: 9px; color: #166534; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(120, 53, 15, 0.3);">
+                                    ✅ 能力足够覆盖还款需求
+                                </div>
+                                ` : ''}
                             </div>
-                            ${dailyTarget.repaymentNeeded > dailyTarget.abilityTarget ? `
-                            <div style="font-size: 9px; color: #991b1b; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
-                                ⚠️ 还款压力较大，目标按还款需求计算
-                            </div>
-                            ` : dailyTarget.repaymentNeeded > 0 ? `
-                            <div style="font-size: 9px; color: #166534; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
-                                ✅ 能力足够覆盖还款需求
-                            </div>
-                            ` : ''}
-                        </div>
                         
                         ${dailyTarget.avgDailyEarnings > 0 ? `
                         <div style="margin-bottom: 10px; font-size: 9px; color: #92400e; text-align: center;">
@@ -10029,48 +10191,48 @@ function renderYearlyGoal() {
                         </div>
                         ` : ''}
                         
-                        <!-- 统计信息（紧凑网格布局） -->
+                        <!-- 统计信息（毛玻璃效果） -->
                         ${gapStats.totalDays > 0 ? `
                         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;">
-                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px; text-align: center;">
-                                <div style="font-size: 14px; font-weight: 700; color: #22c55e;">${gapStats.achievedDays}</div>
-                                <div style="font-size: 9px; color: #92400e;">达标</div>
+                            <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
+                                <div style="font-size: 16px; font-weight: 700; color: #166534;">${gapStats.achievedDays}</div>
+                                <div style="font-size: 10px; color: #78350f; margin-top: 2px;">达标</div>
                             </div>
-                            <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px; text-align: center;">
-                                <div style="font-size: 14px; font-weight: 700; color: #ef4444;">${gapStats.missedDays}</div>
-                                <div style="font-size: 9px; color: #92400e;">未达标</div>
+                            <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
+                                <div style="font-size: 16px; font-weight: 700; color: #991b1b;">${gapStats.missedDays}</div>
+                                <div style="font-size: 10px; color: #78350f; margin-top: 2px;">未达标</div>
                             </div>
                         </div>
                         
-                        <!-- 超额/缺口信息（单行显示） -->
+                        <!-- 超额/缺口信息（毛玻璃效果） -->
                         ${gapStats.totalSurplus > 0 ? `
-                        <div style="background: rgba(255,255,255,0.5); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; font-size: 10px; color: #92400e; display: flex; justify-content: space-between;">
-                            <span>超额: <b style="color: #22c55e;">¥${gapStats.totalSurplus.toFixed(2)}</b></span>
-                            ${gapStats.remainingSurplus > 0 ? `<span>剩余: <b style="color: #22c55e;">¥${gapStats.remainingSurplus.toFixed(2)}</b></span>` : ''}
+                        <div style="background: rgba(255,255,255,0.25); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.35); font-size: 11px; color: #78350f; display: flex; justify-content: space-between;">
+                            <span>超额: <b style="color: #166534;">¥${gapStats.totalSurplus.toFixed(2)}</b></span>
+                            ${gapStats.remainingSurplus > 0 ? `<span>剩余: <b style="color: #166534;">¥${gapStats.remainingSurplus.toFixed(2)}</b></span>` : ''}
                         </div>
                         ` : ''}
                         
                         ${gapStats.netGap > 0 ? `
-                        <div style="background: rgba(239, 68, 68, 0.2); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; border-left: 2px solid #ef4444; font-size: 10px; color: #991b1b; display: flex; justify-content: space-between;">
+                        <div style="background: rgba(239, 68, 68, 0.15); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; color: #78350f; display: flex; justify-content: space-between;">
                             <span>缺口</span>
-                            <b>¥${gapStats.netGap.toFixed(2)}</b>
+                            <b style="color: #991b1b;">¥${gapStats.netGap.toFixed(2)}</b>
                         </div>
                         ` : gapStats.remainingSurplus > 0 && gapStats.totalSurplus === 0 ? `
-                        <div style="background: rgba(34, 197, 94, 0.2); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; border-left: 2px solid #22c55e; font-size: 10px; color: #166534; display: flex; justify-content: space-between;">
+                        <div style="background: rgba(34, 197, 94, 0.15); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(34, 197, 94, 0.3); font-size: 11px; color: #78350f; display: flex; justify-content: space-between;">
                             <span>结余</span>
-                            <b>¥${gapStats.remainingSurplus.toFixed(2)}</b>
+                            <b style="color: #166534;">¥${gapStats.remainingSurplus.toFixed(2)}</b>
                         </div>
                         ` : ''}
                         ` : ''}
                         
-                        <!-- 今日状态 -->
+                        <!-- 今日状态（毛玻璃效果） -->
                         ${todayRecord ? `
-                        <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; border-radius: 6px; padding: 8px; border-left: 2px solid ${todayRecord.isAchieved ? '#22c55e' : '#ef4444'};">
+                        <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; border: 1px solid ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 11px; font-weight: 600; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
+                                <span style="font-size: 12px; font-weight: 600; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
                                     ${todayRecord.isAchieved ? '✅ 已达标' : '❌ 未达标'}
                                 </span>
-                                <span style="font-size: 10px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
+                                <span style="font-size: 11px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'}; font-weight: 600;">
                                     ${todayRecord.isAchieved ? `+¥${(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `-¥${todayRecord.gap.toFixed(2)}`}
                                 </span>
                             </div>
@@ -10128,56 +10290,59 @@ function renderYearlyGoal() {
             const dailyStats = DataManager.calculateAppAchievementStats(app.appId);
             
             html += `
-                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px; margin-bottom: 8px; border-left: 3px solid ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; cursor: pointer;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')">
+                <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.3); cursor: pointer; position: relative; overflow: hidden;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')">
+                    <!-- 左侧彩色条 -->
+                    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; border-radius: 12px 0 0 12px;"></div>
+                    
                     <!-- 第一行：排名 + 软件名 + 手机名 -->
-                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                        <span style="font-size: 10px; background: ${rankColor}15; color: ${rankColor}; padding: 1px 6px; border-radius: 10px; font-weight: 600; flex-shrink: 0;">${index + 1}</span>
-                        <span style="font-weight: 600; font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${app.appName}</span>
-                        <span style="font-size: 10px; color: var(--text-secondary); flex-shrink: 0;">(${app.phoneName})</span>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-left: 8px;">
+                        <span style="font-size: 11px; background: ${rankColor}25; color: ${rankColor}; padding: 2px 8px; border-radius: 10px; font-weight: 600; flex-shrink: 0; border: 1px solid ${rankColor}40;">${index + 1}</span>
+                        <span style="font-weight: 600; font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #78350f;">${app.appName}</span>
+                        <span style="font-size: 11px; color: #92400e; flex-shrink: 0;">(${app.phoneName})</span>
                     </div>
                     
                     <!-- 第二行：状态标签（换行显示） -->
-                    <div style="display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap;">
-                        <span style="font-size: 9px; padding: 1px 5px; border-radius: 6px; background: ${rankColor}20; color: ${rankColor};">
+                    <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; padding-left: 8px;">
+                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: ${rankColor}20; color: #78350f; border: 1px solid ${rankColor}50; font-weight: 600;">
                             ${rankBadge}
                         </span>
-                        <span style="font-size: 9px; padding: 1px 5px; border-radius: 6px; background: ${isCompleted ? '#dcfce7' : hasAllocation ? '#fce7f3' : '#fee2e2'}; color: ${isCompleted ? '#166534' : hasAllocation ? '#be185d' : '#991b1b'};">
+                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: ${isCompleted ? 'rgba(34, 197, 94, 0.15)' : hasAllocation ? 'rgba(240, 147, 251, 0.15)' : 'rgba(239, 68, 68, 0.1)'}; color: ${isCompleted ? '#166534' : hasAllocation ? '#be185d' : '#991b1b'}; border: 1px solid ${isCompleted ? 'rgba(34, 197, 94, 0.25)' : hasAllocation ? 'rgba(240, 147, 251, 0.25)' : 'rgba(239, 68, 68, 0.2)'}; font-weight: 600;">
                             ${hasAllocation ? '受助' : isCompleted ? '达标' : '进行中'}
                         </span>
                     </div>
                     
                     <!-- 第三行：目标金额 -->
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary);">
-                        <span>年目标: ¥${app.adjustedTarget.toFixed(2)}</span>
-                        <span>已赚: ¥${app.totalEarned.toFixed(2)}</span>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #92400e; padding-left: 8px;">
+                        <span>年目标: <strong style="color: #78350f;">¥${app.adjustedTarget.toFixed(2)}</strong></span>
+                        <span>已赚: <strong style="color: #78350f;">¥${app.totalEarned.toFixed(2)}</strong></span>
                     </div>
                     
                     <!-- 进度条 -->
-                    <div style="background: var(--border-color); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 6px;">
-                        <div style="background: ${isCompleted ? '#38ef7d' : rankColor}; height: 100%; width: ${appProgress}%; transition: width 0.3s ease; border-radius: 4px;"></div>
+                    <div style="background: rgba(120, 53, 15, 0.1); border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 8px; margin-left: 8px;">
+                        <div style="background: ${isCompleted ? '#38ef7d' : rankColor}; height: 100%; width: ${appProgress}%; transition: width 0.3s ease; border-radius: 6px;"></div>
                     </div>
                     
                     <!-- 第四行：剩余和进度 -->
-                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">
-                        <span>剩: ¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</span>
-                        <span>${appProgress}%</span>
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #92400e; margin-bottom: 8px; padding-left: 8px;">
+                        <span>剩: <strong style="color: #78350f;">¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</strong></span>
+                        <span style="font-weight: 600; color: #78350f;">${appProgress}%</span>
                     </div>
                     
-                    <!-- 每日目标信息（紧凑版） -->
-                    <div style="background: ${dailyStats.todayAchieved ? '#f0fdf4' : '#fef3c7'}; border-radius: 5px; padding: 6px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px;">
-                            <span style="color: var(--text-secondary);">
-                                日目标: <strong style="color: var(--text-primary);">¥${dailyTarget.toFixed(2)}</strong>
+                    <!-- 每日目标信息（毛玻璃效果） -->
+                    <div style="background: ${dailyStats.todayAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(251, 191, 36, 0.2)'}; backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-left: 8px; border: 1px solid ${dailyStats.todayAchieved ? 'rgba(34, 197, 94, 0.25)' : 'rgba(251, 191, 36, 0.3)'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                            <span style="color: #92400e;">
+                                日目标: <strong style="color: #78350f;">¥${dailyTarget.toFixed(2)}</strong>
                             </span>
-                            <span style="color: ${dailyStats.todayAchieved ? '#166534' : '#92400e'}; font-size: 9px;">
+                            <span style="color: ${dailyStats.todayAchieved ? '#166534' : '#92400e'}; font-size: 10px; font-weight: 600;">
                                 ${dailyStats.todayAchieved ? '✅ 已达标' : '⏳ 未达标'} · ${dailyStats.achievedDays}天
                             </span>
                         </div>
                     </div>
                     
                     ${hasAllocation ? `
-                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color); font-size: 11px; color: #be185d;">
-                        💝 获得超额分配: ¥${app.allocatedSurplus.toFixed(2)} · 新目标: ¥${app.newTarget.toFixed(2)}
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(120, 53, 15, 0.2); font-size: 12px; color: #be185d; padding-left: 8px;">
+                        💝 获得超额分配: <strong>¥${app.allocatedSurplus.toFixed(2)}</strong> · 新目标: <strong>¥${app.newTarget.toFixed(2)}</strong>
                     </div>
                     ` : ''}
                 </div>
