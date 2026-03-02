@@ -8967,33 +8967,28 @@ function renderGamesList() {
         }
         
         return `
-            <div class="game-item" style="padding: 16px; border-bottom: 1px solid var(--border-color);">
-                <div class="game-info" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <div class="game-details">
-                        <div class="game-name" style="font-weight: 600; font-size: 16px;">${game.name}</div>
-                        <div class="game-date" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                            下载日期: ${game.downloadDate}
-                        </div>
+            <div class="game-item" style="padding: 16px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); border-radius: 12px; margin-bottom: 12px;">
+                <!-- 第一行：游戏名称和状态 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <span class="game-name" style="font-weight: 600; font-size: 16px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px;" onclick="editDownloadedGameName('${game.id}', '${game.name}')" title="点击修改名称">${game.name}</span>
+                    <span style="color: ${statusColor}; font-weight: 600; font-size: 13px; white-space: nowrap; background: ${statusColor}15; padding: 4px 10px; border-radius: 20px;">${statusText}</span>
+                </div>
+                
+                <!-- 第二行：进度条 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 11px; color: var(--text-secondary);">下载于 ${game.downloadDate}</span>
+                        <span style="font-size: 13px; font-weight: 700; color: ${statusColor};">${Math.round(progressPercent)}%</span>
                     </div>
-                    <div class="game-status" style="text-align: right;">
-                        <span style="color: ${statusColor}; font-weight: 600; font-size: 14px;">${statusText}</span>
+                    <div style="height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden;">
+                        <div style="width: ${progressPercent}%; height: 100%; background: ${statusColor}; border-radius: 3px; transition: width 0.3s ease;"></div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                    <button class="btn btn-sm" onclick="editDownloadedGameName('${game.id}', '${game.name}')" style="font-size: 11px; padding: 4px 12px;">✏️ 修改名称</button>
-                </div>
-                <div class="progress-item">
-                    <div class="progress-header" style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span>游玩进度</span>
-                        <span class="font-semibold">${Math.round(progressPercent)}%</span>
-                    </div>
-                    <div class="progress-bar" style="height: 8px; background: var(--bg-cream); border-radius: 4px; overflow: hidden;">
-                        <div class="progress-fill" style="width: ${progressPercent}%; height: 100%; background: ${statusColor}; border-radius: 4px; transition: width 0.3s ease;"></div>
-                    </div>
-                </div>
+                
+                <!-- 第三行：操作按钮 -->
                 ${game.canDelete ? `
-                    <div style="margin-top: 12px; text-align: right;">
-                        <button class="btn btn-error btn-sm" onclick="deleteDownloadedGame('${game.id}')">删除游戏</button>
+                    <div style="text-align: right;">
+                        <button class="btn btn-error btn-sm" onclick="deleteDownloadedGame('${game.id}')" style="font-size: 11px; padding: 6px 16px;">🗑️ 删除游戏</button>
                     </div>
                 ` : ''}
             </div>
