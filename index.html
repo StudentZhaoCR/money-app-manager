@@ -596,45 +596,57 @@
                 <button class="btn btn-secondary flex-1" onclick="calculateInstallmentGoalsGlobal()">刷新计算</button>
             </div>
 
-            <!-- 分期总览 -->
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">分期还款总览</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="stats-container">
-                    <div class="stats-row">
-                        <div class="stat-card border-primary">
-                            <span class="stat-label">总还款金额</span>
-                            <span class="stat-value" id="total-installment-amount">¥0.00</span>
-                        </div>
-                        <div class="stat-card border-secondary">
-                            <span class="stat-label">最近还款日期</span>
-                            <span class="stat-value" id="nearest-due-date">暂无</span>
-                        </div>
-                    </div>
-                    <div class="stats-row">
-                        <div class="stat-card border-tertiary">
-                            <span class="stat-label">待还金额</span>
-                            <span class="stat-value" id="installment-pending-amount">¥0.00</span>
-                        </div>
-                        <div class="stat-card border-accent">
-                            <span class="stat-label">已还金额</span>
-                            <span class="stat-value" id="installment-repaid-amount">¥0.00</span>
-                        </div>
-                    </div>
-                    <div class="stats-row">
-                        <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9);">可用资金</span>
-                            <span class="stat-value" style="color: white;" id="installment-available-funds">¥0.00</span>
-                        </div>
-                        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9);">剩余天数</span>
-                            <span class="stat-value" style="color: white;" id="installment-days-left">0天</span>
-                        </div>
-                    </div>
-                </div>
+            <!-- 分期总览 - 毛玻璃效果 -->
+            <div style="position: relative; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; padding: 20px; margin-top: 24px; overflow: hidden;">
+                <!-- 背景装饰圆形 -->
+                <div style="position: absolute; top: -50px; right: -50px; width: 120px; height: 120px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(30px);"></div>
+                <div style="position: absolute; bottom: -40px; left: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(25px);"></div>
                 
+                <!-- 毛玻璃卡片内容 -->
+                <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.25); padding: 20px;">
+                    <div class="section-header" style="margin-bottom: 16px;">
+                        <div class="section-title" style="color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">分期还款总览</div>
+                        <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
+                    </div>
+                    <div class="stats-container">
+                        <div class="stats-row">
+                            <!-- 总还款金额 - 紫色毛玻璃 -->
+                            <div style="position: relative; background: rgba(139, 92, 246, 0.4); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px);">
+                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">总还款金额</span>
+                                <span style="color: #ffffff; font-size: 22px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="total-installment-amount">¥0.00</span>
+                            </div>
+                            <!-- 最近还款日期 - 粉色毛玻璃 -->
+                            <div style="position: relative; background: rgba(236, 72, 153, 0.4); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px);">
+                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">最近还款日期</span>
+                                <span style="color: #ffffff; font-size: 18px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="nearest-due-date">暂无</span>
+                            </div>
+                        </div>
+                        <div class="stats-row">
+                            <!-- 待还金额 - 淡紫色毛玻璃 -->
+                            <div style="position: relative; background: rgba(167, 139, 250, 0.4); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px);">
+                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">待还金额</span>
+                                <span style="color: #ffffff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="installment-pending-amount">¥0.00</span>
+                            </div>
+                            <!-- 已还金额 - 黄色毛玻璃 -->
+                            <div style="position: relative; background: rgba(251, 191, 36, 0.4); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px);">
+                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">已还金额</span>
+                                <span style="color: #ffffff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="installment-repaid-amount">¥0.00</span>
+                            </div>
+                        </div>
+                        <div class="stats-row">
+                            <!-- 可用资金 - 蓝色毛玻璃 -->
+                            <div style="position: relative; background: rgba(59, 130, 246, 0.4); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px);">
+                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">可用资金</span>
+                                <span style="color: #ffffff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="installment-available-funds">¥0.00</span>
+                            </div>
+                            <!-- 剩余天数 - 红色毛玻璃 -->
+                            <div style="position: relative; background: rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px);">
+                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">剩余天数</span>
+                                <span style="color: #ffffff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="installment-days-left">0天</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 分期列表 -->
