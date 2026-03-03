@@ -1045,6 +1045,11 @@ body {
     will-change: transform;
     transform: translateZ(0);
     backface-visibility: hidden;
+    /* 在低端设备上禁用毛玻璃效果 */
+    @media (prefers-reduced-motion: reduce) {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
 }
 
 /* 减少重绘区域 */
@@ -1056,6 +1061,18 @@ body {
 .page {
     contain: layout;
     min-height: calc(100vh - 200px);
+}
+
+/* 滚动时禁用复杂动画 */
+.page.scrolling * {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+
+/* 优化固定定位元素 */
+.navbar, .bottom-nav {
+    will-change: transform;
+    transform: translateZ(0);
 }
 
 /* 导航栏 */

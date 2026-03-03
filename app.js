@@ -5193,7 +5193,7 @@ function renderAppEarningAnalysis() {
                         <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(15px);"></div>
                         
                         <!-- 毛玻璃卡片内容 -->
-                        <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
+                        <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
                             <!-- 标题 -->
                             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                                 <span style="font-size: 20px;">${item.icon}</span>
@@ -11103,7 +11103,35 @@ document.addEventListener('DOMContentLoaded', function() {
     initCalendars();
     restoreGameTimer(); // 恢复计时器状态
     loadYearlyGoalSettings(); // 加载年度目标设置
+    
+    // 滚动性能优化
+    initScrollOptimization();
 });
+
+// 滚动性能优化
+function initScrollOptimization() {
+    let scrollTimeout;
+    let isScrolling = false;
+    const pages = document.querySelectorAll('.page');
+    
+    pages.forEach(page => {
+        page.addEventListener('scroll', function() {
+            if (!isScrolling) {
+                isScrolling = true;
+                page.classList.add('scrolling');
+                // 滚动时减少模糊效果
+                page.style.setProperty('--blur-amount', '2px');
+            }
+            
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                isScrolling = false;
+                page.classList.remove('scrolling');
+                page.style.setProperty('--blur-amount', '5px');
+            }, 150);
+        }, { passive: true });
+    });
+}
 
 // 滑动切换页面功能已禁用
 
