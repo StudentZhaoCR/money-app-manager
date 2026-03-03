@@ -835,16 +835,21 @@ class DataManager {
         return {
             amount: parsed.yearlyGoalAmount || 0,
             year: parsed.yearlyGoalYear || new Date().getFullYear(),
-            autoDistribute: parsed.yearlyGoalAutoDistribute !== false // 默认开启自动分配
+            autoDistribute: parsed.yearlyGoalAutoDistribute !== false, // 默认开启自动分配
+            targetDays: parsed.yearlyGoalTargetDays || 0, // 0表示不限时
+            startDate: parsed.yearlyGoalStartDate || new Date().toISOString().split('T')[0],
+            endDate: parsed.yearlyGoalEndDate || null
         };
     }
 
     // 保存年度目标
-    static saveYearlyGoal(amount, year, autoDistribute = true) {
+    static saveYearlyGoal(amount, targetDays = 0, autoDistribute = true, startDate = null, endDate = null) {
         const settings = localStorage.getItem(SETTINGS_KEY);
         const parsed = settings ? JSON.parse(settings) : {};
         parsed.yearlyGoalAmount = parseFloat(amount) || 0;
-        parsed.yearlyGoalYear = year || new Date().getFullYear();
+        parsed.yearlyGoalTargetDays = parseInt(targetDays) || 0; // 目标天数，0表示不限时
+        parsed.yearlyGoalStartDate = startDate || new Date().toISOString().split('T')[0];
+        parsed.yearlyGoalEndDate = endDate || null;
         parsed.yearlyGoalAutoDistribute = autoDistribute;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
     }
@@ -10089,6 +10094,34 @@ function renderYearlyGoal() {
     // 获取目标进度信息
     const goalProgress = DataManager.calculateGoalProgress();
 
+    // 计算时间周期信息
+    let periodText = '';
+    let daysRemaining = 0;
+    let dailyTargetAmount = 0;
+    
+    if (goal.targetDays > 0) {
+        const today = new Date();
+        
+        // 如果有结束日期，使用结束日期计算
+        if (goal.endDate) {
+            const endDate = new Date(goal.endDate);
+            daysRemaining = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+        } else {
+            // 否则使用开始日期+天数计算
+            const startDate = new Date(goal.startDate);
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + goal.targetDays);
+            daysRemaining = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+        }
+        
+        // 计算每日目标
+        dailyTargetAmount = goal.amount / goal.targetDays;
+        
+        periodText = `${goal.targetDays}天目标`;
+    } else {
+        periodText = '不限时目标';
+    }
+
     let html = `
         <div style="padding: 16px;">
             <!-- 总体进度 - 毛玻璃效果 -->
@@ -10099,10 +10132,20 @@ function renderYearlyGoal() {
                 
                 <!-- 毛玻璃卡片内容 -->
                 <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">收益目标</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">🎯 ${periodText}</span>
+                        ${goal.targetDays > 0 && daysRemaining > 0 ? `<span style="font-size: 12px; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 10px;">剩余${daysRemaining}天</span>` : ''}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">目标金额</span>
                         <span style="font-size: 22px; font-weight: bold; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${goal.amount.toFixed(2)}</span>
                     </div>
+                    ${goal.targetDays > 0 ? `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.85);">每日需赚取</span>
+                        <span style="font-size: 16px; font-weight: 700; color: #ffffff;">¥${dailyTargetAmount.toFixed(2)}</span>
+                    </div>
+                    ` : ''}
                     <div style="background: rgba(255,255,255,0.25); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
                         <div style="background: ${isOverTarget ? '#38ef7d' : 'linear-gradient(90deg, #ffffff, rgba(255,255,255,0.8))'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
                     </div>
@@ -10398,20 +10441,70 @@ function renderYearlyGoal() {
 }
 
 // 保存收益目标
+// 更新目标每日需赚取金额显示
+function updateGoalDailyTarget() {
+    const amountInput = document.getElementById('yearly-goal-amount');
+    const startDateInput = document.getElementById('yearly-goal-start-date');
+    const endDateInput = document.getElementById('yearly-goal-end-date');
+    const totalDaysDisplay = document.getElementById('goal-total-days');
+    const dailyTargetDisplay = document.getElementById('goal-daily-target');
+    
+    const amount = parseFloat(amountInput.value) || 0;
+    const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+    const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+    
+    if (startDate && endDate && amount > 0) {
+        const diffTime = endDate - startDate;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays > 0) {
+            totalDaysDisplay.textContent = diffDays + '天';
+            const dailyTarget = amount / diffDays;
+            dailyTargetDisplay.textContent = '¥' + dailyTarget.toFixed(2);
+        } else {
+            totalDaysDisplay.textContent = '-';
+            dailyTargetDisplay.textContent = '-';
+        }
+    } else {
+        totalDaysDisplay.textContent = '-';
+        dailyTargetDisplay.textContent = '-';
+    }
+}
+
 function saveYearlyGoal() {
     const amountInput = document.getElementById('yearly-goal-amount');
+    const startDateInput = document.getElementById('yearly-goal-start-date');
+    const endDateInput = document.getElementById('yearly-goal-end-date');
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
 
     const amount = parseFloat(amountInput.value);
     const autoDistribute = autoDistributeCheckbox.checked;
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
 
     if (!amount || amount <= 0) {
         showToast('请输入有效的目标金额', 'error');
         return;
     }
 
-    // 不再传入年份，使用0表示不限时目标
-    DataManager.saveYearlyGoal(amount, 0, autoDistribute);
+    if (!startDate || !endDate) {
+        showToast('请选择开始和结束日期', 'error');
+        return;
+    }
+
+    // 计算目标天数
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = end - start;
+    const targetDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (targetDays <= 0) {
+        showToast('结束日期必须晚于开始日期', 'error');
+        return;
+    }
+
+    // 保存目标，传入天数、开始日期和结束日期
+    DataManager.saveYearlyGoal(amount, targetDays, autoDistribute, startDate, endDate);
     showToast('目标已保存', 'success');
     
     // 刷新仪表盘显示
@@ -10423,10 +10516,32 @@ function loadYearlyGoalSettings() {
     const goal = DataManager.getYearlyGoal();
     
     const amountInput = document.getElementById('yearly-goal-amount');
+    const startDateInput = document.getElementById('yearly-goal-start-date');
+    const endDateInput = document.getElementById('yearly-goal-end-date');
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
 
     if (amountInput) amountInput.value = goal.amount > 0 ? goal.amount : '';
     if (autoDistributeCheckbox) autoDistributeCheckbox.checked = goal.autoDistribute;
+    
+    // 加载开始日期
+    if (startDateInput && goal.startDate) {
+        startDateInput.value = goal.startDate;
+    } else if (startDateInput) {
+        startDateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
+    // 加载结束日期
+    if (endDateInput && goal.endDate) {
+        endDateInput.value = goal.endDate;
+    } else if (endDateInput) {
+        // 默认结束日期为30天后
+        const defaultEnd = new Date();
+        defaultEnd.setDate(defaultEnd.getDate() + 30);
+        endDateInput.value = defaultEnd.toISOString().split('T')[0];
+    }
+    
+    // 更新每日目标显示
+    updateGoalDailyTarget();
 }
 
 // 显示每日目标缺口详情弹窗
