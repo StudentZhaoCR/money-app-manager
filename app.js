@@ -900,11 +900,10 @@ class DataManager {
         return stats;
     }
 
-    // 计算目标分配（基于估算天数）
+    // 计算目标分配（平均分配）
     static calculateYearlyGoalDistribution() {
         const goal = this.getYearlyGoal();
         const stats = this.getAppsYearlyStats(goal.year);
-        const goalProgress = this.calculateGoalProgress();
 
         if (goal.amount <= 0 || stats.length === 0) {
             return { goal: goal, apps: [], totalEarned: 0, remaining: 0, progress: 0 };
@@ -915,46 +914,28 @@ class DataManager {
         const remaining = Math.max(0, goal.amount - totalEarned);
         const progress = Math.min(100, (totalEarned / goal.amount * 100)).toFixed(1);
 
-        // 使用估算天数（基于历史平均收益）
-        const estimatedDays = goalProgress.estimatedDaysNeeded > 0 ? goalProgress.estimatedDaysNeeded : 365;
-
-        // 按实际收益排序（从低到高）
-        const sortedStats = [...stats].sort((a, b) => a.yearlyEarned - b.yearlyEarned);
+        // 每个软件的年目标 = 总目标 / 软件数量
+        const yearlyTargetPerApp = goal.amount / stats.length;
+        
+        // 每个软件的日目标 = 年目标 / 365天
+        const dailyTargetPerApp = yearlyTargetPerApp / 365;
 
         // 计算每个软件的目标分配
-        const apps = sortedStats.map((stat, index) => {
-            // 基础目标 = 总目标 / 软件数量
-            const baseTarget = goal.amount / stats.length;
-
-            // 根据实际表现调整目标
-            const rankPercent = index / (stats.length - 1 || 1);
-            
-            // 表现系数
-            let performanceFactor;
-            if (rankPercent < 0.33) {
-                performanceFactor = 0.5 + (rankPercent / 0.33) * 0.3;
-            } else if (rankPercent < 0.67) {
-                performanceFactor = 0.9 + ((rankPercent - 0.33) / 0.34) * 0.2;
-            } else {
-                performanceFactor = 1.2 + ((rankPercent - 0.67) / 0.33) * 0.3;
-            }
-            
-            const adjustedTarget = baseTarget * performanceFactor;
-
+        const apps = stats.map((stat, index) => {
             // 计算差额
-            const diff = stat.yearlyEarned - adjustedTarget;
+            const diff = stat.totalEarned - yearlyTargetPerApp;
 
             return {
                 ...stat,
-                baseTarget: baseTarget,
-                adjustedTarget: adjustedTarget,
-                performanceFactor: performanceFactor,
+                baseTarget: yearlyTargetPerApp,
+                adjustedTarget: yearlyTargetPerApp,
+                performanceFactor: 1.0,
                 rank: index + 1,
                 diff: diff,
                 status: diff >= 0 ? '超额' : '缺口',
-                progress: stat.yearlyEarned / adjustedTarget * 100,
-                // 基于估算天数的日目标
-                dailyTarget: adjustedTarget / estimatedDays
+                progress: stat.totalEarned / yearlyTargetPerApp * 100,
+                // 日目标 = 年目标 / 365
+                dailyTarget: dailyTargetPerApp
             };
         });
 
@@ -964,8 +945,8 @@ class DataManager {
             totalEarned: totalEarned,
             remaining: remaining,
             progress: progress,
-            estimatedDays: estimatedDays,
-            avgDailyEarnings: goalProgress.avgDailyEarnings
+            estimatedDays: 365,
+            avgDailyEarnings: totalEarned / 365
         };
     }
 
@@ -10272,7 +10253,8 @@ function renderYearlyGoal() {
                     </div>
                     ${isOverTarget ? `
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                        <span style="color: #38ef7d; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">🎉 超额完成! 超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)}</span>
+                        <div style="color: #38ef7d; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2); font-size: 14px; margin-bottom: 4px;">🎉 超额完成! 超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)}</div>
+                        ${daysRemaining > 0 ? `<div style="color: rgba(255,255,255,0.9); font-size: 12px;">本年度还剩 ${daysRemaining} 天，继续加油！</div>` : ''}
                     </div>
                     ` : `
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
@@ -10282,91 +10264,6 @@ function renderYearlyGoal() {
                     `}
                 </div>
             </div>
-
-            <!-- 每日目标缺口记录 -->
-            ${(() => {
-                const goalProgress = DataManager.calculateGoalProgress();
-                const dailyTarget = DataManager.calculateDailyTarget();
-                
-                if (!goalProgress.isValid) return '';
-                
-                // 自动记录今日缺口
-                DataManager.checkAndRecordTodayGap();
-                
-                const gapStats = DataManager.getDailyGapStats();
-                
-                const now = new Date();
-                const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                const todayRecord = DataManager.getDailyGap(today);
-                
-                // 计算今日实际收益
-                const data = DataManager.loadData();
-                let todayEarned = 0;
-                data.phones.forEach(phone => {
-                    phone.apps.forEach(app => {
-                        if (app.dailyEarnings && app.dailyEarnings[today]) {
-                            todayEarned += parseFloat(app.dailyEarnings[today]) || 0;
-                        }
-                    });
-                });
-                
-                // 判断今日赚取是否达到还款所需
-                const isRepaymentAchieved = dailyTarget.repaymentNeeded > 0 && todayEarned >= dailyTarget.repaymentNeeded;
-                
-                return `
-                    <div style="position: relative; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); border-radius: 16px; padding: 20px; margin-bottom: 16px; overflow: hidden;">
-                        <!-- 背景装饰圆形 -->
-                        <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(25px);"></div>
-                        <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(20px);"></div>
-                        
-                        <!-- 毛玻璃卡片内容 -->
-                        <div style="position: relative; background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.4); padding: 12px;">
-                            <!-- 标题行 -->
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-size: 13px; font-weight: 600; color: #78350f;">📅 每日目标追踪</span>
-                                <button class="btn btn-sm" onclick="showDailyGapDetailModal()" style="font-size: 10px; padding: 3px 8px; background: rgba(120, 53, 15, 0.1); border: 1px solid rgba(120, 53, 15, 0.2); color: #78350f;">详情</button>
-                            </div>
-                            
-                            <!-- 今日目标金额 -->
-                            <div style="background: rgba(255,255,255,0.35); border-radius: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.4);">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 11px; color: #92400e;">今日目标</span>
-                                    <span style="font-size: 20px; font-weight: 700; color: #78350f;">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
-                                </div>
-                            </div>
-                            
-                            <!-- 统计信息 -->
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;">
-                                <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
-                                    <div style="font-size: 16px; font-weight: 700; color: #166534;">${gapStats.achievedDays}</div>
-                                    <div style="font-size: 10px; color: #78350f; margin-top: 2px;">达标</div>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
-                                    <div style="font-size: 16px; font-weight: 700; color: #991b1b;">${gapStats.missedDays}</div>
-                                    <div style="font-size: 10px; color: #78350f; margin-top: 2px;">未达标</div>
-                                </div>
-                            </div>
-                        
-                        <!-- 今日状态 -->
-                        ${todayRecord ? `
-                        <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; border: 1px solid ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 12px; font-weight: 600; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'};">
-                                    ${todayRecord.isAchieved ? '✅ 已达标' : '❌ 未达标'}
-                                </span>
-                                <span style="font-size: 11px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'}; font-weight: 600;">
-                                    ${todayRecord.isAchieved ? `+¥${Math.abs(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `差¥${Math.abs(todayRecord.targetAmount - todayRecord.earnedAmount).toFixed(2)}`}
-                                </span>
-                            </div>
-                        </div>
-                        ` : `
-                        <div style="background: rgba(255,255,255,0.3); border-radius: 6px; padding: 8px; text-align: center;">
-                            <span style="font-size: 11px; color: #92400e;">今日尚未记录</span>
-                        </div>
-                        `}
-                    </div>
-                `;
-            })()}
 
             <!-- 软件目标分配 -->
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
