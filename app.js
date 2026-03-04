@@ -835,21 +835,16 @@ class DataManager {
         return {
             amount: parsed.yearlyGoalAmount || 0,
             year: parsed.yearlyGoalYear || new Date().getFullYear(),
-            autoDistribute: parsed.yearlyGoalAutoDistribute !== false, // 默认开启自动分配
-            targetDays: parsed.yearlyGoalTargetDays || 0, // 0表示不限时
-            startDate: parsed.yearlyGoalStartDate || new Date().toISOString().split('T')[0],
-            endDate: parsed.yearlyGoalEndDate || null
+            autoDistribute: parsed.yearlyGoalAutoDistribute !== false // 默认开启自动分配
         };
     }
 
     // 保存年度目标
-    static saveYearlyGoal(amount, targetDays = 0, autoDistribute = true, startDate = null, endDate = null) {
+    static saveYearlyGoal(amount, year, autoDistribute = true) {
         const settings = localStorage.getItem(SETTINGS_KEY);
         const parsed = settings ? JSON.parse(settings) : {};
         parsed.yearlyGoalAmount = parseFloat(amount) || 0;
-        parsed.yearlyGoalTargetDays = parseInt(targetDays) || 0; // 目标天数，0表示不限时
-        parsed.yearlyGoalStartDate = startDate || new Date().toISOString().split('T')[0];
-        parsed.yearlyGoalEndDate = endDate || null;
+        parsed.yearlyGoalYear = parseInt(year) || new Date().getFullYear();
         parsed.yearlyGoalAutoDistribute = autoDistribute;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
     }
@@ -3379,43 +3374,52 @@ class DataManager {
         });
     }
 
-    // 计算软件提现总目标（基于分期还款总额）
+    // 计算每日提现目标（基于年度收益目标）
     static calculateDailyWithdrawalTarget() {
         const data = this.loadData();
+        const goal = this.getYearlyGoal();
 
         // 统计所有软件数量
         const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
 
-        if (totalApps === 0) {
+        if (totalApps === 0 || goal.amount <= 0) {
             return null;
         }
 
-        // 获取所有活跃分期
-        const activeInstallments = data.installments.filter(i => i.status === 'active');
+        // 计算年度剩余天数
+        const today = new Date();
+        const yearEnd = new Date(goal.year, 11, 31);
+        const daysRemaining = Math.max(1, Math.ceil((yearEnd - today) / (1000 * 60 * 60 * 24)));
 
-        // 计算总待还金额（所有分期的剩余还款额）
-        const totalPendingAmount = activeInstallments.reduce((sum, inst) => {
-            return sum + (inst.amount - (inst.paidAmount || 0));
-        }, 0);
-
-        // 计算已提现总额
+        // 计算已提现总额（今年内的提现）
+        const yearStart = new Date(goal.year, 0, 1);
         const totalWithdrawn = data.phones.reduce((sum, phone) => {
             return sum + phone.apps.reduce((appSum, app) => {
-                return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+                // 只计算今年的提现
+                const thisYearWithdrawn = app.withdrawals ? app.withdrawals
+                    .filter(w => new Date(w.date) >= yearStart)
+                    .reduce((wSum, w) => wSum + (w.amount || 0), 0) : 0;
+                return appSum + thisYearWithdrawn;
             }, 0);
         }, 0);
 
         // 剩余目标金额
-        const remainingTarget = Math.max(0, totalPendingAmount - totalWithdrawn);
+        const remainingTarget = Math.max(0, goal.amount - totalWithdrawn);
 
-        // 每个软件需要提现的目标 = 剩余目标 / 软件数量
-        const perAppTarget = totalApps > 0 ? remainingTarget / totalApps : 0;
+        // 每日需要赚取的金额
+        const dailyTarget = remainingTarget / daysRemaining;
+
+        // 每个软件需要赚取的目标（平均分配）
+        const perAppTarget = totalApps > 0 ? dailyTarget / totalApps : 0;
 
         return {
             totalApps,
-            totalTargetAmount: totalPendingAmount,
+            year: goal.year,
+            yearGoal: goal.amount,
             totalWithdrawn,
             remainingTarget,
+            daysRemaining,
+            dailyTarget,
             perAppTarget
         };
     }
@@ -4601,7 +4605,7 @@ function renderDashboard() {
                 : 0;
             dailyTargetEl.innerHTML = `
                 <div style="text-align: center; margin-bottom: 16px;">
-                    <div style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 6px;">还款总目标</div>
+                    <div style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 6px;">软件提现总目标</div>
                     <div style="font-size: 32px; font-weight: 700; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${dailyTarget.totalTargetAmount.toFixed(2)}</div>
                 </div>
 
@@ -5771,7 +5775,6 @@ function renderIncomeCalendar() {
         // 判断是否有数据
         const hasWithdrawal = dayData.withdrawal > 0;
         const hasExpense = dayData.expense > 0;
-        const hasInstallment = dayData.installment;
 
         // 构建背景色 - 毛玻璃效果
         let backgroundColor = 'rgba(255,255,255,0.1)';
@@ -5792,11 +5795,6 @@ function renderIncomeCalendar() {
         } else if (hasExpense) {
             backgroundColor = 'rgba(248, 113, 113, 0.35)'; // 红色 - 有支出
             borderColor = 'rgba(248, 113, 113, 0.5)';
-            textColor = '#ffffff';
-            amountColor = '#ffffff';
-        } else if (hasInstallment) {
-            backgroundColor = 'rgba(251, 191, 36, 0.35)'; // 黄色 - 还款日
-            borderColor = 'rgba(251, 191, 36, 0.5)';
             textColor = '#ffffff';
             amountColor = '#ffffff';
         }
@@ -6205,6 +6203,15 @@ function renderTodayApps(data) {
         if (!phoneId && app.phoneId) {
             phoneId = app.phoneId;
         }
+        
+        // 计算今日还需赚取的金额
+        let todayRemaining = 0;
+        if (dailyTarget && dailyTarget.dailyTarget > 0) {
+            // 获取今日已赚取金额
+            const todayEarned = getAppTodayEarned(app.id);
+            todayRemaining = Math.max(0, dailyTarget.perAppTarget - todayEarned);
+        }
+        
         return `
             <div style="position: relative; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); border-radius: 16px; padding: 16px; margin-bottom: 12px; overflow: hidden;">
                 <!-- 背景装饰圆形 -->
@@ -6215,7 +6222,7 @@ function renderTodayApps(data) {
                 <div style="position: relative; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px;">
                         <span style="font-size: 14px; font-weight: 600; color: #78350f; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${app.phoneName} - ${app.name}</span>
-                        ${dailyTarget && dailyTarget.totalTargetAmount > 0 ? `<span style="font-size: 12px; color: #92400e; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;">需提现: ¥${dailyTarget.perAppTarget.toFixed(2)}</span>` : ''}
+                        ${dailyTarget && dailyTarget.dailyTarget > 0 && todayRemaining > 0 ? `<span style="font-size: 12px; color: #92400e; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;">今日还需: ¥${todayRemaining.toFixed(2)}</span>` : (dailyTarget && dailyTarget.dailyTarget > 0 ? '<span style="font-size: 12px; color: #15803d; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;">今日已达标</span>' : '')}
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 12px; color: #92400e; margin-bottom: 10px;">
                         <span>余额: <strong style="color: #78350f;">¥${(app.balance || 0).toFixed(2)}</strong></span>
@@ -6797,17 +6804,17 @@ function renderStats() {
                     </span>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-                    <div style="background: rgba(59, 130, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">当前余额</span>
-                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${(app.balance || 0).toFixed(2)}</span>
-                    </div>
                     <div style="background: rgba(34, 197, 94, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">累计提现</span>
+                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">已赚</span>
                         <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${withdrawn.toFixed(2)}</span>
                     </div>
+                    <div style="background: rgba(59, 130, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
+                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">累计提现</span>
+                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${(app.withdrawn || 0).toFixed(2)}</span>
+                    </div>
                     <div style="background: rgba(139, 92, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">提现次数</span>
-                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">${withdrawalCount}次</span>
+                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">当前余额</span>
+                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${(app.balance || 0).toFixed(2)}</span>
                     </div>
                 </div>
             </div>
@@ -7958,6 +7965,137 @@ function showSystemIntroduction() {
             }
         ]
     );
+}
+
+// 添加测试数据
+function addTestData() {
+    if (!confirm('确定要添加测试数据吗？这将在现有数据基础上添加测试手机和应用。')) {
+        return;
+    }
+
+    const data = DataManager.loadData();
+
+    // 创建测试手机
+    const testPhones = [
+        { name: '测试手机-1', model: 'iPhone 14 Pro' },
+        { name: '测试手机-2', model: 'Samsung S23' },
+        { name: '测试手机-3', model: 'Xiaomi 13' }
+    ];
+
+    testPhones.forEach((phoneInfo, index) => {
+        const phoneId = 'test_phone_' + Date.now() + '_' + index;
+        const phone = {
+            id: phoneId,
+            name: phoneInfo.name,
+            model: phoneInfo.model,
+            apps: []
+        };
+
+        // 为每个手机添加测试应用
+        const testApps = [
+            { name: '抖音极速版', targetAmount: 30, balance: 15.5 },
+            { name: '快手极速版', targetAmount: 30, balance: 22.3 },
+            { name: '今日头条', targetAmount: 15, balance: 8.7 },
+            { name: '百度极速版', targetAmount: 20, balance: 12.0 }
+        ];
+
+        testApps.forEach((appInfo, appIndex) => {
+            const appId = 'test_app_' + Date.now() + '_' + index + '_' + appIndex;
+            const app = {
+                id: appId,
+                name: appInfo.name,
+                targetAmount: appInfo.targetAmount,
+                balance: appInfo.balance,
+                withdrawn: Math.random() * 100 + 50, // 随机已提现金额
+                historicalWithdrawn: Math.random() * 200 + 100,
+                withdrawals: [],
+                expenses: []
+            };
+
+            // 添加一些提现记录
+            const withdrawalCount = Math.floor(Math.random() * 5) + 1;
+            for (let i = 0; i < withdrawalCount; i++) {
+                const date = new Date();
+                date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+                app.withdrawals.push({
+                    date: date.toISOString().split('T')[0],
+                    amount: Math.random() * 20 + 10
+                });
+            }
+
+            phone.apps.push(app);
+        });
+
+        data.phones.push(phone);
+    });
+
+    // 添加一些支出记录
+    const expenseTypes = ['餐饮', '交通', '购物', '娱乐', '其他'];
+    for (let i = 0; i < 5; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+        data.expenses.push({
+            id: 'test_expense_' + Date.now() + '_' + i,
+            date: date.toISOString().split('T')[0],
+            amount: Math.random() * 50 + 10,
+            type: expenseTypes[Math.floor(Math.random() * expenseTypes.length)],
+            note: '测试支出 ' + (i + 1)
+        });
+    }
+
+    // 设置年度收益目标
+    data.settings.yearlyGoalAmount = 5000;
+    data.settings.yearlyGoalYear = new Date().getFullYear();
+    data.settings.yearlyGoalAutoDistribute = true;
+
+    DataManager.saveData(data);
+
+    // 刷新所有页面
+    renderDashboard();
+    renderPhones();
+    renderStats();
+    renderSettings();
+    renderGamesPage();
+
+    showToast('测试数据添加成功！', 'success');
+}
+
+// 添加极简测试数据（仅1个手机1个应用）
+function addMinimalTestData() {
+    if (!confirm('确定要添加极简测试数据吗？')) {
+        return;
+    }
+
+    const data = DataManager.loadData();
+
+    // 创建一个极简测试手机
+    const phone = {
+        id: 'minimal_test_' + Date.now(),
+        name: '测试手机',
+        model: 'Test Device',
+        apps: [{
+            id: 'minimal_app_' + Date.now(),
+            name: '测试应用',
+            targetAmount: 30,
+            balance: 15.0,
+            withdrawn: 45.0,
+            historicalWithdrawn: 100.0,
+            withdrawals: [
+                { date: new Date().toISOString().split('T')[0], amount: 15.0 }
+            ],
+            expenses: []
+        }]
+    };
+
+    data.phones.push(phone);
+    DataManager.saveData(data);
+
+    // 刷新页面
+    renderDashboard();
+    renderPhones();
+    renderStats();
+
+    showToast('极简测试数据添加成功！', 'success');
 }
 
 // 清空所有数据
@@ -10094,33 +10232,14 @@ function renderYearlyGoal() {
     // 获取目标进度信息
     const goalProgress = DataManager.calculateGoalProgress();
 
-    // 计算时间周期信息
-    let periodText = '';
-    let daysRemaining = 0;
-    let dailyTargetAmount = 0;
+    // 计算年度剩余天数
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const yearEnd = new Date(goal.year, 11, 31); // 当年12月31日
+    const daysRemaining = Math.ceil((yearEnd - today) / (1000 * 60 * 60 * 24));
     
-    if (goal.targetDays > 0) {
-        const today = new Date();
-        
-        // 如果有结束日期，使用结束日期计算
-        if (goal.endDate) {
-            const endDate = new Date(goal.endDate);
-            daysRemaining = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
-        } else {
-            // 否则使用开始日期+天数计算
-            const startDate = new Date(goal.startDate);
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + goal.targetDays);
-            daysRemaining = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
-        }
-        
-        // 计算每日目标
-        dailyTargetAmount = goal.amount / goal.targetDays;
-        
-        periodText = `${goal.targetDays}天目标`;
-    } else {
-        periodText = '不限时目标';
-    }
+    // 计算每日目标
+    const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
 
     let html = `
         <div style="padding: 16px;">
@@ -10133,19 +10252,17 @@ function renderYearlyGoal() {
                 <!-- 毛玻璃卡片内容 -->
                 <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">🎯 ${periodText}</span>
-                        ${goal.targetDays > 0 && daysRemaining > 0 ? `<span style="font-size: 12px; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 10px;">剩余${daysRemaining}天</span>` : ''}
+                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">🎯 ${goal.year}年度目标</span>
+                        ${daysRemaining > 0 ? `<span style="font-size: 12px; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 10px;">剩余${daysRemaining}天</span>` : ''}
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span style="font-size: 14px; color: rgba(255,255,255,0.9);">目标金额</span>
                         <span style="font-size: 22px; font-weight: bold; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${goal.amount.toFixed(2)}</span>
                     </div>
-                    ${goal.targetDays > 0 ? `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
                         <span style="font-size: 12px; color: rgba(255,255,255,0.85);">每日需赚取</span>
                         <span style="font-size: 16px; font-weight: 700; color: #ffffff;">¥${dailyTargetAmount.toFixed(2)}</span>
                     </div>
-                    ` : ''}
                     <div style="background: rgba(255,255,255,0.25); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
                         <div style="background: ${isOverTarget ? '#38ef7d' : 'linear-gradient(90deg, #ffffff, rgba(255,255,255,0.8))'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
                     </div>
@@ -10212,98 +10329,25 @@ function renderYearlyGoal() {
                             
                             <!-- 今日目标金额 -->
                             <div style="background: rgba(255,255,255,0.35); border-radius: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.4);">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <span style="font-size: 11px; color: #92400e;">今日目标</span>
                                     <span style="font-size: 20px; font-weight: 700; color: #78350f;">¥${dailyTarget.dailyTarget.toFixed(2)}</span>
                                 </div>
-                                <div style="font-size: 10px; color: #92400e;">
-                                    ${dailyTarget.performanceLevel === 'excellent' ? '🌟 表现优秀' : 
-                                      dailyTarget.performanceLevel === 'normal' ? '💪 正常发挥' :
-                                      dailyTarget.performanceLevel === 'declining' ? '📈 鼓励恢复' :
-                                      dailyTarget.performanceLevel === 'poor' ? '💪 加油努力' :
-                                      dailyTarget.performanceLevel === 'new_user' ? '🎯 新手目标' : '基于历史数据'}
-                                </div>
                             </div>
                             
-                            <!-- 历史数据小字 -->
-                            <!-- 目标构成说明 -->
-                            <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.3);">
-                                <div style="font-size: 10px; color: #92400e; margin-bottom: 6px; text-align: center; font-weight: 600;">目标构成</div>
-                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-                                    <div style="background: rgba(255,255,255,0.35); border-radius: 6px; padding: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
-                                        <div style="font-size: 9px; color: #92400e; margin-bottom: 2px;">💪 能力目标</div>
-                                        <div style="font-size: 13px; font-weight: 700; color: #78350f;">¥${dailyTarget.abilityTarget.toFixed(2)}</div>
-                                    </div>
-                                    ${dailyTarget.repaymentNeeded > 0 ? `
-                                    <div style="background: ${isRepaymentAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.35)'}; border-radius: 6px; padding: 6px; text-align: center; position: relative; border: 1px solid rgba(255,255,255,0.3);">
-                                        <div style="font-size: 9px; color: ${isRepaymentAchieved ? '#166534' : '#92400e'}; margin-bottom: 2px;">
-                                            💰 还款所需 ${isRepaymentAchieved ? '✓' : ''}
-                                        </div>
-                                        <div style="font-size: 13px; font-weight: 700; color: ${isRepaymentAchieved ? '#166534' : '#78350f'};">¥${dailyTarget.repaymentNeeded.toFixed(2)}</div>
-                                        ${isRepaymentAchieved ? `
-                                        <div style="position: absolute; top: -4px; right: -4px; background: #22c55e; color: white; font-size: 9px; padding: 1px 4px; border-radius: 8px; font-weight: bold;">已达标</div>
-                                        ` : ''}
-                                    </div>
-                                    ` : `
-                                    <div style="background: rgba(34, 197, 94, 0.2); border-radius: 6px; padding: 6px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
-                                        <div style="font-size: 9px; color: #92400e; margin-bottom: 2px;">✅ 无还款</div>
-                                        <div style="font-size: 13px; font-weight: 700; color: #78350f;">-</div>
-                                    </div>
-                                    `}
+                            <!-- 统计信息 -->
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;">
+                                <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
+                                    <div style="font-size: 16px; font-weight: 700; color: #166534;">${gapStats.achievedDays}</div>
+                                    <div style="font-size: 10px; color: #78350f; margin-top: 2px;">达标</div>
                                 </div>
-                                ${dailyTarget.repaymentNeeded > dailyTarget.abilityTarget ? `
-                                <div style="font-size: 9px; color: #991b1b; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(120, 53, 15, 0.3);">
-                                    ⚠️ 还款压力较大，目标按还款需求计算
+                                <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
+                                    <div style="font-size: 16px; font-weight: 700; color: #991b1b;">${gapStats.missedDays}</div>
+                                    <div style="font-size: 10px; color: #78350f; margin-top: 2px;">未达标</div>
                                 </div>
-                                ` : dailyTarget.repaymentNeeded > 0 ? `
-                                <div style="font-size: 9px; color: #166534; text-align: center; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(120, 53, 15, 0.3);">
-                                    ✅ 能力足够覆盖还款需求
-                                </div>
-                                ` : ''}
                             </div>
                         
-                        ${dailyTarget.avgDailyEarnings > 0 ? `
-                        <div style="margin-bottom: 10px; font-size: 9px; color: #92400e; text-align: center;">
-                            历史平均: ¥${dailyTarget.avgDailyEarnings.toFixed(2)}
-                            ${dailyTarget.last7DaysAvg > 0 ? ` | 近7天: ¥${dailyTarget.last7DaysAvg.toFixed(2)}` : ''}
-                        </div>
-                        ` : ''}
-                        
-                        <!-- 统计信息（毛玻璃效果） -->
-                        ${gapStats.totalDays > 0 ? `
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;">
-                            <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
-                                <div style="font-size: 16px; font-weight: 700; color: #166534;">${gapStats.achievedDays}</div>
-                                <div style="font-size: 10px; color: #78350f; margin-top: 2px;">达标</div>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; text-align: center; border: 1px solid rgba(255,255,255,0.4);">
-                                <div style="font-size: 16px; font-weight: 700; color: #991b1b;">${gapStats.missedDays}</div>
-                                <div style="font-size: 10px; color: #78350f; margin-top: 2px;">未达标</div>
-                            </div>
-                        </div>
-                        
-                        <!-- 超额/缺口信息（毛玻璃效果） -->
-                        ${gapStats.totalSurplus > 0 ? `
-                        <div style="background: rgba(255,255,255,0.25); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.35); font-size: 11px; color: #78350f; display: flex; justify-content: space-between;">
-                            <span>超额: <b style="color: #166534;">¥${gapStats.totalSurplus.toFixed(2)}</b></span>
-                            ${gapStats.remainingSurplus > 0 ? `<span>剩余: <b style="color: #166534;">¥${gapStats.remainingSurplus.toFixed(2)}</b></span>` : ''}
-                        </div>
-                        ` : ''}
-                        
-                        ${gapStats.netGap > 0 ? `
-                        <div style="background: rgba(239, 68, 68, 0.15); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 11px; color: #78350f; display: flex; justify-content: space-between;">
-                            <span>缺口</span>
-                            <b style="color: #991b1b;">¥${gapStats.netGap.toFixed(2)}</b>
-                        </div>
-                        ` : gapStats.remainingSurplus > 0 && gapStats.totalSurplus === 0 ? `
-                        <div style="background: rgba(34, 197, 94, 0.15); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-bottom: 10px; border: 1px solid rgba(34, 197, 94, 0.3); font-size: 11px; color: #78350f; display: flex; justify-content: space-between;">
-                            <span>结余</span>
-                            <b style="color: #166534;">¥${gapStats.remainingSurplus.toFixed(2)}</b>
-                        </div>
-                        ` : ''}
-                        ` : ''}
-                        
-                        <!-- 今日状态（毛玻璃效果） -->
+                        <!-- 今日状态 -->
                         ${todayRecord ? `
                         <div style="background: ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; border: 1px solid ${todayRecord.isAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -10311,19 +10355,13 @@ function renderYearlyGoal() {
                                     ${todayRecord.isAchieved ? '✅ 已达标' : '❌ 未达标'}
                                 </span>
                                 <span style="font-size: 11px; color: ${todayRecord.isAchieved ? '#166534' : '#991b1b'}; font-weight: 600;">
-                                    ${todayRecord.isAchieved ? `+¥${(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `-¥${todayRecord.gap.toFixed(2)}`}
+                                    ${todayRecord.isAchieved ? `+¥${Math.abs(todayRecord.earnedAmount - todayRecord.targetAmount).toFixed(2)}` : `差¥${Math.abs(todayRecord.targetAmount - todayRecord.earnedAmount).toFixed(2)}`}
                                 </span>
-                            </div>
-                            <div style="font-size: 9px; color: #78350f; margin-top: 2px;">
-                                目标¥${todayRecord.targetAmount.toFixed(2)} · 实际¥${todayRecord.earnedAmount.toFixed(2)}
                             </div>
                         </div>
                         ` : `
                         <div style="background: rgba(255,255,255,0.3); border-radius: 6px; padding: 8px; text-align: center;">
                             <span style="font-size: 11px; color: #92400e;">今日尚未记录</span>
-                            <div style="font-size: 9px; color: #92400e; margin-top: 2px;">
-                                修改软件余额记录收益
-                            </div>
                         </div>
                         `}
                     </div>
@@ -10441,71 +10479,44 @@ function renderYearlyGoal() {
 }
 
 // 保存收益目标
-// 更新目标每日需赚取金额显示
-function updateGoalDailyTarget() {
-    const amountInput = document.getElementById('yearly-goal-amount');
-    const startDateInput = document.getElementById('yearly-goal-start-date');
-    const endDateInput = document.getElementById('yearly-goal-end-date');
-    const totalDaysDisplay = document.getElementById('goal-total-days');
-    const dailyTargetDisplay = document.getElementById('goal-daily-target');
+// 生成年份选项
+function generateYearOptions() {
+    const yearSelect = document.getElementById('yearly-goal-year');
+    if (!yearSelect) return;
     
-    const amount = parseFloat(amountInput.value) || 0;
-    const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
-    const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 2;
+    const endYear = currentYear + 5;
     
-    if (startDate && endDate && amount > 0) {
-        const diffTime = endDate - startDate;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (diffDays > 0) {
-            totalDaysDisplay.textContent = diffDays + '天';
-            const dailyTarget = amount / diffDays;
-            dailyTargetDisplay.textContent = '¥' + dailyTarget.toFixed(2);
-        } else {
-            totalDaysDisplay.textContent = '-';
-            dailyTargetDisplay.textContent = '-';
-        }
-    } else {
-        totalDaysDisplay.textContent = '-';
-        dailyTargetDisplay.textContent = '-';
+    let html = '';
+    for (let year = startYear; year <= endYear; year++) {
+        html += `<option value="${year}" ${year === currentYear ? 'selected' : ''}>${year}年</option>`;
     }
+    yearSelect.innerHTML = html;
 }
 
 function saveYearlyGoal() {
+    const yearSelect = document.getElementById('yearly-goal-year');
     const amountInput = document.getElementById('yearly-goal-amount');
-    const startDateInput = document.getElementById('yearly-goal-start-date');
-    const endDateInput = document.getElementById('yearly-goal-end-date');
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
 
+    const year = parseInt(yearSelect.value);
     const amount = parseFloat(amountInput.value);
     const autoDistribute = autoDistributeCheckbox.checked;
-    const startDate = startDateInput.value;
-    const endDate = endDateInput.value;
+
+    if (!year || year < 2000 || year > 2100) {
+        showToast('请选择有效的年份', 'error');
+        return;
+    }
 
     if (!amount || amount <= 0) {
         showToast('请输入有效的目标金额', 'error');
         return;
     }
 
-    if (!startDate || !endDate) {
-        showToast('请选择开始和结束日期', 'error');
-        return;
-    }
-
-    // 计算目标天数
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = end - start;
-    const targetDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (targetDays <= 0) {
-        showToast('结束日期必须晚于开始日期', 'error');
-        return;
-    }
-
-    // 保存目标，传入天数、开始日期和结束日期
-    DataManager.saveYearlyGoal(amount, targetDays, autoDistribute, startDate, endDate);
-    showToast('目标已保存', 'success');
+    // 保存年度目标
+    DataManager.saveYearlyGoal(amount, year, autoDistribute);
+    showToast('年度目标已保存', 'success');
     
     // 刷新仪表盘显示
     renderYearlyGoal();
@@ -10515,33 +10526,23 @@ function saveYearlyGoal() {
 function loadYearlyGoalSettings() {
     const goal = DataManager.getYearlyGoal();
     
+    const yearSelect = document.getElementById('yearly-goal-year');
     const amountInput = document.getElementById('yearly-goal-amount');
-    const startDateInput = document.getElementById('yearly-goal-start-date');
-    const endDateInput = document.getElementById('yearly-goal-end-date');
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
 
+    // 生成年份选项
+    generateYearOptions();
+    
+    // 加载年份
+    if (yearSelect && goal.year) {
+        yearSelect.value = goal.year;
+    }
+    
+    // 加载金额
     if (amountInput) amountInput.value = goal.amount > 0 ? goal.amount : '';
+    
+    // 加载自动分配设置
     if (autoDistributeCheckbox) autoDistributeCheckbox.checked = goal.autoDistribute;
-    
-    // 加载开始日期
-    if (startDateInput && goal.startDate) {
-        startDateInput.value = goal.startDate;
-    } else if (startDateInput) {
-        startDateInput.value = new Date().toISOString().split('T')[0];
-    }
-    
-    // 加载结束日期
-    if (endDateInput && goal.endDate) {
-        endDateInput.value = goal.endDate;
-    } else if (endDateInput) {
-        // 默认结束日期为30天后
-        const defaultEnd = new Date();
-        defaultEnd.setDate(defaultEnd.getDate() + 30);
-        endDateInput.value = defaultEnd.toISOString().split('T')[0];
-    }
-    
-    // 更新每日目标显示
-    updateGoalDailyTarget();
 }
 
 // 显示每日目标缺口详情弹窗
