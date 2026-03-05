@@ -489,7 +489,7 @@ function renderInstallments() {
                 </div>
                 <div class="phase-goals-list">
                     ${phaseGoals.map((phase, index) => `
-                        <div class="phase-goal-item" style="padding: 12px; margin-bottom: 8px; background: white; border-radius: 8px; border-left: 4px solid ${index === 0 ? '#22c55e' : '#3b82f6'};">
+                        <div class="phase-goal-item" style="padding: 16px; margin-bottom: 12px; background: white; border-radius: var(--radius-md); border: 3px solid var(--border-color); box-shadow: var(--shadow-card); border-left: 4px solid ${index === 0 ? '#22c55e' : '#3b82f6'};">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                 <span style="font-weight: 600; color: #1f2937;">${phase.phaseName}: ${phase.platform}</span>
                                 <span style="font-size: 12px; color: #6b7280;">${phase.dueDate}截止</span>
@@ -1446,20 +1446,24 @@ class DataManager {
         return result;
     }
     
-    // 获取所有有记录的每日赚取记录
+    // 获取所有有记录的每日赚取记录（只返回今天及以后的记录）
     static getAllDailyEarnings() {
         const data = this.loadData();
         const dailyTotals = {};
+        const today = new Date().toISOString().split('T')[0];
         
-        // 收集所有日期的赚取金额
+        // 收集所有日期的赚取金额（只包括今天及以后）
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
                 if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        if (!dailyTotals[date]) {
-                            dailyTotals[date] = 0;
+                        // 只记录今天及以后的日期
+                        if (date >= today) {
+                            if (!dailyTotals[date]) {
+                                dailyTotals[date] = 0;
+                            }
+                            dailyTotals[date] += parseFloat(amount) || 0;
                         }
-                        dailyTotals[date] += parseFloat(amount) || 0;
                     });
                 }
             });
@@ -1473,18 +1477,20 @@ class DataManager {
         return result;
     }
 
-    // 计算历史平均日收益（基于所有有记录的天数）
+    // 计算历史平均日收益（只基于今天及以后的记录）
     static calculateAverageDailyEarnings() {
         const data = this.loadData();
         let totalEarnings = 0;
         let daysWithEarnings = new Set();
+        const today = new Date().toISOString().split('T')[0];
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
                 if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        if (amount > 0) {
-                            totalEarnings += amount;
+                        // 只计算今天及以后的记录
+                        if (date >= today && amount > 0) {
+                            totalEarnings += parseFloat(amount) || 0;
                             daysWithEarnings.add(date);
                         }
                     });
@@ -3312,6 +3318,18 @@ class DataManager {
         // 清除游戏管理相关的存储键
         localStorage.removeItem(DOWNLOADED_GAMES_KEY);
         localStorage.removeItem(GAME_DRAW_HISTORY_KEY);
+    }
+    
+    // 清除所有每日赚取记录
+    static clearAllDailyEarnings() {
+        const data = this.loadData();
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                app.dailyEarnings = {};
+            });
+        });
+        this.saveData(data);
+        return data;
     }
     
     // 主题相关方法
@@ -5763,6 +5781,26 @@ function showAppDetailModal(appId) {
                 </div>
             ` : ''}
             
+            <!-- 每日赚取记录 -->
+            ${targetApp.dailyEarnings && Object.keys(targetApp.dailyEarnings).length > 0 ? `
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">📈 每日赚取记录</div>
+                    <div style="max-height: 150px; overflow-y: auto;">
+                        ${Object.entries(targetApp.dailyEarnings)
+                            .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+                            .map(([date, amount]) => {
+                                const isToday = date === new Date().toISOString().split('T')[0];
+                                return `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-color); ${isToday ? 'background: rgba(56, 239, 125, 0.1);' : ''}">
+                                        <span style="font-size: 12px; color: var(--text-secondary);">${date} ${isToday ? '(今天)' : ''}</span>
+                                        <span style="font-size: 12px; font-weight: 600; color: var(--success-color);">+¥${parseFloat(amount).toFixed(2)}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                    </div>
+                </div>
+            ` : '<div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center; color: var(--text-secondary); font-size: 12px;">暂无每日赚取记录</div>'}
+            
             <div style="display: flex; gap: 8px;">
                 <button class="btn btn-primary flex-1" onclick="closeModal(); setTimeout(() => openWithdrawModal('${targetPhone.id}', '${targetApp.id}'), 200);">记录提现</button>
                 <button class="btn btn-secondary flex-1" onclick="closeModal(); setTimeout(() => openEditAppModal('${targetPhone.id}', '${targetApp.id}'), 200);">编辑软件</button>
@@ -5801,7 +5839,7 @@ function renderAppRanking() {
         const percentage = (app.withdrawal / maxWithdrawal) * 100;
         const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
         return `
-            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary); border: 3px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-card);">
                 <span style="font-size: 24px; width: 32px; text-align: center;">${medals[index]}</span>
                 <div style="flex: 1;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
@@ -6664,18 +6702,44 @@ function openEditAppModal(phoneId, appId) {
                     });
                     renderPhones();
                     
-                    // 检查是否达到日目标
+                    // 获取更新后的软件信息
                     const phone = result.phones.find(p => p.id === phoneId);
                     const app = phone ? phone.apps.find(a => a.id === appId) : null;
-                    if (app && app._todayEarnings !== undefined) {
-                        if (app._dailyTargetAchieved) {
-                            showToast(`🎉 恭喜！今日收益¥${app._todayEarnings.toFixed(2)}，已达到日目标¥${app._dailyTarget.toFixed(2)}！`, 'success');
-                        } else if (app._dailyTarget) {
-                            const remaining = app._dailyTarget - app._todayEarnings;
-                            showToast(`今日收益¥${app._todayEarnings.toFixed(2)}，距离日目标¥${app._dailyTarget.toFixed(2)}还差¥${remaining.toFixed(2)}`, 'info');
-                        } else {
-                            showToast(`今日收益¥${app._todayEarnings.toFixed(2)}`, 'info');
+                    
+                    if (app) {
+                        // 获取各类目标信息
+                        const dailyTarget = DataManager.calculateDailyTarget();
+                        const yearlyGoal = DataManager.getYearlyGoal();
+                        const appStats = DataManager.getAppEarningsStats(app);
+                        
+                        // 构建提示信息
+                        let messages = [];
+                        
+                        // 1. 今日收益提示
+                        if (appStats.today > 0) {
+                            messages.push(`今日收益¥${appStats.today.toFixed(2)}`);
                         }
+                        
+                        // 2. 年目标提示
+                        if (yearlyGoal.amount > 0 && dailyTarget.isValid) {
+                            const todayEarned = appStats.today;
+                            const dailyTargetAmount = dailyTarget.dailyTarget;
+                            
+                            if (todayEarned >= dailyTargetAmount) {
+                                messages.push(`🎉 已达到今日目标¥${dailyTargetAmount.toFixed(2)}！`);
+                            } else {
+                                const remaining = dailyTargetAmount - todayEarned;
+                                messages.push(`距离今日目标还差¥${remaining.toFixed(2)}`);
+                            }
+                        }
+                        
+                        // 显示综合提示
+                        if (messages.length > 0) {
+                            showToast(messages.join('，'), 'info');
+                        } else {
+                            showToast('软件已更新！');
+                        }
+                        
                         // 清除标记
                         delete app._dailyTargetAchieved;
                         delete app._todayEarnings;
@@ -8191,6 +8255,16 @@ function addMinimalTestData() {
     showToast('极简测试数据添加成功！', 'success');
 }
 
+// 清空每日赚取记录
+function clearAllDailyEarnings() {
+    if (confirm('确定要清空所有每日赚取记录吗？此操作不可恢复！')) {
+        DataManager.clearAllDailyEarnings();
+        renderDashboard();
+        renderPhones();
+        showToast('每日赚取记录已清空！', 'success');
+    }
+}
+
 // 清空所有数据
 function clearAllData() {
     if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
@@ -8670,6 +8744,7 @@ function displayGameDrawResult(result, container, showCheckbox = false, historyI
     result.forEach((game, index) => {
         const isCompleted = game.completed || false;
         const completedClass = isCompleted ? 'completed' : '';
+        const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
         const checkboxHtml = showCheckbox ? `
             <label class="game-complete-checkbox">
                 <input type="checkbox" ${isCompleted ? 'checked' : ''} 
@@ -8684,7 +8759,7 @@ function displayGameDrawResult(result, container, showCheckbox = false, historyI
                 <div class="game-draw-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);">${index + 1}</div>
                 <div class="game-draw-info">
                     <span class="game-draw-name">${game.name}</span>
-                    <span class="game-draw-time">⏱️ ${game.playTime} 分钟</span>
+                    <span class="game-draw-time">⏱️ ${playTime} 分钟</span>
                 </div>
                 ${checkboxHtml}
             </div>
@@ -8730,6 +8805,7 @@ function renderGameHistory() {
         
         item.games.forEach((game, gameIndex) => {
             const isCompleted = game.completed || false;
+            const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
             html += `
                 <div class="history-game-item ${isCompleted ? 'completed' : ''}">
                     <label class="game-complete-checkbox">
@@ -8738,7 +8814,7 @@ function renderGameHistory() {
                         <span class="checkmark"></span>
                     </label>
                     <span class="history-game-name">${game.name}</span>
-                    <span class="history-game-time">${game.playTime}分钟</span>
+                    <span class="history-game-time">${playTime}分钟</span>
                 </div>
             `;
         });
@@ -8767,12 +8843,13 @@ function openGameResultPopup(result) {
     // 显示结果
     let html = '';
     result.forEach((game, index) => {
+        const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
         html += `
             <div class="popup-game-item" style="animation-delay: ${index * 0.15}s">
                 <div class="popup-game-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);">${index + 1}</div>
                 <div class="popup-game-info">
                     <span class="popup-game-name">${game.name}</span>
-                    <span class="popup-game-time">⏱️ ${game.playTime} 分钟</span>
+                    <span class="popup-game-time">⏱️ ${playTime} 分钟</span>
                 </div>
             </div>
         `;
@@ -9193,6 +9270,16 @@ function onGamePhoneChange() {
     const select = document.getElementById('game-phone-select');
     currentGamePhoneId = select.value || null;
     
+    // 如果切换了手机，清除当前计时器和抽签结果
+    if (todayDrawResult && todayDrawResult._phoneId !== currentGamePhoneId) {
+        todayDrawResult = null;
+    }
+    // 停止当前计时器（如果正在运行）
+    if (typeof gameTimerState !== 'undefined' && gameTimerState.intervalId) {
+        clearInterval(gameTimerState.intervalId);
+        gameTimerState.intervalId = null;
+    }
+    
     // 重置抽签区域
     resetDrawArea();
     
@@ -9213,9 +9300,9 @@ function resetDrawArea() {
     // 检查今天是否已经抽签（优先使用内存变量，如果没有则从localStorage恢复）
     const today = getCurrentDate();
 
-    // 首先检查内存变量
-    if (todayDrawResult && todayDrawResult._drawDate === today) {
-        // 今天已经抽签过了，显示抽签结果（不检查 phoneId，因为可能切换了手机）
+    // 首先检查内存变量（必须匹配当前手机ID）
+    if (todayDrawResult && todayDrawResult._drawDate === today && todayDrawResult._phoneId === currentGamePhoneId) {
+        // 今天已经抽签过了，显示抽签结果
         showTodayDrawResult(todayDrawResult);
         return;
     }
@@ -9223,22 +9310,8 @@ function resetDrawArea() {
     // 如果内存变量不存在，从抽签历史记录中恢复
     const history = DataManager.getGameDrawHistory();
     
-    // 先尝试找到当前手机的记录
-    let todayRecord = history.find(h => h.date === today && h.phoneId === currentGamePhoneId);
-    
-    // 如果没有找到，尝试找到今天的任何记录（不限制手机）
-    if (!todayRecord) {
-        todayRecord = history.find(h => h.date === today);
-        if (todayRecord) {
-            // 更新 currentGamePhoneId 为记录中的手机ID
-            currentGamePhoneId = todayRecord.phoneId;
-            // 更新选择器
-            const select = document.getElementById('game-phone-select');
-            if (select) {
-                select.value = currentGamePhoneId;
-            }
-        }
-    }
+    // 只查找当前手机的记录
+    const todayRecord = history.find(h => h.date === today && h.phoneId === currentGamePhoneId);
 
     if (todayRecord) {
         // 恢复 todayDrawResult（优先使用历史记录中的游戏名称）
@@ -10415,10 +10488,12 @@ function renderYearlyGoal() {
     // 获取所有有记录的每日赚取
     const allDailyEarnings = DataManager.getAllDailyEarnings();
 
+    const themeColor = getThemeColor('primary');
+    
     let html = `
         <div style="padding: 16px;">
             <!-- 总体进度 - 毛玻璃效果 -->
-            <div style="position: relative; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 16px; padding: 24px; margin-bottom: 20px; overflow: hidden;">
+            <div style="position: relative; background: ${themeColor}; border-radius: 16px; padding: 24px; margin-bottom: 20px; overflow: hidden;">
                 <!-- 背景装饰圆形 -->
                 <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(25px);"></div>
                 <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(20px);"></div>
@@ -10537,8 +10612,12 @@ function renderYearlyGoal() {
             const dailyTarget = app.dailyTarget || (app.adjustedTarget / (distribution.estimatedDays || 365));
             const dailyStats = DataManager.calculateAppAchievementStats(app.appId);
             
+            // 根据状态确定边框颜色
+            const borderColor = isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor;
+            const bgColor = isCompleted ? 'rgba(56, 239, 125, 0.15)' : hasAllocation ? 'rgba(240, 147, 251, 0.15)' : `${rankColor}15`;
+            
             html += `
-                <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 12px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.3); cursor: pointer; position: relative; overflow: hidden;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')">
+                <div style="background: ${bgColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 3px solid ${borderColor}; cursor: pointer; position: relative; overflow: hidden; box-shadow: var(--shadow-card); transition: all 0.3s ease;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-hover)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow-card)'">
                     <!-- 左侧彩色条 -->
                     <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; border-radius: 12px 0 0 12px;"></div>
                     
@@ -11298,6 +11377,13 @@ function renderDailyGoalCalendar() {
             }
         }
         
+        // 显示金额（不四舍五入，保留原始精度）
+        const displayAmount = hasRecord ? earnedAmount.toString() : '';
+        
+        // 根据背景色调整文字颜色，确保在绿色背景下清晰可见
+        const dayTextColor = isAchieved ? '#000' : textColor;
+        const amountTextColor = isAchieved ? '#000' : textColor;
+        
         html += `
             <div style="
                 aspect-ratio: 1;
@@ -11307,14 +11393,16 @@ function renderDailyGoalCalendar() {
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                font-size: ${isToday ? '14px' : '12px'};
+                font-size: ${isToday ? '13px' : '11px'};
                 font-weight: ${isToday ? 'bold' : 'normal'};
                 color: ${textColor};
                 border: ${isToday ? '2px solid #11998e' : 'none'};
                 position: relative;
-            " title="${dateStr}${hasRecord ? ' - 收益: ¥' + earnedAmount.toFixed(2) : ' - 无记录'}">
-                <span>${day}</span>
-                ${emoji ? `<span style="font-size: 10px; position: absolute; bottom: 1px;">${emoji}</span>` : ''}
+                padding: 2px;
+            " title="${dateStr}${hasRecord ? ' - 收益: ¥' + earnedAmount : ' - 无记录'}">
+                <span style="font-size: ${isToday ? '12px' : '10px'}; color: ${dayTextColor};">${day}</span>
+                ${hasRecord ? `<span style="font-size: 9px; margin-top: 1px; color: ${amountTextColor};">¥${displayAmount}</span>` : ''}
+                ${emoji ? `<span style="font-size: 8px; position: absolute; bottom: 1px; right: 2px;">${emoji}</span>` : ''}
             </div>
         `;
     }

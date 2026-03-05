@@ -76,7 +76,7 @@
                 
                 <div class="stats-row">
                     <!-- 可用资金 - 淡紫色毛玻璃 -->
-                    <div style="position: relative; background: linear-gradient(135deg, #c084fc 0%, #d8b4fe 100%); border-radius: 16px; padding: 20px; overflow: hidden; flex: 1;">
+                    <div style="position: relative; background: linear-gradient(135deg, #c084fc 0%, #d8b4fe 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1;">
                         <div style="position: absolute; top: -25px; left: 50%; width: 70px; height: 70px; background: rgba(255,255,255,0.35); border-radius: 50%; filter: blur(18px);"></div>
                         <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
                             <span class="stat-label" style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">可用资金</span>
@@ -85,7 +85,7 @@
                     </div>
                     
                     <!-- 有提现软件 - 黄色毛玻璃 -->
-                    <div style="position: relative; background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%); border-radius: 16px; padding: 20px; overflow: hidden; flex: 1;">
+                    <div style="position: relative; background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1;">
                         <div style="position: absolute; bottom: -25px; right: 10px; width: 65px; height: 65px; background: rgba(255,255,255,0.4); border-radius: 50%; filter: blur(18px);"></div>
                         <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
                             <span class="stat-label" style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">有提现软件</span>
@@ -528,6 +528,7 @@
                         <span class="settings-title" style="color: var(--error-color);">危险操作</span>
                     </div>
                     <div class="form-hint mb-3" style="font-size: 13px; color: var(--error-color);">清空所有数据，此操作不可恢复！</div>
+                    <button class="btn btn-error w-full mb-3" onclick="clearAllDailyEarnings()">🗑️ 清空每日赚取记录</button>
                     <button class="btn btn-error w-full" onclick="clearAllData()">🗑️ 清空所有数据</button>
                 </div>
             </div>

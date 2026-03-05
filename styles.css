@@ -2876,7 +2876,15 @@ body {
     border-radius: var(--radius-md);
     padding: 16px;
     margin-bottom: 12px;
-    border: 2px solid rgba(124, 107, 207, 0.1);
+    border: 3px solid var(--border-color);
+    box-shadow: var(--shadow-card);
+    transition: all var(--transition-normal);
+}
+
+.installment-app-goal-item:hover {
+    border-color: var(--primary-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
 }
 
 .installment-app-goal-header {
@@ -3213,12 +3221,6 @@ body {
         padding: 16px;
     }
     
-    .stats-container {
-        margin-left: -16px;
-        margin-right: -16px;
-        width: calc(100% + 32px);
-    }
-    
     .stats-row {
         flex-direction: column;
     }
@@ -3427,12 +3429,6 @@ body {
     
     .main-content {
         padding: 12px;
-    }
-    
-    .stats-container {
-        margin-left: -12px;
-        margin-right: -12px;
-        width: calc(100% + 24px);
     }
     
     .stat-value {
