@@ -1400,6 +1400,79 @@ class DataManager {
         };
     }
 
+    // 获取今日总赚取金额
+    static getTodayTotalEarnings() {
+        const data = this.loadData();
+        const today = getCurrentDate();
+        let totalEarned = 0;
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.dailyEarnings && app.dailyEarnings[today]) {
+                    totalEarned += parseFloat(app.dailyEarnings[today]) || 0;
+                }
+            });
+        });
+        
+        return totalEarned;
+    }
+    
+    // 获取最近N天的每日赚取记录
+    static getRecentDailyEarnings(days) {
+        const data = this.loadData();
+        const result = [];
+        
+        // 获取最近N天的日期
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            
+            let dayEarned = 0;
+            data.phones.forEach(phone => {
+                phone.apps.forEach(app => {
+                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
+                        dayEarned += parseFloat(app.dailyEarnings[dateStr]) || 0;
+                    }
+                });
+            });
+            
+            result.push({
+                date: dateStr,
+                amount: dayEarned
+            });
+        }
+        
+        return result;
+    }
+    
+    // 获取所有有记录的每日赚取记录
+    static getAllDailyEarnings() {
+        const data = this.loadData();
+        const dailyTotals = {};
+        
+        // 收集所有日期的赚取金额
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.dailyEarnings) {
+                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
+                        if (!dailyTotals[date]) {
+                            dailyTotals[date] = 0;
+                        }
+                        dailyTotals[date] += parseFloat(amount) || 0;
+                    });
+                }
+            });
+        });
+        
+        // 转换为数组并排序（日期从早到晚）
+        const result = Object.entries(dailyTotals)
+            .map(([date, amount]) => ({ date, amount }))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        return result;
+    }
+
     // 计算历史平均日收益（基于所有有记录的天数）
     static calculateAverageDailyEarnings() {
         const data = this.loadData();
@@ -2230,6 +2303,9 @@ class DataManager {
         localStorage.removeItem(SETTINGS_KEY);
         localStorage.removeItem(DATA_KEY);
         localStorage.removeItem('moneyApp_assets');
+        localStorage.removeItem('moneyApp_gameDrawHistory');
+        localStorage.removeItem('moneyApp_gameTimers');
+        localStorage.removeItem('moneyApp_dailyGaps');
         return { phones: [], installments: [], expenses: [], settings: {} };
     }
 
@@ -2385,7 +2461,7 @@ class DataManager {
         const dates = Object.keys(app.dailyEarnings).sort();
         
         // 今日收益
-        const todayEarning = app.dailyEarnings[today] || 0;
+        const todayEarning = parseFloat(app.dailyEarnings[today]) || 0;
         
         // 计算7天和30天收益
         let last7Days = 0;
@@ -2393,7 +2469,7 @@ class DataManager {
         let total = 0;
         
         dates.forEach(date => {
-            const amount = app.dailyEarnings[date];
+            const amount = parseFloat(app.dailyEarnings[date]) || 0;
             total += amount;
             
             // 检查是否在7天内
@@ -2855,13 +2931,36 @@ class DataManager {
         const history = this.getGameDrawHistory();
         const targetDays = game.targetDays || 7;
         
+        // 检查是否已存在相同日期和手机的记录
+        const existingIndex = history.findIndex(h => h.phoneId === phoneId && h.date === drawDate);
+        
+        if (existingIndex >= 0) {
+            // 更新现有记录
+            history[existingIndex] = {
+                date: drawDate,
+                gameId: game.id,
+                gameName: game.name,
+                phoneId: phoneId,
+                daysPlayed: game.daysPlayed || 0,
+                remainingDays: targetDays - (game.daysPlayed || 0),
+                targetDays: targetDays,
+                isRedownload: game.isRedownload || false,
+                completed: true,
+                completedAt: new Date().toISOString()
+            };
+            this.saveGameDrawHistory(history);
+            console.log('已更新抽签记录:', history[existingIndex]);
+            return history[existingIndex];
+        }
+        
+        // 添加新记录
         history.unshift({
             date: drawDate,
             gameId: game.id,
             gameName: game.name,
             phoneId: phoneId,
-            daysPlayed: game.daysPlayed,
-            remainingDays: targetDays - game.daysPlayed,
+            daysPlayed: game.daysPlayed || 0,
+            remainingDays: targetDays - (game.daysPlayed || 0),
             targetDays: targetDays,
             isRedownload: game.isRedownload || false,
             completed: true,
@@ -2871,6 +2970,21 @@ class DataManager {
         this.saveGameDrawHistory(history);
         console.log('已保存完成的抽签记录:', history[0]);
         return history[0];
+    }
+    
+    // 更新抽签历史的天数
+    static updateDrawHistoryDays(phoneId, date, daysPlayed) {
+        const history = this.getGameDrawHistory();
+        const record = history.find(h => h.phoneId === phoneId && h.date === date);
+        
+        if (record) {
+            record.daysPlayed = daysPlayed;
+            record.remainingDays = Math.max(0, record.targetDays - daysPlayed);
+            this.saveGameDrawHistory(history);
+            console.log('已更新抽签天数:', record);
+            return record;
+        }
+        return null;
     }
     
     // 清理抽签历史：删除未完成的旧记录和已完成的7天记录
@@ -3204,9 +3318,105 @@ class DataManager {
     static getTheme() {
         return localStorage.getItem('app-theme') || 'default';
     }
-    
+
     static setTheme(theme) {
         localStorage.setItem('app-theme', theme);
+    }
+
+    // 获取主题色
+    static getThemeColors() {
+        const theme = this.getTheme();
+        const colors = {
+            default: {
+                primary: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                secondary: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                accent: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                success: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            },
+            'youth-green': {
+                primary: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                secondary: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 100%)',
+                accent: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            },
+            'vitality-orange': {
+                primary: 'linear-gradient(135deg, #f97316 0%, #fb7185 100%)',
+                secondary: 'linear-gradient(135deg, #fb923c 0%, #fdba74 100%)',
+                accent: 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #eab308 0%, #facc15 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            },
+            'ocean-blue': {
+                primary: 'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)',
+                secondary: 'linear-gradient(135deg, #38bdf8 0%, #7dd3fc 100%)',
+                accent: 'linear-gradient(135deg, #22d3ee 0%, #67e8f9 100%)',
+                success: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                info: 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)'
+            },
+            'sweet-pink': {
+                primary: 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)',
+                secondary: 'linear-gradient(135deg, #f9a8d4 0%, #fbcfe8 100%)',
+                accent: 'linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            },
+            'warm-sunset': {
+                primary: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+                secondary: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                accent: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            },
+            'minimal-dark': {
+                primary: 'linear-gradient(135deg, #404040 0%, #525252 100%)',
+                secondary: 'linear-gradient(135deg, #525252 0%, #737373 100%)',
+                accent: 'linear-gradient(135deg, #a3a3a3 0%, #d4d4d4 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            },
+            'morandi': {
+                primary: 'linear-gradient(135deg, #a8b5bd 0%, #7d8b96 100%)',
+                secondary: 'linear-gradient(135deg, #b8a9a1 0%, #c9b8b0 100%)',
+                accent: 'linear-gradient(135deg, #9db4c0 0%, #b8d4e3 100%)',
+                success: 'linear-gradient(135deg, #a8c5a8 0%, #c5d9c5 100%)',
+                warning: 'linear-gradient(135deg, #d4b896 0%, #e8d4b8 100%)',
+                info: 'linear-gradient(135deg, #9db4c0 0%, #b8d4e3 100%)'
+            },
+            'forest': {
+                primary: 'linear-gradient(135deg, #4a7c59 0%, #2d5a3d 100%)',
+                secondary: 'linear-gradient(135deg, #6b8e5a 0%, #8fbc8f 100%)',
+                accent: 'linear-gradient(135deg, #228b22 0%, #32cd32 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #d4b896 0%, #e8d4b8 100%)',
+                info: 'linear-gradient(135deg, #4682b4 0%, #87ceeb 100%)'
+            },
+            'business': {
+                primary: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
+                secondary: 'linear-gradient(135deg, #2d3748 0%, #4a5568 100%)',
+                accent: 'linear-gradient(135deg, #3182ce 0%, #63b3ed 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #d69e2e 0%, #ecc94b 100%)',
+                info: 'linear-gradient(135deg, #4299e1 0%, #76c1e8 100%)'
+            },
+            'dark': {
+                primary: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                secondary: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                accent: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
+                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+            }
+        };
+        return colors[theme] || colors.default;
     }
 
     // 分期还款相关方法
@@ -4663,9 +4873,6 @@ function renderDashboard() {
     // 渲染总赚取金额
     renderTotalEarnings();
 
-    // 渲染今日需要关注的软件
-    renderTodayApps(data);
-
     // 渲染收入日历
     renderIncomeCalendar();
     
@@ -5680,9 +5887,6 @@ function renderAppEarningsRanking() {
 
     // 按今日收益排序
     const sortedByToday = [...appEarnings].sort((a, b) => b.today - a.today).slice(0, 5);
-    
-    // 按7天平均收益排序
-    const sortedByAvg7 = [...appEarnings].sort((a, b) => b.avg7Days - a.avg7Days).slice(0, 5);
 
     let html = '';
 
@@ -5694,7 +5898,7 @@ function renderAppEarningsRanking() {
                     📅 今日收益排行
                 </div>
         `;
-        
+
         sortedByToday.forEach((app, index) => {
             if (app.today > 0) {
                 const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
@@ -5707,7 +5911,7 @@ function renderAppEarningsRanking() {
                             <div style="flex: 1;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
-                                    <span style="font-weight: 800; color: #38ef7d; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${app.today.toFixed(2)}</span>
+                                    <span style="font-weight: 800; color: #fbbf24; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">¥${app.today.toFixed(2)}</span>
                                 </div>
                             </div>
                         </div>
@@ -5715,43 +5919,7 @@ function renderAppEarningsRanking() {
                 `;
             }
         });
-        
-        html += `</div>`;
-    }
 
-    // 7天平均收益排行 - 毛玻璃效果
-    if (sortedByAvg7.some(a => a.avg7Days > 0)) {
-        html += `
-            <div>
-                <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-                    📊 7天平均收益排行
-                </div>
-        `;
-        
-        sortedByAvg7.forEach((app, index) => {
-            if (app.avg7Days > 0) {
-                const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-                const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b'];
-                const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
-                html += `
-                    <div style="position: relative; background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || '•'}</span>
-                            <div style="flex: 1;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
-                                    <span style="font-weight: 800; color: #a78bfa; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${app.avg7Days.toFixed(2)}/天</span>
-                                </div>
-                                <div style="font-size: 11px; color: rgba(255,255,255,0.85); margin-top: 4px;">
-                                    7天总计: <strong style="color: #ffffff;">¥${app.last7Days.toFixed(2)}</strong> · 累计: <strong style="color: #ffffff;">¥${app.total.toFixed(2)}</strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-        });
-        
         html += `</div>`;
     }
 
@@ -6185,107 +6353,6 @@ function generateEmptyState(type, options = {}) {
     return html;
 }
 
-// 渲染今日需要关注的软件 - 显示当天未提现的软件及今日目标
-function renderTodayApps(data) {
-    const today = getCurrentDate();
-    let todayApps = [];
-
-    // 获取每日提现目标
-    const dailyTarget = DataManager.calculateDailyWithdrawalTarget();
-    const perAppTarget = dailyTarget ? dailyTarget.perAppTarget : 0;
-
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            // 检查今天是否有提现记录
-            const hasWithdrawalToday = app.withdrawals && app.withdrawals.some(w => w.date === today);
-            // 只显示今天未提现的软件
-            if (!hasWithdrawalToday) {
-                todayApps.push({
-                    ...app,
-                    phoneName: phone.name
-                });
-            }
-        });
-    });
-
-    const container = document.getElementById('today-apps-list');
-    if (todayApps.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-state-illustration">🎉</div><div class="empty-state-title">今日所有软件已提现</div><div class="empty-state-description">所有软件今天都有提现记录</div></div>';
-        return;
-    }
-
-    container.innerHTML = todayApps.map(app => {
-        const earned = calculateAppEarned(app);
-        const withdrawalCount = app.withdrawals ? app.withdrawals.length : 0;
-        // 找到app所属的手机ID
-        let phoneId = '';
-        data.phones.forEach(phone => {
-            if (phone.apps && phone.apps.find(a => a.id === app.id)) {
-                phoneId = phone.id;
-            }
-        });
-        
-        // 如果找不到手机ID，尝试使用app.phoneId（如果有的话）
-        if (!phoneId && app.phoneId) {
-            phoneId = app.phoneId;
-        }
-        
-        // 计算今日还需赚取的金额
-        let todayRemaining = 0;
-        if (dailyTarget && dailyTarget.dailyTarget > 0) {
-            // 获取今日已赚取金额
-            const todayEarned = getAppTodayEarned(app.id);
-            todayRemaining = Math.max(0, dailyTarget.perAppTarget - todayEarned);
-        }
-        
-        return `
-            <div style="position: relative; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); border-radius: 16px; padding: 16px; margin-bottom: 12px; overflow: hidden;">
-                <!-- 背景装饰圆形 -->
-                <div style="position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(15px);"></div>
-                <div style="position: absolute; bottom: -15px; left: -15px; width: 50px; height: 50px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(12px);"></div>
-                
-                <!-- 毛玻璃卡片内容 -->
-                <div style="position: relative; background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px;">
-                        <span style="font-size: 14px; font-weight: 600; color: #78350f; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${app.phoneName} - ${app.name}</span>
-                        ${dailyTarget && dailyTarget.dailyTarget > 0 && todayRemaining > 0 ? `<span style="font-size: 12px; color: #92400e; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;">今日还需: ¥${todayRemaining.toFixed(2)}</span>` : (dailyTarget && dailyTarget.dailyTarget > 0 ? '<span style="font-size: 12px; color: #15803d; font-weight: 600; background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;">今日已达标</span>' : '')}
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #92400e; margin-bottom: 10px;">
-                        <span>余额: <strong style="color: #78350f;">¥${(app.balance || 0).toFixed(2)}</strong></span>
-                        <span>累计: <strong style="color: #78350f;">¥${earned.toFixed(2)}</strong></span>
-                        <span>次数: <strong style="color: #78350f;">${withdrawalCount}次</strong></span>
-                    </div>
-                    <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; border-top: 1px solid rgba(120, 53, 15, 0.15);">
-                        ${phoneId ? `
-                        <button class="btn btn-sm" onclick="editAppFromTodayFocus('${app.id}', '${phoneId}')" style="font-size: 11px; padding: 5px 14px; background: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.4); color: #78350f; border-radius: 6px;">✏️ 编辑</button>
-                        <button class="btn btn-sm" onclick="withdrawAppFromTodayFocus('${app.id}', '${phoneId}')" style="font-size: 11px; padding: 5px 14px; background: rgba(17, 153, 142, 0.3); border: 1px solid rgba(17, 153, 142, 0.4); color: #78350f; border-radius: 6px;">💰 提现</button>
-                        ` : '<span style="font-size: 11px; color: #92400e;">无法编辑</span>'}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-// 获取软件今日赚取金额 - 已简化，基于今日提现记录
-function getAppTodayEarned(appId) {
-    const data = DataManager.loadData();
-    const today = getCurrentDate();
-    
-    // 查找该软件所属的手机
-    for (const phone of data.phones) {
-        const app = phone.apps.find(a => a.id === appId);
-        if (app && app.withdrawals) {
-            // 计算今日提现金额
-            return app.withdrawals
-                .filter(w => w.date === today)
-                .reduce((sum, w) => sum + w.amount, 0);
-        }
-    }
-    
-    return 0;
-}
-
 // 渲染手机管理页面
 function renderPhones() {
     const data = DataManager.loadData();
@@ -6681,20 +6748,8 @@ function editAppFromAnalysis(appId, phoneId) {
     openEditAppModal(phoneId, appId);
 }
 
-// 从今日需要关注页面编辑软件
-function editAppFromTodayFocus(appId, phoneId) {
-    event.stopPropagation();
-    openEditAppModal(phoneId, appId);
-}
-
 // 从软件赚取分析页面提现
 function withdrawAppFromAnalysis(appId, phoneId) {
-    event.stopPropagation();
-    openWithdrawModal(phoneId, appId);
-}
-
-// 从今日需要关注页面提现
-function withdrawAppFromTodayFocus(appId, phoneId) {
     event.stopPropagation();
     openWithdrawModal(phoneId, appId);
 }
@@ -8051,6 +8106,16 @@ function addTestData() {
                 });
             }
 
+            // 添加10天的每日赚取记录
+            app.dailyEarnings = {};
+            for (let i = 9; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                // 随机生成每日收益（5-25元）
+                app.dailyEarnings[dateStr] = (Math.random() * 20 + 5).toFixed(2);
+            }
+
             phone.apps.push(app);
         });
 
@@ -8131,6 +8196,8 @@ function clearAllData() {
     if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
         DataManager.clearAllData();
         expandedPhones = {};
+        todayDrawResult = null;
+        currentGamePhoneId = null;
         renderDashboard();
         renderPhones();
         renderStats();
@@ -8147,6 +8214,12 @@ function getCurrentDate() {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+// 获取当前主题色
+function getThemeColor(colorType = 'primary') {
+    const colors = DataManager.getThemeColors();
+    return colors[colorType] || colors.primary;
 }
 
 // 卡通风格日历组件
@@ -9133,26 +9206,67 @@ function onGamePhoneChange() {
 function resetDrawArea() {
     const container = document.getElementById('today-game-result');
     if (!container) return;
-    
+
     // 清理旧的抽签历史
     DataManager.cleanupGameDrawHistory();
-    
-    // 检查今天是否已经抽签（使用内存变量）
+
+    // 检查今天是否已经抽签（优先使用内存变量，如果没有则从localStorage恢复）
     const today = getCurrentDate();
-    
-    if (todayDrawResult && todayDrawResult._drawDate === today && todayDrawResult._phoneId === currentGamePhoneId) {
-        // 今天已经抽签过了，显示抽签结果
+
+    // 首先检查内存变量
+    if (todayDrawResult && todayDrawResult._drawDate === today) {
+        // 今天已经抽签过了，显示抽签结果（不检查 phoneId，因为可能切换了手机）
         showTodayDrawResult(todayDrawResult);
-    } else {
-        // 今天还没抽签，显示抽签按钮
-        container.innerHTML = `
-            <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
-            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn" onclick="drawTodayGame()" style="background: white; color: #11998e; font-weight: bold; font-size: 16px;">🎮 本机抽签</button>
-                <button class="btn" onclick="showCrossPhoneDrawModal()" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; font-weight: bold; font-size: 16px;">🎲 跨手机抽签</button>
-            </div>
-        `;
+        return;
     }
+
+    // 如果内存变量不存在，从抽签历史记录中恢复
+    const history = DataManager.getGameDrawHistory();
+    
+    // 先尝试找到当前手机的记录
+    let todayRecord = history.find(h => h.date === today && h.phoneId === currentGamePhoneId);
+    
+    // 如果没有找到，尝试找到今天的任何记录（不限制手机）
+    if (!todayRecord) {
+        todayRecord = history.find(h => h.date === today);
+        if (todayRecord) {
+            // 更新 currentGamePhoneId 为记录中的手机ID
+            currentGamePhoneId = todayRecord.phoneId;
+            // 更新选择器
+            const select = document.getElementById('game-phone-select');
+            if (select) {
+                select.value = currentGamePhoneId;
+            }
+        }
+    }
+
+    if (todayRecord) {
+        // 恢复 todayDrawResult（优先使用历史记录中的游戏名称）
+        todayDrawResult = {
+            id: todayRecord.gameId,
+            gameId: todayRecord.gameId,
+            gameName: todayRecord.gameName || '未知游戏',
+            name: todayRecord.gameName || '未知游戏',
+            daysPlayed: todayRecord.daysPlayed || 0,
+            remainingDays: todayRecord.remainingDays || (todayRecord.targetDays - todayRecord.daysPlayed),
+            targetDays: todayRecord.targetDays || 7,
+            isRedownload: todayRecord.isRedownload || false,
+            _drawDate: today,
+            _phoneId: todayRecord.phoneId,
+            _remainingDays: todayRecord.remainingDays || (todayRecord.targetDays - todayRecord.daysPlayed)
+        };
+        showTodayDrawResult(todayDrawResult);
+        return;
+    }
+
+    // 今天还没抽签，显示抽签按钮
+    container.innerHTML = `
+        <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn" onclick="drawTodayGame()" style="background: white; color: #11998e; font-weight: bold; font-size: 16px;">🎮 本机抽签</button>
+            <button class="btn" onclick="showCrossPhoneDrawModal()" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; font-weight: bold; font-size: 16px;">🎲 跨手机抽签</button>
+        </div>
+    `;
 }
 
 // 渲染游戏统计
@@ -9326,11 +9440,9 @@ function renderGameDrawHistoryList() {
                         ${isGameCompleted ? '' : `剩余${record.remainingDays}天`}
                     </div>
                     ${isToday && !isGameCompleted ? `
-                    <button class="btn btn-sm ${isTodayCompleted ? 'btn-secondary' : 'btn-success'}" 
-                            onclick="completeDrawHistoryItem('${record.date}', '${record.gameId}')" 
-                            style="margin-top: 8px; padding: 4px 12px; font-size: 12px;">
-                        ${isTodayCompleted ? '✅ 今日已完成' : '标记今日完成'}
-                    </button>
+                    <div style="margin-top: 8px; font-size: 12px; color: ${isTodayCompleted ? 'var(--success-color)' : 'var(--text-secondary)'};">
+                        ${isTodayCompleted ? '✅ 今日已完成' : '⏳ 等待计时结束'}
+                    </div>
                     ` : ''}
                 </div>
             </div>
@@ -9744,20 +9856,15 @@ function showTodayDrawResult(todayDraw) {
                 ${remainingDays > 0 ? `还需玩 ${remainingDays} 天即可删除` : '已完成，可以删除！'}
             </div>
 
-            <!-- 完成按钮 -->
-            ${!isCompletedToday ? `
-            <button class="btn" onclick="completeTodayGame()" style="background: rgba(255,255,255,0.9); color: #11998e; font-weight: bold; font-size: 16px; margin-top: 16px; padding: 12px 32px; border-radius: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                ✅ 标记今日已完成
-            </button>
-            ` : `
+            <!-- 完成状态显示 -->
+            ${isCompletedToday ? `
             <div style="font-size: 16px; color: #fff; font-weight: bold; margin-top: 16px; padding: 12px 24px; background: rgba(255,255,255,0.3); border-radius: 25px; display: inline-block;">
                 ✅ 今日已完成
             </div>
-            `}
-
             <div style="font-size: 12px; opacity: 0.6; margin-top: 12px;">
-                ${isCompletedToday ? '明天再来抽签吧' : '玩够了就点击完成按钮'}
+                明天再来抽签吧
             </div>
+            ` : ''}
         </div>
     `;
 
@@ -9971,10 +10078,10 @@ function pauseGameTimer(gameId) {
 // 停止游戏计时器（用户手动结束）
 function stopGameTimer(gameId) {
     if (gameTimerState.gameId !== gameId) return;
-    
+
     // 清除计时器
     stopGameTimerInternal();
-    
+
     // 标记为已完成
     const timerData = DataManager.getGameTimer(gameId);
     if (timerData) {
@@ -9982,7 +10089,20 @@ function stopGameTimer(gameId) {
         timerData.endTime = new Date().toISOString();
         DataManager.saveGameTimer(gameId, timerData);
     }
-    
+
+    // 更新 todayDrawResult 的天数（与自动结束保持一致）
+    if (todayDrawResult) {
+        todayDrawResult.daysPlayed = (todayDrawResult.daysPlayed || 0) + 1;
+        todayDrawResult.remainingDays = Math.max(0, (todayDrawResult._remainingDays || todayDrawResult.remainingDays || 7) - todayDrawResult.daysPlayed);
+
+        // 保存到抽签历史
+        const today = getCurrentDate();
+        DataManager.updateDrawHistoryDays(todayDrawResult._phoneId || currentGamePhoneId, today, todayDrawResult.daysPlayed);
+    }
+
+    // 自动标记今日完成
+    completeTodayGame();
+
     // 更新显示
     const container = document.getElementById('timer-display-container');
     if (container) {
@@ -9992,10 +10112,11 @@ function stopGameTimer(gameId) {
             <div style="font-size: 12px; opacity: 0.8; margin-top: 8px;">
                 实际游玩: ${formatElapsedTime(gameTimerState.originalDuration * 60 - gameTimerState.remainingSeconds)}
             </div>
+            <div style="font-size: 12px; color: #38ef7d; margin-top: 8px;">✅ 已自动标记今日完成</div>
         `;
     }
-    
-    showToast('游戏计时已结束', 'success');
+
+    showToast('游戏计时已结束，已标记今日完成', 'success');
 }
 
 // 内部停止计时器（不清除数据）
@@ -10063,7 +10184,7 @@ window.addEventListener('focus', () => {
 // 计时完成回调
 function onTimerComplete(gameId) {
     stopGameTimerInternal();
-    
+
     // 标记为已完成
     const timerData = DataManager.getGameTimer(gameId);
     if (timerData) {
@@ -10071,17 +10192,27 @@ function onTimerComplete(gameId) {
         timerData.endTime = new Date().toISOString();
         DataManager.saveGameTimer(gameId, timerData);
     }
-    
+
+    // 更新 todayDrawResult 的天数
+    if (todayDrawResult) {
+        todayDrawResult.daysPlayed = (todayDrawResult.daysPlayed || 0) + 1;
+        todayDrawResult.remainingDays = Math.max(0, (todayDrawResult._remainingDays || todayDrawResult.remainingDays || 7) - todayDrawResult.daysPlayed);
+
+        // 保存到抽签历史
+        const today = getCurrentDate();
+        DataManager.updateDrawHistoryDays(todayDrawResult._phoneId || currentGamePhoneId, today, todayDrawResult.daysPlayed);
+    }
+
     // 更新显示
     const displayEl = document.getElementById('game-timer-display');
     const statusEl = document.getElementById('timer-status');
-    
+
     if (displayEl) displayEl.textContent = '00:00';
     if (statusEl) statusEl.textContent = '计时结束！';
-    
+
     // 播放提醒
     playTimerAlert();
-    
+
     // 显示提醒弹窗
     showTimerCompleteModal(gameId);
 }
@@ -10275,6 +10406,14 @@ function renderYearlyGoal() {
     
     // 计算每日目标
     const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
+    
+    // 计算今日赚取金额
+    const todayStr = getCurrentDate();
+    const todayEarned = DataManager.getTodayTotalEarnings();
+    const isTodayAchieved = todayEarned >= dailyTargetAmount && dailyTargetAmount > 0;
+    
+    // 获取所有有记录的每日赚取
+    const allDailyEarnings = DataManager.getAllDailyEarnings();
 
     let html = `
         <div style="padding: 16px;">
@@ -10298,8 +10437,20 @@ function renderYearlyGoal() {
                         <span style="font-size: 12px; color: rgba(255,255,255,0.85);">每日需赚取</span>
                         <span style="font-size: 16px; font-weight: 700; color: #ffffff;">¥${dailyTargetAmount.toFixed(2)}</span>
                     </div>
+                    
+                    <!-- 今日赚取金额和达标状态 -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: ${isTodayAchieved ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; border: 2px solid ${isTodayAchieved ? '#38ef7d' : 'rgba(255,255,255,0.2)'};">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 12px; color: rgba(255,255,255,0.95);">今日赚取</span>
+                            ${isTodayAchieved ? '<span style="font-size: 16px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));">✓</span>' : ''}
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 20px; font-weight: 700; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${todayEarned.toFixed(2)}</span>
+                            ${isTodayAchieved ? '<div style="font-size: 11px; color: #ffffff; font-weight: 600; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">已达标</div>' : `<div style="font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px;">还差 ¥${(dailyTargetAmount - todayEarned).toFixed(2)}</div>`}
+                        </div>
+                    </div>
                     <div style="background: rgba(255,255,255,0.25); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
-                        <div style="background: ${isOverTarget ? '#38ef7d' : 'linear-gradient(90deg, #ffffff, rgba(255,255,255,0.8))'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
+                        <div style="background: ${isOverTarget ? 'linear-gradient(90deg, #fbbf24, #f59e0b)' : 'linear-gradient(90deg, #f472b6, #db2777)'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 13px; color: rgba(255,255,255,0.9);">
                         <span>已赚取: <strong style="color: #ffffff;">¥${distribution.totalEarned.toFixed(2)}</strong></span>
@@ -10318,6 +10469,36 @@ function renderYearlyGoal() {
                     `}
                 </div>
             </div>
+
+            <!-- 每日赚取记录 -->
+            ${allDailyEarnings.length > 0 ? `
+            <div style="margin-bottom: 20px;">
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
+                    📈 每日赚取记录 (${allDailyEarnings.length}天)
+                </div>
+                <div id="daily-earnings-container" style="display: flex; gap: 8px; overflow-x: auto; padding: 4px; scroll-behavior: smooth;">
+                    ${allDailyEarnings.map(day => {
+                        const isDayAchieved = day.amount >= dailyTargetAmount && dailyTargetAmount > 0;
+                        const isToday = day.date === todayStr;
+                        return `
+                        <div style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'};">
+                            <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">${day.date.slice(5)}</div>
+                            <div style="font-size: 13px; font-weight: 600; color: ${isDayAchieved ? 'var(--success-color)' : 'var(--text-primary)'};">¥${day.amount.toFixed(0)}</div>
+                            ${isDayAchieved ? '<div style="font-size: 9px; color: var(--success-color);">✓</div>' : ''}
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
+                <script>
+                    (function() {
+                        const container = document.getElementById('daily-earnings-container');
+                        if (container) {
+                            container.scrollLeft = container.scrollWidth;
+                        }
+                    })();
+                </script>
+            </div>
+            ` : ''}
 
             <!-- 软件目标分配 -->
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
