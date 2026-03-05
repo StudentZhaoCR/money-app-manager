@@ -11101,7 +11101,7 @@ function renderDailyGoalContent() {
                     <button class="btn btn-sm btn-secondary" onclick="changeDailyGoalMonth(1)">▶</button>
                 </div>
             </div>
-            <div id="daily-goal-calendar" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center;">
+            <div id="daily-goal-calendar" style="display: grid; grid-template-columns: repeat(7, minmax(36px, 1fr)); gap: 3px; text-align: center; overflow-x: auto; -webkit-overflow-scrolling: touch;">
                 <!-- 日历将由JS生成 -->
             </div>
             <div style="display: flex; gap: 16px; justify-content: center; margin-top: 12px; font-size: 11px;">
@@ -11377,8 +11377,8 @@ function renderDailyGoalCalendar() {
             }
         }
         
-        // 显示金额（不四舍五入，保留原始精度）
-        const displayAmount = hasRecord ? earnedAmount.toString() : '';
+        // 显示金额（处理浮点数精度问题，最多保留2位小数）
+        const displayAmount = hasRecord ? parseFloat(earnedAmount.toFixed(2)) : '';
         
         // 根据背景色调整文字颜色，确保在绿色背景下清晰可见
         const dayTextColor = isAchieved ? '#000' : textColor;
@@ -11393,16 +11393,17 @@ function renderDailyGoalCalendar() {
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                font-size: ${isToday ? '13px' : '11px'};
+                font-size: ${isToday ? '12px' : '10px'};
                 font-weight: ${isToday ? 'bold' : 'normal'};
                 color: ${textColor};
                 border: ${isToday ? '2px solid #11998e' : 'none'};
                 position: relative;
-                padding: 2px;
+                padding: 1px;
+                min-height: 40px;
             " title="${dateStr}${hasRecord ? ' - 收益: ¥' + earnedAmount : ' - 无记录'}">
-                <span style="font-size: ${isToday ? '12px' : '10px'}; color: ${dayTextColor};">${day}</span>
-                ${hasRecord ? `<span style="font-size: 9px; margin-top: 1px; color: ${amountTextColor};">¥${displayAmount}</span>` : ''}
-                ${emoji ? `<span style="font-size: 8px; position: absolute; bottom: 1px; right: 2px;">${emoji}</span>` : ''}
+                <span style="font-size: ${isToday ? '11px' : '9px'}; color: ${dayTextColor}; line-height: 1.2;">${day}</span>
+                ${hasRecord ? `<span style="font-size: 8px; margin-top: 1px; color: ${amountTextColor}; line-height: 1.2; word-break: break-all;">¥${displayAmount}</span>` : ''}
+                ${emoji ? `<span style="font-size: 7px; position: absolute; bottom: 1px; right: 1px;">${emoji}</span>` : ''}
             </div>
         `;
     }
