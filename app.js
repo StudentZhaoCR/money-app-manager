@@ -6976,35 +6976,150 @@ function renderWithdrawRecords() {
 }
 
 // 渲染支出记录
-function renderExpenseRecords() {
+function renderExpenseRecords(filterCategory = 'all') {
     const data = DataManager.loadData();
     const container = document.getElementById('expense-records-list');
     
-    const allExpenses = data.expenses || [];
+    let allExpenses = data.expenses || [];
+    
+    // 为每条记录添加类别
+    allExpenses = allExpenses.map(e => ({
+        ...e,
+        category: getExpenseCategory(e.purpose)
+    }));
+    
+    // 按类别筛选
+    let filteredExpenses = allExpenses;
+    if (filterCategory !== 'all') {
+        filteredExpenses = allExpenses.filter(e => e.category === filterCategory);
+    }
+    
+    // 计算总支出（根据筛选条件）
+    const totalExpense = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+    
+    // 获取所有类别统计
+    const categoryStats = getCategoryStats(allExpenses);
     
     // 按日期排序
-    allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+    filteredExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     if (allExpenses.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无支出记录</div>';
         return;
     }
     
-    container.innerHTML = allExpenses.map(e => `
-        <div class="expense-record-item">
-            <div class="expense-record-header">
-                <span class="expense-tag">💰 支出</span>
-                <span class="expense-date">${e.date}</span>
-            </div>
-            <div class="expense-divider"></div>
-            <div class="expense-record-body">
-                <div class="expense-info">
-                    <h4 class="expense-purpose">${e.purpose}</h4>
-                </div>
-                <div class="expense-amount">-¥${e.amount.toFixed(2)}</div>
+    // 生成类别筛选按钮
+    const categoryButtonsHtml = categoryStats.map(cat => `
+        <button onclick="renderExpenseRecords('${cat.category}')" 
+                class="category-filter-btn ${filterCategory === cat.category ? 'active' : ''}"
+                style="padding: 8px 16px; margin: 4px; border: 1px solid ${filterCategory === cat.category ? '#ef4444' : 'var(--border-color)'}; 
+                       border-radius: 20px; background: ${filterCategory === cat.category ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-secondary)'}; 
+                       color: ${filterCategory === cat.category ? '#ef4444' : 'var(--text-secondary)'}; font-size: 13px; cursor: pointer;
+                       transition: all 0.2s;">
+            ${cat.category} (${cat.count})
+        </button>
+    `).join('');
+    
+    // 添加总支出卡片 + 类别筛选 + 记录列表
+    container.innerHTML = `
+        <div class="expense-total-card" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border: 2px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: center;">
+            <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">${filterCategory === 'all' ? '💰 总支出' : `💰 ${filterCategory}支出`}</div>
+            <div style="font-size: 32px; font-weight: 700; color: #ef4444;">¥${totalExpense.toFixed(2)}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">共 ${filteredExpenses.length} 笔支出记录</div>
+        </div>
+        
+        <div class="category-filter" style="margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">按类别筛选：</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                <button onclick="renderExpenseRecords('all')" 
+                        class="category-filter-btn ${filterCategory === 'all' ? 'active' : ''}"
+                        style="padding: 8px 16px; margin: 4px; border: 1px solid ${filterCategory === 'all' ? '#ef4444' : 'var(--border-color)'}; 
+                               border-radius: 20px; background: ${filterCategory === 'all' ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-secondary)'}; 
+                               color: ${filterCategory === 'all' ? '#ef4444' : 'var(--text-secondary)'}; font-size: 13px; cursor: pointer;">
+                    全部 (${allExpenses.length})
+                </button>
+                ${categoryButtonsHtml}
             </div>
         </div>
-    `).join('');
+        
+        <div class="expense-records-list">
+            ${filteredExpenses.length === 0 ? '<div class="empty-state">该类别暂无支出记录</div>' : filteredExpenses.map(e => `
+                <div class="expense-record-item">
+                    <div class="expense-record-header">
+                        <span class="expense-tag">💰 ${e.category}</span>
+                        <span class="expense-date">${e.date}</span>
+                    </div>
+                    <div class="expense-divider"></div>
+                    <div class="expense-record-body">
+                        <div class="expense-info">
+                            <h4 class="expense-purpose">${e.purpose}</h4>
+                        </div>
+                        <div class="expense-amount">-¥${e.amount.toFixed(2)}</div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// 获取支出类别
+function getExpenseCategory(purpose) {
+    if (!purpose) return '其他';
+    const p = purpose.toLowerCase();
+    
+    // 话费相关
+    if (p.includes('话费') || p.includes('充值') || p.includes('流量') || p.includes('宽带') || p.includes('移动') || p.includes('联通') || p.includes('电信')) {
+        return '话费';
+    }
+    // 餐饮相关
+    if (p.includes('餐') || p.includes('饭') || p.includes('吃') || p.includes('外卖') || p.includes('奶茶') || p.includes('咖啡') || p.includes('零食')) {
+        return '餐饮';
+    }
+    // 交通相关
+    if (p.includes('车') || p.includes('油') || p.includes('公交') || p.includes('地铁') || p.includes('打车') || p.includes('滴滴') || p.includes('交通')) {
+        return '交通';
+    }
+    // 购物相关
+    if (p.includes('买') || p.includes('购') || p.includes('淘宝') || p.includes('京东') || p.includes('拼多多') || p.includes('衣服') || p.includes('鞋')) {
+        return '购物';
+    }
+    // 娱乐相关
+    if (p.includes('游戏') || p.includes('会员') || p.includes('视频') || p.includes('电影') || p.includes('娱乐') || p.includes('ktv')) {
+        return '娱乐';
+    }
+    // 医疗相关
+    if (p.includes('药') || p.includes('医院') || p.includes('看病') || p.includes('医疗') || p.includes('体检')) {
+        return '医疗';
+    }
+    // 住房相关
+    if (p.includes('房') || p.includes('租') || p.includes('水电') || p.includes('物业') || p.includes('煤气')) {
+        return '住房';
+    }
+    // 学习相关
+    if (p.includes('书') || p.includes('课') || p.includes('学习') || p.includes('培训') || p.includes('考试')) {
+        return '学习';
+    }
+    // 宠物相关
+    if (p.includes('猫') || p.includes('狗') || p.includes('宠物') || p.includes('粮') || p.includes('疫苗')) {
+        return '宠物';
+    }
+    
+    return '其他';
+}
+
+// 获取类别统计
+function getCategoryStats(expenses) {
+    const stats = {};
+    expenses.forEach(e => {
+        const category = e.category;
+        if (!stats[category]) {
+            stats[category] = { category, count: 0, total: 0 };
+        }
+        stats[category].count++;
+        stats[category].total += e.amount;
+    });
+    
+    return Object.values(stats).sort((a, b) => b.total - a.total);
 }
 
 // 渲染分期还款页面
