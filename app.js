@@ -845,46 +845,46 @@ class DataManager {
         }
         
         // 自动计算年目标
-        const autoCalculatedGoal = this.calculateAutoYearlyGoal();
+        const autoCalculatedResult = this.calculateAutoYearlyGoal();
         return {
-            amount: autoCalculatedGoal,
+            amount: autoCalculatedResult.amount,
             year: currentYear,
             autoDistribute: true,
-            isAutoCalculated: true
+            isAutoCalculated: true,
+            weights: autoCalculatedResult.weights
         };
     }
     
-    // 自动计算年目标（基于历史表现）
+    // 自动计算年目标（基于历史表现，使用自适应权重）
     static calculateAutoYearlyGoal() {
         const avgStats = this.calculateAverageDailyEarnings();
         const last7DaysStats = this.calculateLast7DaysAverage();
-        const maxDailyEarnings = this.calculateMaxDailyEarnings();
+        
+        // 获取自适应权重
+        const weights = this.calculateAdaptiveWeights();
         
         // 基础计算：基于历史平均日收益 × 365天
         let baseYearlyGoal = 0;
         
-        if (avgStats.avgDailyEarnings > 0) {
-            // 使用最近7天平均和历史平均的加权值
-            const weightedDailyAvg = (last7DaysStats.avgDailyEarnings * 0.6) + (avgStats.avgDailyEarnings * 0.4);
+        if (avgStats.avgDailyEarnings > 0 || last7DaysStats.avgDailyEarnings > 0) {
+            // 使用自适应权重计算加权平均值
+            const weightedDailyAvg = (last7DaysStats.avgDailyEarnings * weights.recentWeight) + 
+                                     (avgStats.avgDailyEarnings * weights.historyWeight);
             baseYearlyGoal = weightedDailyAvg * 365;
-        } else if (last7DaysStats.avgDailyEarnings > 0) {
-            // 只有最近7天数据
-            baseYearlyGoal = last7DaysStats.avgDailyEarnings * 365;
         } else {
             // 无历史数据，使用默认值
             baseYearlyGoal = 3650; // 默认每天10元
         }
         
-        // 设置合理范围
-        const minGoal = 1825; // 最低每天5元
-        const maxGoal = maxDailyEarnings * 1.5 * 365; // 最高不超过历史最大值的1.5倍
-        
-        let finalYearlyGoal = Math.max(minGoal, Math.min(baseYearlyGoal, maxGoal));
-        
         // 取整到百位
-        finalYearlyGoal = Math.round(finalYearlyGoal / 100) * 100;
+        const finalYearlyGoal = Math.round(baseYearlyGoal / 100) * 100;
         
-        return finalYearlyGoal;
+        return {
+            amount: finalYearlyGoal,
+            weights: weights,
+            avgStats: avgStats,
+            last7DaysStats: last7DaysStats
+        };
     }
 
     // 保存年度目标
@@ -1050,7 +1050,8 @@ class DataManager {
 
     // ==================== 每日目标功能 ====================
 
-    // 获取软件的每日目标（基于年度目标分配计算，支持动态调整）
+    // 获取软件的每日目标（新的计算逻辑）
+    // 软件日目标 = 日目标 ÷ 软件数量
     static getAppDailyGoal(appId) {
         const data = this.loadData();
         for (const phone of data.phones) {
@@ -1066,13 +1067,12 @@ class DataManager {
                     };
                 }
                 
-                // 自动计算：基于目标分配（使用估算天数）
-                const distribution = this.calculateYearlyGoalDistribution();
-                const appDistribution = distribution.apps.find(a => a.appId === appId);
+                // 使用新的计算方式
+                const dailyTargetInfo = this.calculateYearlyDailyTarget();
                 
-                if (appDistribution && distribution.goal.amount > 0) {
-                    // 基础每日目标 = 年目标 / 365天
-                    const baseDailyGoal = appDistribution.adjustedTarget / 365;
+                if (dailyTargetInfo.isValid && dailyTargetInfo.perAppDailyTarget > 0) {
+                    // 基础每日目标 = 日目标 ÷ 软件数量
+                    const baseDailyGoal = dailyTargetInfo.perAppDailyTarget;
                     
                     // 动态调整：根据昨日完成情况调整今日目标
                     const adjustedDailyGoal = this.calculateAdjustedDailyGoal(appId, baseDailyGoal);
@@ -1081,21 +1081,18 @@ class DataManager {
                         amount: adjustedDailyGoal,
                         enabled: app.dailyGoalEnabled !== false,
                         autoCalculate: true,
-                        yearlyTarget: appDistribution.adjustedTarget,
-                        performanceFactor: appDistribution.performanceFactor,
+                        yearlyTarget: dailyTargetInfo.yearlyGoal / dailyTargetInfo.totalApps,
                         baseDailyGoal: baseDailyGoal,
                         isAdjusted: adjustedDailyGoal !== baseDailyGoal
                     };
                 }
                 
-                // 如果没有年度目标，使用默认计算
-                const yearlyGoal = this.getYearlyGoal();
-                const defaultDailyGoal = yearlyGoal.amount > 0 ? yearlyGoal.amount / 365 : 0;
+                // 如果没有有效目标，返回0
                 return {
-                    amount: defaultDailyGoal,
+                    amount: 0,
                     enabled: app.dailyGoalEnabled !== false,
                     autoCalculate: true,
-                    yearlyTarget: yearlyGoal.amount
+                    yearlyTarget: 0
                 };
             }
         }
@@ -1494,19 +1491,19 @@ class DataManager {
         return result;
     }
     
-    // 获取所有有记录的每日赚取记录（只返回今天及以后的记录）
+    // 获取所有有记录的每日赚取记录（返回今天及以前的记录）
     static getAllDailyEarnings() {
         const data = this.loadData();
         const dailyTotals = {};
         const today = new Date().toISOString().split('T')[0];
         
-        // 收集所有日期的赚取金额（只包括今天及以后）
+        // 收集所有日期的赚取金额（只包括今天及以前的历史记录）
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
                 if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        // 只记录今天及以后的日期
-                        if (date >= today) {
+                        // 只记录今天及以前的日期（历史记录）
+                        if (date <= today) {
                             if (!dailyTotals[date]) {
                                 dailyTotals[date] = 0;
                             }
@@ -1525,7 +1522,7 @@ class DataManager {
         return result;
     }
 
-    // 计算历史平均日收益（只基于今天及以后的记录）
+    // 计算历史平均日收益（只基于今天及以前的记录）
     static calculateAverageDailyEarnings() {
         const data = this.loadData();
         let totalEarnings = 0;
@@ -1536,8 +1533,8 @@ class DataManager {
             phone.apps.forEach(app => {
                 if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        // 只计算今天及以后的记录
-                        if (date >= today && amount > 0) {
+                        // 只计算今天及以前的记录（历史数据）
+                        if (date <= today && amount > 0) {
                             totalEarnings += parseFloat(amount) || 0;
                             daysWithEarnings.add(date);
                         }
@@ -1584,11 +1581,254 @@ class DataManager {
             }
         }
         
+        // 获取详细数据用于波动分析
+        const dailyData = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            
+            let dayEarnings = 0;
+            data.phones.forEach(phone => {
+                phone.apps.forEach(app => {
+                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
+                        dayEarnings += app.dailyEarnings[dateStr];
+                    }
+                });
+            });
+            
+            dailyData.push({
+                date: dateStr,
+                earnings: dayEarnings,
+                dayIndex: i
+            });
+        }
+        
+        // 计算波动性和趋势
+        const volatility = this.calculateVolatility(dailyData);
+        const trend = this.calculateTrend(dailyData);
+        
         return {
             totalEarnings: totalEarnings,
             daysCount: daysCount,
-            avgDailyEarnings: daysCount > 0 ? totalEarnings / daysCount : 0
+            avgDailyEarnings: daysCount > 0 ? totalEarnings / daysCount : 0,
+            dailyData: dailyData,
+            volatility: volatility,
+            trend: trend
         };
+    }
+    
+    // 计算波动性（变异系数法）
+    static calculateVolatility(dailyData) {
+        const validData = dailyData.filter(d => d.earnings > 0).map(d => d.earnings);
+        if (validData.length < 2) return { level: 'unknown', coefficient: 0 };
+        
+        // 计算平均值
+        const avg = validData.reduce((sum, val) => sum + val, 0) / validData.length;
+        if (avg === 0) return { level: 'unknown', coefficient: 0 };
+        
+        // 计算标准差
+        const variance = validData.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / validData.length;
+        const stdDev = Math.sqrt(variance);
+        
+        // 变异系数 = 标准差 / 平均值
+        const coefficient = stdDev / avg;
+        
+        // 判断波动等级（5级分类）
+        let level = 'medium';
+        let levelText = '一般';
+        let levelColor = '#f59e0b';
+        
+        if (coefficient < 0.1) {
+            level = 'very_low';      // 极稳定
+            levelText = '极稳定';
+            levelColor = '#10b981';
+        } else if (coefficient < 0.2) {
+            level = 'low';           // 很稳定
+            levelText = '很稳定';
+            levelColor = '#22c55e';
+        } else if (coefficient < 0.35) {
+            level = 'medium_low';    // 较稳定
+            levelText = '较稳定';
+            levelColor = '#84cc16';
+        } else if (coefficient < 0.5) {
+            level = 'medium_high';   // 有些波动
+            levelText = '有些波动';
+            levelColor = '#f97316';
+        } else if (coefficient < 0.8) {
+            level = 'high';          // 波动大
+            levelText = '波动大';
+            levelColor = '#ef4444';
+        } else {
+            level = 'very_high';     // 极不稳定
+            levelText = '极不稳定';
+            levelColor = '#dc2626';
+        }
+        
+        return {
+            level: level,
+            levelText: levelText,
+            levelColor: levelColor,
+            coefficient: coefficient,
+            stdDev: stdDev,
+            average: avg,
+            min: Math.min(...validData),
+            max: Math.max(...validData),
+            range: Math.max(...validData) - Math.min(...validData)
+        };
+    }
+    
+    // 计算趋势
+    static calculateTrend(dailyData) {
+        const validData = dailyData.filter(d => d.earnings > 0);
+        if (validData.length < 3) return { direction: 'unknown', strength: 0 };
+        
+        // 计算连续上升/下降的次数
+        let upStreak = 0;
+        let downStreak = 0;
+        let maxUpStreak = 0;
+        let maxDownStreak = 0;
+        
+        for (let i = 1; i < validData.length; i++) {
+            if (validData[i].earnings > validData[i-1].earnings) {
+                upStreak++;
+                downStreak = 0;
+                maxUpStreak = Math.max(maxUpStreak, upStreak);
+            } else if (validData[i].earnings < validData[i-1].earnings) {
+                downStreak++;
+                upStreak = 0;
+                maxDownStreak = Math.max(maxDownStreak, downStreak);
+            } else {
+                upStreak = 0;
+                downStreak = 0;
+            }
+        }
+        
+        // 判断趋势方向
+        const firstHalf = validData.slice(0, Math.floor(validData.length / 2));
+        const secondHalf = validData.slice(Math.floor(validData.length / 2));
+        
+        const firstAvg = firstHalf.reduce((sum, d) => sum + d.earnings, 0) / firstHalf.length || 0;
+        const secondAvg = secondHalf.reduce((sum, d) => sum + d.earnings, 0) / secondHalf.length || 0;
+        
+        let direction = 'flat';
+        let strength = 0;
+        
+        if (secondAvg > firstAvg * 1.1) {
+            direction = 'up';
+            strength = (secondAvg - firstAvg) / firstAvg;
+        } else if (secondAvg < firstAvg * 0.9) {
+            direction = 'down';
+            strength = (firstAvg - secondAvg) / firstAvg;
+        }
+        
+        return {
+            direction: direction,
+            strength: strength,
+            maxUpStreak: maxUpStreak,
+            maxDownStreak: maxDownStreak,
+            firstHalfAvg: firstAvg,
+            secondHalfAvg: secondAvg
+        };
+    }
+    
+    // 计算自适应权重
+    static calculateAdaptiveWeights() {
+        const last7DaysStats = this.calculateLast7DaysAverage();
+        const avgStats = this.calculateAverageDailyEarnings();
+        
+        // 默认权重
+        let recentWeight = 0.6;
+        let historyWeight = 0.4;
+        
+        // 根据波动性调整（使用5级分类）
+        if (last7DaysStats.volatility) {
+            const volLevel = last7DaysStats.volatility.level;
+            switch (volLevel) {
+                case 'very_low':    // 极稳定
+                    recentWeight = 0.75;
+                    historyWeight = 0.25;
+                    break;
+                case 'low':         // 很稳定
+                    recentWeight = 0.7;
+                    historyWeight = 0.3;
+                    break;
+                case 'medium_low':  // 较稳定
+                    recentWeight = 0.6;
+                    historyWeight = 0.4;
+                    break;
+                case 'medium_high': // 有些波动
+                    recentWeight = 0.5;
+                    historyWeight = 0.5;
+                    break;
+                case 'high':        // 波动大
+                    recentWeight = 0.4;
+                    historyWeight = 0.6;
+                    break;
+                case 'very_high':   // 极不稳定
+                    recentWeight = 0.35;
+                    historyWeight = 0.65;
+                    break;
+            }
+        }
+        
+        // 根据趋势微调
+        if (last7DaysStats.trend) {
+            if (last7DaysStats.trend.direction === 'up') {
+                // 上升趋势，再提高一点近期权重
+                recentWeight += 0.05;
+            } else if (last7DaysStats.trend.direction === 'down') {
+                // 下降趋势，降低一点近期权重
+                recentWeight -= 0.05;
+            }
+        }
+        
+        // 根据历史数据量调整
+        if (avgStats.daysCount < 30) {
+            // 历史数据少，主要靠近期
+            recentWeight = Math.max(recentWeight, 0.7);
+        } else if (avgStats.daysCount > 90) {
+            // 历史数据充足，可以平衡考虑
+            recentWeight = 0.55;
+            historyWeight = 0.45;
+        }
+        
+        // 确保权重在合理范围内
+        recentWeight = Math.max(0.3, Math.min(0.8, recentWeight));
+        historyWeight = 1 - recentWeight;
+        
+        return {
+            recentWeight: recentWeight,
+            historyWeight: historyWeight,
+            volatility: last7DaysStats.volatility,
+            trend: last7DaysStats.trend,
+            reason: this.getWeightAdjustmentReason(last7DaysStats, avgStats)
+        };
+    }
+    
+    // 获取权重调整原因说明
+    static getWeightAdjustmentReason(last7DaysStats, avgStats) {
+        const reasons = [];
+        
+        if (last7DaysStats.volatility && last7DaysStats.volatility.levelText) {
+            reasons.push(`近7天${last7DaysStats.volatility.levelText}`);
+        }
+        
+        if (last7DaysStats.trend) {
+            if (last7DaysStats.trend.direction === 'up') {
+                reasons.push('呈上升趋势');
+            } else if (last7DaysStats.trend.direction === 'down') {
+                reasons.push('呈下降趋势');
+            }
+        }
+        
+        if (avgStats.daysCount < 30) {
+            reasons.push('历史数据较少');
+        } else if (avgStats.daysCount > 90) {
+            reasons.push('历史数据充足');
+        }
+        
+        return reasons.join('，');
     }
 
     // 计算历史最高日收益
@@ -1807,13 +2047,14 @@ class DataManager {
         };
     }
 
-    // 计算全年目标的每日需赚金额（保留原函数用于兼容）
+    // 计算全年目标的每日需赚金额（新的计算逻辑）
+    // 年目标 = 加权平均 × 365 → 取整到百位
+    // 日目标 = (年目标 - 已赚取) ÷ 剩余天数
+    // 软件日目标 = 日目标 ÷ 软件数量
     static calculateYearlyDailyTarget() {
-        // 使用新的计算方式
-        const progress = this.calculateGoalProgress();
-        const dailyTarget = this.calculateDailyTarget();
+        const goal = this.getYearlyGoal();
         
-        if (!progress.isValid) {
+        if (goal.amount <= 0) {
             return {
                 yearlyGoal: 0,
                 dailyTarget: 0,
@@ -1823,15 +2064,40 @@ class DataManager {
                 isValid: false
             };
         }
-
+        
+        // 计算已赚取金额（当前余额 + 已提现）
+        const data = this.loadData();
+        let totalEarned = 0;
+        let totalApps = 0;
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                totalEarned += (app.withdrawn || 0) + (app.historicalWithdrawn || 0) + (app.balance || 0);
+                totalApps++;
+            });
+        });
+        
+        // 计算剩余天数（从今天到年底）
+        const now = new Date();
+        const endOfYear = new Date(now.getFullYear(), 11, 31);
+        const daysRemaining = Math.max(1, Math.ceil((endOfYear - now) / (1000 * 60 * 60 * 24)));
+        
+        // 计算剩余金额
+        const remainingAmount = Math.max(0, goal.amount - totalEarned);
+        
+        // 计算日目标 = 剩余金额 ÷ 剩余天数
+        const dailyTarget = remainingAmount > 0 ? remainingAmount / daysRemaining : 0;
+        
+        // 计算每个软件的日目标
+        const perAppDailyTarget = totalApps > 0 ? dailyTarget / totalApps : 0;
+        
         return {
-            yearlyGoal: progress.targetAmount,
-            dailyTarget: dailyTarget.dailyTarget,
-            daysRemaining: progress.estimatedDaysNeeded,
-            totalEarned: progress.totalEarned,
-            remainingAmount: progress.remainingAmount,
-            avgDailyEarnings: progress.avgDailyEarnings,
-            estimatedDaysNeeded: progress.estimatedDaysNeeded,
+            yearlyGoal: goal.amount,
+            dailyTarget: dailyTarget,
+            perAppDailyTarget: perAppDailyTarget,
+            daysRemaining: daysRemaining,
+            totalEarned: totalEarned,
+            remainingAmount: remainingAmount,
+            totalApps: totalApps,
             isValid: true
         };
     }
@@ -10358,17 +10624,16 @@ function renderAutoGoalCalculation() {
     // 获取统计数据
     const avgStats = DataManager.calculateAverageDailyEarnings();
     const last7DaysStats = DataManager.calculateLast7DaysAverage();
-    const maxDailyEarnings = DataManager.calculateMaxDailyEarnings();
-    const autoGoal = DataManager.calculateAutoYearlyGoal();
+    const autoGoalResult = DataManager.calculateAutoYearlyGoal();
+    const autoGoal = autoGoalResult.amount;
+    const weights = autoGoalResult.weights;
+    const dailyTargetInfo = DataManager.calculateYearlyDailyTarget();
     
-    // 计算过程
-    const weightedDailyAvg = avgStats.avgDailyEarnings > 0 
-        ? (last7DaysStats.avgDailyEarnings * 0.6) + (avgStats.avgDailyEarnings * 0.4)
-        : last7DaysStats.avgDailyEarnings;
+    // 计算过程（使用自适应权重）
+    const weightedDailyAvg = (last7DaysStats.avgDailyEarnings * weights.recentWeight) + 
+                             (avgStats.avgDailyEarnings * weights.historyWeight);
     
     const baseYearlyGoal = weightedDailyAvg * 365;
-    const minGoal = 1825;
-    const maxGoal = maxDailyEarnings * 1.5 * 365;
     
     autoDisplay.innerHTML = `
         <label class="form-label" style="font-size: 12px;">自动计算目标</label>
@@ -10386,29 +10651,85 @@ function renderAutoGoalCalculation() {
             <!-- 步骤1: 历史平均 -->
             <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
                 <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 1: 历史平均收益</div>
-                <div style="font-size: 13px; color: var(--text-primary);">
-                    历史平均: <b>¥${avgStats.avgDailyEarnings.toFixed(2)}</b>/天
-                    <span style="font-size: 10px; color: var(--text-secondary);">(${avgStats.daysCount}天数据)</span>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div>总收益: ¥${avgStats.totalEarnings.toFixed(2)}</div>
+                    <div>有收益天数: ${avgStats.daysCount}天</div>
+                    <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
+                        历史平均: <b>¥${avgStats.avgDailyEarnings.toFixed(2)}</b>/天
+                        <span style="font-size: 10px; color: var(--text-secondary);">(${avgStats.daysCount > 0 ? '总收益÷天数' : '暂无数据'})</span>
+                    </div>
                 </div>
             </div>
             
             <!-- 步骤2: 最近7天 -->
             <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
                 <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 2: 最近7天平均</div>
-                <div style="font-size: 13px; color: var(--text-primary);">
-                    近7天平均: <b>¥${last7DaysStats.avgDailyEarnings.toFixed(2)}</b>/天
-                    <span style="font-size: 10px; color: var(--text-secondary);">(${last7DaysStats.daysCount}天数据)</span>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span>近7天平均:</span>
+                        <span style="font-weight: 600;">¥${last7DaysStats.avgDailyEarnings.toFixed(2)}/天</span>
+                    </div>
+                    ${last7DaysStats.volatility && last7DaysStats.volatility.level !== 'unknown' ? `
+                    <div style="background: rgba(17, 153, 142, 0.05); padding: 6px; border-radius: 4px; margin-top: 6px; font-size: 11px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                            <span>波动程度:</span>
+                            <span style="font-weight: 600; color: ${last7DaysStats.volatility.levelColor};">
+                                ${last7DaysStats.volatility.levelText}
+                            </span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                            <span>变异系数:</span>
+                            <span>${(last7DaysStats.volatility.coefficient * 100).toFixed(1)}%</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>范围:</span>
+                            <span>¥${last7DaysStats.volatility.min.toFixed(2)} ~ ¥${last7DaysStats.volatility.max.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    ` : ''}
+                    ${last7DaysStats.trend && last7DaysStats.trend.direction !== 'unknown' ? `
+                    <div style="background: rgba(17, 153, 142, 0.05); padding: 6px; border-radius: 4px; margin-top: 6px; font-size: 11px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                            <span>趋势:</span>
+                            <span style="font-weight: 600; color: ${last7DaysStats.trend.direction === 'up' ? '#22c55e' : last7DaysStats.trend.direction === 'down' ? '#ef4444' : '#6b7280'};">
+                                ${last7DaysStats.trend.direction === 'up' ? '↗ 上升' : last7DaysStats.trend.direction === 'down' ? '↘ 下降' : '→ 平稳'}
+                            </span>
+                        </div>
+                        ${last7DaysStats.trend.strength > 0 ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>趋势强度:</span>
+                            <span>${(last7DaysStats.trend.strength * 100).toFixed(1)}%</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    ` : ''}
                 </div>
             </div>
             
-            <!-- 步骤3: 加权计算 -->
+            <!-- 步骤3: 自适应加权计算 -->
             <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
-                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 3: 加权平均</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                    步骤 3: 自适应加权平均 
+                    <span style="background: var(--primary-color); color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px;">智能调整</span>
+                </div>
                 <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
-                    <div>近7天 × 60%: ¥${(last7DaysStats.avgDailyEarnings * 0.6).toFixed(2)}</div>
-                    <div>历史 × 40%: ¥${(avgStats.avgDailyEarnings * 0.4).toFixed(2)}</div>
-                    <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
-                        加权平均: <b>¥${weightedDailyAvg.toFixed(2)}</b>/天
+                    <div style="background: rgba(17, 153, 142, 0.1); padding: 6px; border-radius: 4px; margin-bottom: 6px; font-size: 11px;">
+                        <b>权重调整原因:</b> ${weights.reason || '默认权重'}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>近7天权重:</span>
+                        <span style="font-weight: 600; color: var(--primary-color);">${(weights.recentWeight * 100).toFixed(0)}%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>历史权重:</span>
+                        <span style="font-weight: 600; color: var(--primary-color);">${(weights.historyWeight * 100).toFixed(0)}%</span>
+                    </div>
+                    <div style="border-top: 1px dashed var(--border-color); margin-top: 6px; padding-top: 6px;">
+                        <div>近7天 × ${(weights.recentWeight * 100).toFixed(0)}%: ¥${(last7DaysStats.avgDailyEarnings * weights.recentWeight).toFixed(2)}</div>
+                        <div>历史 × ${(weights.historyWeight * 100).toFixed(0)}%: ¥${(avgStats.avgDailyEarnings * weights.historyWeight).toFixed(2)}</div>
+                        <div style="margin-top: 4px;">
+                            加权平均: <b>¥${weightedDailyAvg.toFixed(2)}</b>/天
+                        </div>
                     </div>
                 </div>
             </div>
@@ -10418,44 +10739,55 @@ function renderAutoGoalCalculation() {
                 <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 4: 年目标计算</div>
                 <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
                     <div>¥${weightedDailyAvg.toFixed(2)} × 365天 = ¥${baseYearlyGoal.toFixed(2)}</div>
-                </div>
-            </div>
-            
-            <!-- 步骤5: 范围限制 -->
-            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
-                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 5: 范围限制</div>
-                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
-                    <div>最低目标: ¥${minGoal.toFixed(2)} (每天¥5)</div>
-                    <div>最高目标: ¥${maxGoal.toFixed(2)} (历史最大×1.5)</div>
                     <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
-                        限制后: <b>¥${Math.max(minGoal, Math.min(baseYearlyGoal, maxGoal)).toFixed(2)}</b>
+                        取整到百位: <b>¥${autoGoal.toFixed(2)}</b>
                     </div>
                 </div>
             </div>
             
-            <!-- 步骤6: 最终取整 -->
+            <!-- 步骤5: 日目标计算 -->
+            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 5: 日目标计算</div>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div>年目标: ¥${autoGoal.toFixed(2)}</div>
+                    <div>已赚取: ¥${dailyTargetInfo.totalEarned.toFixed(2)}</div>
+                    <div>剩余金额: ¥${dailyTargetInfo.remainingAmount.toFixed(2)}</div>
+                    <div>剩余天数: ${dailyTargetInfo.daysRemaining}天</div>
+                    <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
+                        日目标 = 剩余金额 ÷ 剩余天数<br>
+                        <b>¥${dailyTargetInfo.remainingAmount.toFixed(2)} ÷ ${dailyTargetInfo.daysRemaining} = ¥${dailyTargetInfo.dailyTarget.toFixed(2)}</b>/天
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 步骤6: 软件日目标 -->
             <div style="padding: 8px; background: linear-gradient(135deg, rgba(17, 153, 142, 0.1), rgba(56, 239, 125, 0.05)); border-radius: 6px; border-left: 3px solid var(--primary-color);">
-                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 6: 最终取整</div>
-                <div style="font-size: 14px; color: var(--primary-color); font-weight: 700;">
-                    取整到百位: ¥${autoGoal.toFixed(2)}
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 6: 软件日目标</div>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div>日目标: ¥${dailyTargetInfo.dailyTarget.toFixed(2)}</div>
+                    <div>软件数量: ${dailyTargetInfo.totalApps}个</div>
+                    <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
+                        每个软件日目标 = 日目标 ÷ 软件数量<br>
+                        <b style="font-size: 14px; color: var(--primary-color);">¥${dailyTargetInfo.dailyTarget.toFixed(2)} ÷ ${dailyTargetInfo.totalApps} = ¥${dailyTargetInfo.perAppDailyTarget.toFixed(2)}</b>/软件/天
+                    </div>
                 </div>
             </div>
         </div>
         
-        <!-- 日目标预览 -->
+        <!-- 自适应权重说明 -->
         <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-top: 12px;">
-            <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                <span>📅</span> 每日目标预览
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span>🧠</span> 自适应权重算法
             </div>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
-                    <div style="font-size: 10px; color: var(--text-secondary);">每天需赚</div>
-                    <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${(autoGoal / 365).toFixed(2)}</div>
-                </div>
-                <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
-                    <div style="font-size: 10px; color: var(--text-secondary);">每月需赚</div>
-                    <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${(autoGoal / 12).toFixed(2)}</div>
-                </div>
+            <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.6;">
+                <div style="margin-bottom: 6px;"><b>波动判断:</b> 使用变异系数（标准差÷平均值）衡量波动程度</div>
+                <div style="margin-bottom: 6px;"><b>趋势判断:</b> 比较前后半段平均值判断上升/下降趋势</div>
+                <div style="margin-bottom: 6px;"><b>权重调整规则:</b></div>
+                <div style="padding-left: 12px; margin-bottom: 4px;">• 波动小 → 提高近期权重（更相信最新表现）</div>
+                <div style="padding-left: 12px; margin-bottom: 4px;">• 波动大 → 降低近期权重（更依赖历史平均）</div>
+                <div style="padding-left: 12px; margin-bottom: 4px;">• 上升趋势 → 再提高一点近期权重</div>
+                <div style="padding-left: 12px; margin-bottom: 4px;">• 下降趋势 → 降低一点近期权重</div>
+                <div style="padding-left: 12px;">• 历史数据少 → 主要靠近期数据</div>
             </div>
         </div>
     `;
