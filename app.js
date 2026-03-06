@@ -828,15 +828,63 @@ class DataManager {
 
     // ==================== 年度目标功能 ====================
 
-    // 获取年度目标设置
+    // 获取年度目标设置（自动计算）
     static getYearlyGoal() {
         const settings = localStorage.getItem(SETTINGS_KEY);
         const parsed = settings ? JSON.parse(settings) : {};
+        const currentYear = new Date().getFullYear();
+        
+        // 如果设置了手动目标且年份匹配，使用手动目标
+        if (parsed.yearlyGoalAmount > 0 && parsed.yearlyGoalYear === currentYear) {
+            return {
+                amount: parsed.yearlyGoalAmount,
+                year: currentYear,
+                autoDistribute: parsed.yearlyGoalAutoDistribute !== false,
+                isAutoCalculated: false
+            };
+        }
+        
+        // 自动计算年目标
+        const autoCalculatedGoal = this.calculateAutoYearlyGoal();
         return {
-            amount: parsed.yearlyGoalAmount || 0,
-            year: parsed.yearlyGoalYear || new Date().getFullYear(),
-            autoDistribute: parsed.yearlyGoalAutoDistribute !== false // 默认开启自动分配
+            amount: autoCalculatedGoal,
+            year: currentYear,
+            autoDistribute: true,
+            isAutoCalculated: true
         };
+    }
+    
+    // 自动计算年目标（基于历史表现）
+    static calculateAutoYearlyGoal() {
+        const avgStats = this.calculateAverageDailyEarnings();
+        const last7DaysStats = this.calculateLast7DaysAverage();
+        const maxDailyEarnings = this.calculateMaxDailyEarnings();
+        
+        // 基础计算：基于历史平均日收益 × 365天
+        let baseYearlyGoal = 0;
+        
+        if (avgStats.avgDailyEarnings > 0) {
+            // 使用最近7天平均和历史平均的加权值
+            const weightedDailyAvg = (last7DaysStats.avgDailyEarnings * 0.6) + (avgStats.avgDailyEarnings * 0.4);
+            baseYearlyGoal = weightedDailyAvg * 365;
+        } else if (last7DaysStats.avgDailyEarnings > 0) {
+            // 只有最近7天数据
+            baseYearlyGoal = last7DaysStats.avgDailyEarnings * 365;
+        } else {
+            // 无历史数据，使用默认值
+            baseYearlyGoal = 3650; // 默认每天10元
+        }
+        
+        // 设置合理范围
+        const minGoal = 1825; // 最低每天5元
+        const maxGoal = maxDailyEarnings * 1.5 * 365; // 最高不超过历史最大值的1.5倍
+        
+        let finalYearlyGoal = Math.max(minGoal, Math.min(baseYearlyGoal, maxGoal));
+        
+        // 取整到百位
+        finalYearlyGoal = Math.round(finalYearlyGoal / 100) * 100;
+        
+        return finalYearlyGoal;
     }
 
     // 保存年度目标
@@ -10244,23 +10292,64 @@ function saveYearlyGoal() {
 function loadYearlyGoalSettings() {
     const goal = DataManager.getYearlyGoal();
     
-    const yearSelect = document.getElementById('yearly-goal-year');
-    const amountInput = document.getElementById('yearly-goal-amount');
-    const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
-
     // 生成年份选项
     generateYearOptions();
     
-    // 加载年份
-    if (yearSelect && goal.year) {
-        yearSelect.value = goal.year;
+    // 根据是否是自动计算模式设置UI
+    if (goal.isAutoCalculated) {
+        setGoalMode('auto', false);
+    } else {
+        setGoalMode('manual', false);
+        // 加载手动设置的值
+        const yearSelect = document.getElementById('yearly-goal-year');
+        const amountInput = document.getElementById('yearly-goal-amount');
+        if (yearSelect && goal.year) yearSelect.value = goal.year;
+        if (amountInput) amountInput.value = goal.amount > 0 ? goal.amount : '';
     }
     
-    // 加载金额
-    if (amountInput) amountInput.value = goal.amount > 0 ? goal.amount : '';
-    
     // 加载自动分配设置
+    const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
     if (autoDistributeCheckbox) autoDistributeCheckbox.checked = goal.autoDistribute;
+}
+
+// 设置目标模式
+function setGoalMode(mode, save = true) {
+    const autoBtn = document.getElementById('goal-mode-auto');
+    const manualBtn = document.getElementById('goal-mode-manual');
+    const autoDisplay = document.getElementById('auto-goal-display');
+    const manualSettings = document.getElementById('manual-goal-settings');
+    const modeDesc = document.getElementById('goal-mode-desc');
+    const saveBtn = document.getElementById('save-goal-btn');
+    const autoGoalAmount = document.getElementById('auto-goal-amount');
+    
+    if (mode === 'auto') {
+        // 自动计算模式
+        autoBtn.className = 'btn btn-primary flex-1';
+        manualBtn.className = 'btn btn-secondary flex-1';
+        autoDisplay.style.display = 'block';
+        manualSettings.style.display = 'none';
+        saveBtn.style.display = 'none';
+        modeDesc.textContent = '根据历史收益自动计算年目标，每日动态调整';
+        
+        // 计算并显示自动目标
+        const autoGoal = DataManager.calculateAutoYearlyGoal();
+        if (autoGoalAmount) autoGoalAmount.textContent = `¥${autoGoal.toFixed(2)}`;
+        
+        // 清除手动设置
+        if (save) {
+            DataManager.saveYearlyGoal(0, new Date().getFullYear(), true);
+            showToast('已切换到自动计算模式', 'success');
+            renderYearlyGoal();
+        }
+    } else {
+        // 手动设置模式
+        autoBtn.className = 'btn btn-secondary flex-1';
+        manualBtn.className = 'btn btn-primary flex-1';
+        autoDisplay.style.display = 'none';
+        manualSettings.style.display = 'block';
+        saveBtn.style.display = 'block';
+        modeDesc.textContent = '手动设置年度目标金额，系统将按此目标进行分配';
+    }
 }
 
 // 显示每日目标缺口详情弹窗
