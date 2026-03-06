@@ -10320,7 +10320,6 @@ function setGoalMode(mode, save = true) {
     const manualSettings = document.getElementById('manual-goal-settings');
     const modeDesc = document.getElementById('goal-mode-desc');
     const saveBtn = document.getElementById('save-goal-btn');
-    const autoGoalAmount = document.getElementById('auto-goal-amount');
     
     if (mode === 'auto') {
         // 自动计算模式
@@ -10331,9 +10330,8 @@ function setGoalMode(mode, save = true) {
         saveBtn.style.display = 'none';
         modeDesc.textContent = '根据历史收益自动计算年目标，每日动态调整';
         
-        // 计算并显示自动目标
-        const autoGoal = DataManager.calculateAutoYearlyGoal();
-        if (autoGoalAmount) autoGoalAmount.textContent = `¥${autoGoal.toFixed(2)}`;
+        // 渲染自动计算详情
+        renderAutoGoalCalculation();
         
         // 清除手动设置
         if (save) {
@@ -10350,6 +10348,117 @@ function setGoalMode(mode, save = true) {
         saveBtn.style.display = 'block';
         modeDesc.textContent = '手动设置年度目标金额，系统将按此目标进行分配';
     }
+}
+
+// 渲染自动计算年目标的详细计算流程
+function renderAutoGoalCalculation() {
+    const autoDisplay = document.getElementById('auto-goal-display');
+    if (!autoDisplay) return;
+    
+    // 获取统计数据
+    const avgStats = DataManager.calculateAverageDailyEarnings();
+    const last7DaysStats = DataManager.calculateLast7DaysAverage();
+    const maxDailyEarnings = DataManager.calculateMaxDailyEarnings();
+    const autoGoal = DataManager.calculateAutoYearlyGoal();
+    
+    // 计算过程
+    const weightedDailyAvg = avgStats.avgDailyEarnings > 0 
+        ? (last7DaysStats.avgDailyEarnings * 0.6) + (avgStats.avgDailyEarnings * 0.4)
+        : last7DaysStats.avgDailyEarnings;
+    
+    const baseYearlyGoal = weightedDailyAvg * 365;
+    const minGoal = 1825;
+    const maxGoal = maxDailyEarnings * 1.5 * 365;
+    
+    autoDisplay.innerHTML = `
+        <label class="form-label" style="font-size: 12px;">自动计算目标</label>
+        <div style="background: linear-gradient(135deg, rgba(17, 153, 142, 0.1), rgba(56, 239, 125, 0.05)); border: 1px solid rgba(17, 153, 142, 0.3); border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 12px;">
+            <div style="font-size: 28px; font-weight: 700; color: var(--primary-color);" id="auto-goal-amount">¥${autoGoal.toFixed(2)}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">基于历史表现自动计算</div>
+        </div>
+        
+        <!-- 计算流程详情 -->
+        <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-top: 12px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <span>📊</span> 计算流程
+            </div>
+            
+            <!-- 步骤1: 历史平均 -->
+            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 1: 历史平均收益</div>
+                <div style="font-size: 13px; color: var(--text-primary);">
+                    历史平均: <b>¥${avgStats.avgDailyEarnings.toFixed(2)}</b>/天
+                    <span style="font-size: 10px; color: var(--text-secondary);">(${avgStats.daysCount}天数据)</span>
+                </div>
+            </div>
+            
+            <!-- 步骤2: 最近7天 -->
+            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 2: 最近7天平均</div>
+                <div style="font-size: 13px; color: var(--text-primary);">
+                    近7天平均: <b>¥${last7DaysStats.avgDailyEarnings.toFixed(2)}</b>/天
+                    <span style="font-size: 10px; color: var(--text-secondary);">(${last7DaysStats.daysCount}天数据)</span>
+                </div>
+            </div>
+            
+            <!-- 步骤3: 加权计算 -->
+            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 3: 加权平均</div>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div>近7天 × 60%: ¥${(last7DaysStats.avgDailyEarnings * 0.6).toFixed(2)}</div>
+                    <div>历史 × 40%: ¥${(avgStats.avgDailyEarnings * 0.4).toFixed(2)}</div>
+                    <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
+                        加权平均: <b>¥${weightedDailyAvg.toFixed(2)}</b>/天
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 步骤4: 年目标计算 -->
+            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 4: 年目标计算</div>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div>¥${weightedDailyAvg.toFixed(2)} × 365天 = ¥${baseYearlyGoal.toFixed(2)}</div>
+                </div>
+            </div>
+            
+            <!-- 步骤5: 范围限制 -->
+            <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 5: 范围限制</div>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.6;">
+                    <div>最低目标: ¥${minGoal.toFixed(2)} (每天¥5)</div>
+                    <div>最高目标: ¥${maxGoal.toFixed(2)} (历史最大×1.5)</div>
+                    <div style="border-top: 1px dashed var(--border-color); margin-top: 4px; padding-top: 4px;">
+                        限制后: <b>¥${Math.max(minGoal, Math.min(baseYearlyGoal, maxGoal)).toFixed(2)}</b>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 步骤6: 最终取整 -->
+            <div style="padding: 8px; background: linear-gradient(135deg, rgba(17, 153, 142, 0.1), rgba(56, 239, 125, 0.05)); border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">步骤 6: 最终取整</div>
+                <div style="font-size: 14px; color: var(--primary-color); font-weight: 700;">
+                    取整到百位: ¥${autoGoal.toFixed(2)}
+                </div>
+            </div>
+        </div>
+        
+        <!-- 日目标预览 -->
+        <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-top: 12px;">
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <span>📅</span> 每日目标预览
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-secondary);">每天需赚</div>
+                    <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${(autoGoal / 365).toFixed(2)}</div>
+                </div>
+                <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-secondary);">每月需赚</div>
+                    <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${(autoGoal / 12).toFixed(2)}</div>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // 显示每日目标缺口详情弹窗
