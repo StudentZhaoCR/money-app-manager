@@ -3320,18 +3320,6 @@ class DataManager {
         localStorage.removeItem(GAME_DRAW_HISTORY_KEY);
     }
     
-    // 清除所有每日赚取记录
-    static clearAllDailyEarnings() {
-        const data = this.loadData();
-        data.phones.forEach(phone => {
-            phone.apps.forEach(app => {
-                app.dailyEarnings = {};
-            });
-        });
-        this.saveData(data);
-        return data;
-    }
-    
     // 主题相关方法
     static getTheme() {
         return localStorage.getItem('app-theme') || 'default';
@@ -4728,7 +4716,21 @@ function showPage(pageName) {
     // 保存当前页面状态
     saveCurrentPageState();
     
-    // 先刷新页面数据，再显示页面，避免内容加载导致的弹跳
+    // 隐藏所有页面
+    document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+    });
+    
+    // 获取目标页面
+    const targetPage = document.getElementById(`page-${pageName}`);
+    
+    // 显示目标页面
+    targetPage.classList.add('active');
+    
+    // 先恢复页面状态（包括滚动位置、表单值等）
+    restorePageState(pageName);
+    
+    // 再刷新页面数据（避免覆盖已恢复的状态）
     if (pageName === 'dashboard') renderDashboard();
     if (pageName === 'phones') renderPhones();
     if (pageName === 'stats') renderStats();
@@ -4739,16 +4741,16 @@ function showPage(pageName) {
     if (pageName === 'games') renderGamesPage();
     if (pageName === 'assets') renderAssetsPage();
     
-    // 隐藏所有页面
-    document.querySelectorAll('.page').forEach(page => {
-        page.classList.remove('active');
-    });
-    
-    // 显示目标页面
-    document.getElementById(`page-${pageName}`).classList.add('active');
-    
-    // 恢复页面状态
-    restorePageState(pageName);
+    // 再次恢复表单值（确保不被 render 函数覆盖）
+    const state = pageStates[pageName];
+    if (state && state.formValues) {
+        Object.entries(state.formValues).forEach(([id, value]) => {
+            const input = document.getElementById(id);
+            if (input && input.value !== value) {
+                input.value = value;
+            }
+        });
+    }
     
     // 更新底部导航
     document.querySelectorAll('.tab-item').forEach(item => {
@@ -4765,11 +4767,25 @@ function showPage(pageName) {
 function saveCurrentPageState() {
     const pageElement = document.getElementById(`page-${currentPage}`);
     if (pageElement) {
+        // 保存滚动位置（但不自动恢复）
+        const scrollTop = currentPage === 'settings' ? window.scrollY : pageElement.scrollTop;
+        
+        // 保存更完整的状态
         pageStates[currentPage] = {
-            scrollTop: pageElement.scrollTop,
+            scrollTop: scrollTop,
             expandedSections: getExpandedSections(currentPage),
-            currentGamePhoneId: currentGamePhoneId // 保存游戏页面选中的手机
+            currentGamePhoneId: currentGamePhoneId, // 保存游戏页面选中的手机
+            // 保存表单输入值
+            formValues: getFormValues(currentPage),
+            // 保存选中状态
+            selectedItems: getSelectedItems(currentPage),
+            // 保存过滤/排序状态
+            filterState: getFilterState(currentPage),
+            // 保存时间戳
+            timestamp: Date.now()
         };
+        
+        console.log(`保存页面状态: ${currentPage}`, pageStates[currentPage]);
     }
 }
 
@@ -4783,6 +4799,54 @@ function getExpandedSections(pageName) {
         });
     }
     return expanded;
+}
+
+// 获取表单输入值
+function getFormValues(pageName) {
+    const values = {};
+    const pageElement = document.getElementById(`page-${pageName}`);
+    if (!pageElement) return values;
+    
+    // 保存所有输入框的值
+    pageElement.querySelectorAll('input[type="text"], input[type="number"], textarea, select').forEach(input => {
+        if (input.id) {
+            values[input.id] = input.value;
+        }
+    });
+    
+    return values;
+}
+
+// 获取选中状态
+function getSelectedItems(pageName) {
+    const selected = [];
+    const pageElement = document.getElementById(`page-${pageName}`);
+    if (!pageElement) return selected;
+    
+    // 保存选中的复选框
+    pageElement.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+        if (checkbox.id || checkbox.name) {
+            selected.push(checkbox.id || checkbox.name);
+        }
+    });
+    
+    return selected;
+}
+
+// 获取过滤/排序状态
+function getFilterState(pageName) {
+    const state = {};
+    const pageElement = document.getElementById(`page-${pageName}`);
+    if (!pageElement) return state;
+    
+    // 保存下拉选择器的值
+    pageElement.querySelectorAll('select').forEach(select => {
+        if (select.id) {
+            state[select.id] = select.value;
+        }
+    });
+    
+    return state;
 }
 
 // 恢复页面状态
@@ -4807,12 +4871,51 @@ function restorePageState(pageName) {
         currentGamePhoneId = state.currentGamePhoneId;
     }
     
-    // 恢复滚动位置
-    if (pageElement && state.scrollTop !== undefined) {
-        setTimeout(() => {
-            pageElement.scrollTop = state.scrollTop;
-        }, 100);
+    // 恢复表单输入值
+    if (state.formValues) {
+        Object.entries(state.formValues).forEach(([id, value]) => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.value = value;
+            }
+        });
     }
+    
+    // 恢复选中状态
+    if (state.selectedItems) {
+        state.selectedItems.forEach(id => {
+            const checkbox = document.getElementById(id) || document.querySelector(`[name="${id}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+    }
+    
+    // 恢复过滤/排序状态
+    if (state.filterState) {
+        Object.entries(state.filterState).forEach(([id, value]) => {
+            const select = document.getElementById(id);
+            if (select) {
+                select.value = value;
+            }
+        });
+    }
+    
+    // 恢复滚动位置（使用 requestAnimationFrame 确保在渲染前执行）
+    if (state.scrollTop !== undefined) {
+        requestAnimationFrame(() => {
+            if (pageName === 'settings') {
+                window.scrollTo(0, state.scrollTop);
+            } else {
+                const pageElement = document.getElementById(`page-${pageName}`);
+                if (pageElement) {
+                    pageElement.scrollTop = state.scrollTop;
+                }
+            }
+        });
+    }
+    
+    console.log(`恢复页面状态: ${pageName}`, state);
 }
 
 // 渲染仪表盘
@@ -4893,9 +4996,6 @@ function renderDashboard() {
 
     // 渲染收入日历
     renderIncomeCalendar();
-    
-    // 渲染软件提现排行
-    renderAppRanking();
     
     // 渲染软件收益排行（基于余额变化）
     renderAppEarningsRanking();
@@ -5813,84 +5913,6 @@ function showAppDetailModal(appId) {
     ]);
 }
 
-// ==================== 软件提现排行功能 ====================
-
-// 渲染软件提现排行
-function renderAppRanking() {
-    const card = document.getElementById('app-ranking-card');
-    const content = document.getElementById('app-ranking-content');
-    if (!card || !content) return;
-
-    const data = DataManager.loadData();
-    const rankings = calculateAppWithdrawalRankings(data);
-
-    if (rankings.length === 0) {
-        card.style.display = 'none';
-        return;
-    }
-
-    card.style.display = 'block';
-
-    // 只显示前5名
-    const top5 = rankings.slice(0, 5);
-    const maxWithdrawal = top5[0].withdrawal;
-
-    content.innerHTML = top5.map((app, index) => {
-        const percentage = (app.withdrawal / maxWithdrawal) * 100;
-        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-        return `
-            <div style="display: flex; align-items: center; gap: 12px; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary); border: 3px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-card);">
-                <span style="font-size: 24px; width: 32px; text-align: center;">${medals[index]}</span>
-                <div style="flex: 1;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <span style="font-weight: 600; color: var(--text-primary);">${app.appName}</span>
-                        <span style="font-weight: 700; color: var(--success-color);">¥${app.withdrawal.toFixed(2)}</span>
-                    </div>
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${app.phoneName} · 提现${app.withdrawalCount}次</div>
-                    <div style="height: 6px; background: var(--bg-cream); border-radius: 3px; overflow: hidden;">
-                        <div style="height: 100%; width: ${percentage}%; background: linear-gradient(90deg, var(--primary-color), var(--primary-light)); border-radius: 3px; transition: width 0.5s ease;"></div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-// 计算软件提现排行
-function calculateAppWithdrawalRankings(data) {
-    const rankings = [];
-
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            // 计算总提现金额
-            let totalWithdrawal = 0;
-            let withdrawalCount = 0;
-
-            if (app.withdrawals && app.withdrawals.length > 0) {
-                withdrawalCount = app.withdrawals.length;
-                totalWithdrawal = app.withdrawals.reduce((sum, w) => sum + w.amount, 0);
-            }
-
-            // 加上历史提现金额
-            if (app.historicalWithdrawn && app.historicalWithdrawn > 0) {
-                totalWithdrawal += app.historicalWithdrawn;
-            }
-
-            if (totalWithdrawal > 0) {
-                rankings.push({
-                    phoneName: phone.name,
-                    appName: app.name,
-                    withdrawal: totalWithdrawal,
-                    withdrawalCount: withdrawalCount
-                });
-            }
-        });
-    });
-
-    // 按提现金额排序
-    return rankings.sort((a, b) => b.withdrawal - a.withdrawal);
-}
-
 // 渲染软件收益排行（基于余额变化）
 function renderAppEarningsRanking() {
     const card = document.getElementById('app-earnings-ranking-card');
@@ -6139,168 +6161,6 @@ function showDayDetail(dateStr) {
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
 }
-
-// 全局搜索功能
-function performSearch(query) {
-    const resultsContainer = document.getElementById('search-results');
-    
-    if (!query || query.trim() === '') {
-        resultsContainer.style.display = 'none';
-        return;
-    }
-    
-    query = query.toLowerCase().trim();
-    const data = DataManager.loadData();
-    const results = [];
-    
-    // 搜索手机
-    data.phones.forEach(phone => {
-        if (phone.name.toLowerCase().includes(query)) {
-            results.push({
-                type: 'phone',
-                name: phone.name,
-                id: phone.id,
-                subtitle: `${phone.apps.length} 个软件`
-            });
-        }
-        
-        // 搜索软件
-        phone.apps.forEach(app => {
-            if (app.name.toLowerCase().includes(query)) {
-                const earned = calculateAppEarned(app);
-                results.push({
-                    type: 'app',
-                    name: app.name,
-                    phoneName: phone.name,
-                    phoneId: phone.id,
-                    appId: app.id,
-                    subtitle: `累计提现: ¥${earned.toFixed(2)}`
-                });
-            }
-        });
-    });
-    
-    // 渲染搜索结果
-    if (results.length === 0) {
-        resultsContainer.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--text-muted);">未找到匹配结果</div>';
-    } else {
-        resultsContainer.innerHTML = results.map(result => `
-            <div class="search-result-item" onclick="handleSearchResult('${result.type}', '${result.phoneId || result.id}', '${result.appId || ''}')" 
-                 style="padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color); transition: background 0.2s;"
-                 onmouseover="this.style.background='var(--bg-cream)'" 
-                 onmouseout="this.style.background='transparent'">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 20px;">${result.type === 'phone' ? '📱' : '📲'}</span>
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; color: var(--text-primary);">${result.name}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">${result.phoneName ? result.phoneName + ' · ' : ''}${result.subtitle}</div>
-                    </div>
-                    <span style="font-size: 12px; color: var(--primary-color); padding: 4px 8px; background: var(--bg-cream); border-radius: var(--radius-sm);">${result.type === 'phone' ? '手机' : '软件'}</span>
-                </div>
-            </div>
-        `).join('');
-    }
-    
-    resultsContainer.style.display = 'block';
-}
-
-// 处理搜索结果点击
-function handleSearchResult(type, phoneId, appId) {
-    if (type === 'phone') {
-        // 先设置展开状态
-        expandedPhones[phoneId] = true;
-        localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
-        
-        // 跳转到手机管理页面
-        showPage('phones');
-        
-        // 滚动到该手机（只在手机管理页面中查找）
-        setTimeout(() => {
-            const phonesPage = document.getElementById('page-phones');
-            if (!phonesPage) return;
-            
-            const phoneElement = phonesPage.querySelector(`[data-phone-id="${phoneId}"]`);
-            if (phoneElement) {
-                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-                
-                phoneElement.style.animation = 'highlight 1s ease';
-                // 添加高亮边框
-                phoneElement.style.border = '3px solid var(--primary-color)';
-                setTimeout(() => {
-                    phoneElement.style.border = '';
-                }, 3000);
-            }
-        }, 500);
-    } else if (type === 'app') {
-        // 先设置展开状态
-        expandedPhones[phoneId] = true;
-        localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
-        
-        // 跳转到手机管理页面
-        showPage('phones');
-        
-        // 滚动并高亮（增加延迟确保手机展开和软件渲染完成）
-        setTimeout(() => {
-            // 只在手机管理页面中查找元素
-            const phonesPage = document.getElementById('page-phones');
-            if (!phonesPage) return;
-            
-            const phoneElement = phonesPage.querySelector(`[data-phone-id="${phoneId}"]`);
-            const appElement = phonesPage.querySelector(`[data-app-id="${appId}"]`);
-            
-            console.log('搜索软件 - phoneId:', phoneId, 'appId:', appId);
-            console.log('搜索软件 - phoneElement:', phoneElement);
-            console.log('搜索软件 - appElement:', appElement);
-            
-            if (appElement) {
-                // 滚动到软件元素（只在当前活动页面内）
-                appElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-                
-                // 添加明显的高亮效果
-                appElement.style.background = 'linear-gradient(135deg, var(--accent-light), var(--accent-color))';
-                appElement.style.borderRadius = 'var(--radius-md)';
-                appElement.style.boxShadow = '0 0 20px rgba(34, 211, 238, 0.5)';
-                appElement.style.transform = 'scale(1.02)';
-                appElement.style.transition = 'all 0.3s ease';
-                appElement.style.zIndex = '10';
-                
-                // 3秒后移除高亮
-                setTimeout(() => {
-                    appElement.style.background = '';
-                    appElement.style.boxShadow = '';
-                    appElement.style.transform = '';
-                    appElement.style.zIndex = '';
-                }, 3000);
-            } else if (phoneElement) {
-                // 如果找不到软件，至少滚动到手机
-                console.log('未找到软件元素，滚动到手机');
-                phoneElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-            } else {
-                console.log('未找到手机和软件元素');
-            }
-        }, 800); // 增加延迟确保渲染完成
-    }
-    
-    // 清除搜索
-    clearSearch();
-}
-
-// 清除搜索
-function clearSearch() {
-    const searchInput = document.getElementById('global-search');
-    const resultsContainer = document.getElementById('search-results');
-    if (searchInput) searchInput.value = '';
-    if (resultsContainer) resultsContainer.style.display = 'none';
-}
-
-// 点击外部关闭搜索结果
-document.addEventListener('click', function(e) {
-    const searchContainer = document.querySelector('.search-container');
-    const resultsContainer = document.getElementById('search-results');
-    if (searchContainer && resultsContainer && !searchContainer.contains(e.target)) {
-        resultsContainer.style.display = 'none';
-    }
-});
 
 // ==================== 自动备份功能 ====================
 
@@ -7720,549 +7580,6 @@ function restoreFromCode() {
             }
         }
     ]);
-}
-
-// 显示系统介绍
-function showSystemIntroduction() {
-    const sections = [
-        {
-            id: 'overview',
-            title: '📋 系统概述',
-            icon: '📋',
-            content: `
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">系统定位</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        本系统是一个综合性的个人财务管理工具，专门设计用于管理通过赚钱软件获得的收入，
-                        同时整合个人真实财产（工资、支出等），实现资金的统一管理和分析。
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">核心设计理念</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="margin-bottom: 4px;">• <b>分离管理</b>：软件收入与个人财产分开记录</div>
-                        <div style="margin-bottom: 4px;">• <b>灵活流转</b>：支持软件收入提现到个人钱包</div>
-                        <div style="margin-bottom: 4px;">• <b>智能分析</b>：自动计算收益、目标、缺口等</div>
-                        <div>• <b>动态目标</b>：根据历史表现和还款计划智能调整每日目标</div>
-                    </div>
-                </div>
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <div>• <b>仪表盘</b>：底部导航栏第1个图标 📊</div>
-                        <div>• <b>手机管理</b>：底部导航栏第2个图标 📱</div>
-                        <div>• <b>资产管理</b>：底部导航栏第4个图标 💼</div>
-                        <div>• <b>游戏管理</b>：底部导航栏第5个图标 🎮</div>
-                        <div>• <b>设置</b>：底部导航栏第6个图标 ⚙️</div>
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'phones',
-            title: '📱 手机管理逻辑',
-            icon: '📱',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>手机管理页面</b>：底部导航栏第2个图标 📱<br>
-                        或点击仪表盘中的"管理手机"按钮
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">数据结构</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        手机 → 软件 → 收益记录<br>
-                        每台手机可以安装多个赚钱软件，每个软件独立记录余额和收益历史。
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">收益计算逻辑</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
-                            <b>总赚取</b> = 已提现金额 + 历史提现 + 当前余额
-                        </div>
-                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px;">
-                            <b>每日收益</b> = 当日余额增加额（自动计算）
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">快速操作</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        • 点击手机名称展开/收起软件列表<br>
-                        • 点击"+"按钮快速添加软件<br>
-                        • 点击软件余额可直接编辑<br>
-                        • 达标日历显示每日目标完成情况
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'daily-target',
-            title: '🎯 每日目标逻辑',
-            icon: '🎯',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>每日目标追踪</b>：仪表盘页面 - 收益目标卡片下方<br>
-                        或点击"查看详情"按钮查看完整记录
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">目标计算公式</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-                            <b>每日目标</b> = max(还款所需, 动态激励目标, 5元保底)
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">动态系数规则</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
-                            <tr style="background: var(--bg-cream);">
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">🌟 优秀</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">近7天 ≥ 历史平均×1.2</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">保持高水平</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">💪 正常</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">历史平均 ≤ 近7天 < 历史平均×1.2</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">激励提升10%</td>
-                            </tr>
-                            <tr style="background: var(--bg-cream);">
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">📈 下滑</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">历史平均×0.5 ≤ 近7天 < 历史平均</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">鼓励恢复90%</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">💪 加油</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">近7天 < 历史平均×0.5</td>
-                                <td style="padding: 6px; border: 1px solid var(--border-color);">建立信心70%</td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">缺口抵扣机制</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        超额的收益会自动累积，用于抵扣未来的缺口。<br>
-                        例如：第1天超额5元，第2天缺口3元，则抵扣后实际缺口为0。
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'goal-distribution',
-            title: '📊 软件目标分配逻辑',
-            icon: '📊',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>收益目标弹窗</b>：仪表盘页面 - 点击"🎯 收益目标"卡片<br>
-                        或点击"📊 详情"按钮查看各软件目标分配
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">排名机制</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        软件按<b>今年实际收益</b>从低到高排名（收益低的排名靠前）
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">表现系数</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: rgba(34, 197, 94, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
-                            <b>后33%（收益低）</b>：系数 0.5 ~ 0.8 → 降低目标
-                        </div>
-                        <div style="background: rgba(59, 130, 246, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
-                            <b>中间34%</b>：系数 0.9 ~ 1.1 → 接近基础目标
-                        </div>
-                        <div style="background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 6px;">
-                            <b>前33%（收益高）</b>：系数 1.2 ~ 1.5 → 提高目标
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">日目标计算</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px;">
-                            软件日目标 = (总目标 × 软件表现系数) / 软件数量 / 估算天数
-                        </div>
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'personal-finance',
-            title: '💎 个人财务逻辑',
-            icon: '💎',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>个人财务概览</b>：仪表盘页面 - 第2个卡片 💎<br>
-                        包含：记收入、记支出、提现功能按钮
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">资金池设计</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="margin-bottom: 8px;"><b>软件资金池</b>：所有赚钱软件的余额总和</div>
-                        <div style="margin-bottom: 8px;"><b>个人资金池</b>：工资、奖金等真实收入</div>
-                        <div><b>固定资产</b>：已购买的资产价值</div>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">资金流转</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: rgba(34, 197, 94, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
-                            <b>提现</b>：软件余额 → 个人钱包
-                        </div>
-                        <div style="background: rgba(239, 68, 68, 0.1); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
-                            <b>支出</b>：从个人钱包扣除
-                        </div>
-                        <div style="background: rgba(59, 130, 246, 0.1); padding: 8px; border-radius: 6px;">
-                            <b>收入</b>：工资等进入个人钱包
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">总资产计算</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px;">
-                            <b>总资产</b> = 个人钱包 + 软件余额 + 资产价值
-                        </div>
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'assets',
-            title: '💼 资产管理逻辑',
-            icon: '💼',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>资产管理页面</b>：底部导航栏第4个图标 💼<br>
-                        包含：资产概览、资产清单、分类统计
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">自动分类机制</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        系统根据物品名称中的关键词自动识别分类：<br>
-                        • 输入"iPhone" → 电子产品<br>
-                        • 输入"猫粮" → 宠物用品<br>
-                        • 输入"跑步机" → 运动户外<br>
-                        支持100+个关键词识别
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">每日成本计算</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        <div style="background: var(--bg-cream); padding: 8px; border-radius: 6px;">
-                            <b>每日成本</b> = 购买价格 / 持有天数<br>
-                            持有天数 = 今天 - 购买日期
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">分类统计</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        自动按分类汇总：物品数量、总价值、每日成本
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'games',
-            title: '🎮 游戏管理逻辑',
-            icon: '🎮',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>游戏管理页面</b>：底部导航栏第5个图标 🎮<br>
-                        包含：游戏抽签、游戏列表、抽签历史
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">智能抽签算法</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        综合考虑以下因素计算权重：<br>
-                        • <b>进度系数</b>：快完成的游戏权重更高<br>
-                        • <b>冷落系数</b>：长时间未抽到的权重增加<br>
-                        • <b>连续系数</b>：昨天玩过的降低权重<br>
-                        • <b>新游戏优先</b>：daysPlayed=0的游戏10倍权重
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">历史记录规则</div>
-                    <div style="font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
-                        • 只有标记完成的记录才保存<br>
-                        • 未标记的记录第二天自动清除<br>
-                        • 7天完成的记录1天后自动删除
-                    </div>
-                </div>
-            `
-        },
-        {
-            id: 'data-flow',
-            title: '🔄 数据流转图',
-            icon: '🔄',
-            content: `
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-color);">📍 功能位置</div>
-                    <div style="font-size: 12px; line-height: 1.8; color: var(--text-secondary);">
-                        <b>系统介绍</b>：设置页面 - 点击"📚 查看系统介绍"按钮<br>
-                        本页面展示了系统各功能的逻辑和位置
-                    </div>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 12px; color: var(--primary-color);">完整数据流程</div>
-                    <div style="font-size: 12px; line-height: 2; color: var(--text-secondary);">
-                        <div style="background: rgba(102, 126, 234, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-                            <b>1. 记录收益</b><br>
-                            手机软件 → 编辑余额 → 系统自动计算日收益
-                        </div>
-                        <div style="background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-                            <b>2. 计算目标</b><br>
-                            历史数据 + 还款计划 → 智能每日目标
-                        </div>
-                        <div style="background: rgba(34, 197, 94, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-                            <b>3. 资金流转</b><br>
-                            软件提现 → 个人钱包 → 记录支出
-                        </div>
-                        <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px;">
-                            <b>4. 统计分析</b><br>
-                            所有数据汇总 → 仪表盘展示
-                        </div>
-                    </div>
-                </div>
-            `
-        }
-    ];
-    
-    let currentSection = 0;
-    
-    function renderContent() {
-        const section = sections[currentSection];
-        return `
-            <div style="max-height: 70vh; overflow-y: auto; padding-right: 8px;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--border-color);">
-                    <span style="font-size: 32px;">${section.icon}</span>
-                    <div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">${section.title}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">${currentSection + 1} / ${sections.length}</div>
-                    </div>
-                </div>
-                <div style="font-size: 14px; line-height: 1.8;">
-                    ${section.content}
-                </div>
-                <div style="display: flex; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="changeSection(-1)" ${currentSection === 0 ? 'disabled' : ''}>← 上一页</button>
-                    <button class="btn btn-secondary" style="flex: 1;" onclick="changeSection(1)" ${currentSection === sections.length - 1 ? 'disabled' : ''}>下一页 →</button>
-                </div>
-                <div style="display: flex; justify-content: center; gap: 6px; margin-top: 12px;">
-                    ${sections.map((_, idx) => `
-                        <div style="width: 8px; height: 8px; border-radius: 50%; background: ${idx === currentSection ? 'var(--primary-color)' : 'var(--border-color)'}; cursor: pointer;" onclick="goToSection(${idx})"></div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
-    
-    window.changeSection = function(delta) {
-        currentSection += delta;
-        if (currentSection < 0) currentSection = 0;
-        if (currentSection >= sections.length) currentSection = sections.length - 1;
-        updateModalContent();
-    };
-    
-    window.goToSection = function(index) {
-        currentSection = index;
-        updateModalContent();
-    };
-    
-    function updateModalContent() {
-        const modalBody = document.querySelector('#modal .modal-body');
-        if (modalBody) {
-            modalBody.innerHTML = renderContent();
-        }
-    }
-    
-    showModal(
-        '📚 系统功能介绍',
-        renderContent(),
-        [
-            {
-                text: '关闭',
-                class: 'btn-secondary',
-                action: () => {
-                    delete window.changeSection;
-                    delete window.goToSection;
-                    closeModal();
-                }
-            }
-        ]
-    );
-}
-
-// 添加测试数据
-function addTestData() {
-    if (!confirm('确定要添加测试数据吗？这将在现有数据基础上添加测试手机和应用。')) {
-        return;
-    }
-
-    const data = DataManager.loadData();
-
-    // 创建测试手机
-    const testPhones = [
-        { name: '测试手机-1', model: 'iPhone 14 Pro' },
-        { name: '测试手机-2', model: 'Samsung S23' },
-        { name: '测试手机-3', model: 'Xiaomi 13' }
-    ];
-
-    testPhones.forEach((phoneInfo, index) => {
-        const phoneId = 'test_phone_' + Date.now() + '_' + index;
-        const phone = {
-            id: phoneId,
-            name: phoneInfo.name,
-            model: phoneInfo.model,
-            apps: []
-        };
-
-        // 为每个手机添加测试应用
-        const testApps = [
-            { name: '抖音极速版', targetAmount: 30, balance: 15.5 },
-            { name: '快手极速版', targetAmount: 30, balance: 22.3 },
-            { name: '今日头条', targetAmount: 15, balance: 8.7 },
-            { name: '百度极速版', targetAmount: 20, balance: 12.0 }
-        ];
-
-        testApps.forEach((appInfo, appIndex) => {
-            const appId = 'test_app_' + Date.now() + '_' + index + '_' + appIndex;
-            const app = {
-                id: appId,
-                name: appInfo.name,
-                targetAmount: appInfo.targetAmount,
-                balance: appInfo.balance,
-                withdrawn: Math.random() * 100 + 50, // 随机已提现金额
-                historicalWithdrawn: Math.random() * 200 + 100,
-                withdrawals: [],
-                expenses: []
-            };
-
-            // 添加一些提现记录
-            const withdrawalCount = Math.floor(Math.random() * 5) + 1;
-            for (let i = 0; i < withdrawalCount; i++) {
-                const date = new Date();
-                date.setDate(date.getDate() - Math.floor(Math.random() * 30));
-                app.withdrawals.push({
-                    date: date.toISOString().split('T')[0],
-                    amount: Math.random() * 20 + 10
-                });
-            }
-
-            // 添加10天的每日赚取记录
-            app.dailyEarnings = {};
-            for (let i = 9; i >= 0; i--) {
-                const date = new Date();
-                date.setDate(date.getDate() - i);
-                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                // 随机生成每日收益（5-25元）
-                app.dailyEarnings[dateStr] = (Math.random() * 20 + 5).toFixed(2);
-            }
-
-            phone.apps.push(app);
-        });
-
-        data.phones.push(phone);
-    });
-
-    // 添加一些支出记录
-    const expenseTypes = ['餐饮', '交通', '购物', '娱乐', '其他'];
-    for (let i = 0; i < 5; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 30));
-        data.expenses.push({
-            id: 'test_expense_' + Date.now() + '_' + i,
-            date: date.toISOString().split('T')[0],
-            amount: Math.random() * 50 + 10,
-            type: expenseTypes[Math.floor(Math.random() * expenseTypes.length)],
-            note: '测试支出 ' + (i + 1)
-        });
-    }
-
-    // 设置年度收益目标
-    data.settings.yearlyGoalAmount = 5000;
-    data.settings.yearlyGoalYear = new Date().getFullYear();
-    data.settings.yearlyGoalAutoDistribute = true;
-
-    DataManager.saveData(data);
-
-    // 刷新所有页面
-    renderDashboard();
-    renderPhones();
-    renderStats();
-    renderSettings();
-    renderGamesPage();
-
-    showToast('测试数据添加成功！', 'success');
-}
-
-// 添加极简测试数据（仅1个手机1个应用）
-function addMinimalTestData() {
-    if (!confirm('确定要添加极简测试数据吗？')) {
-        return;
-    }
-
-    const data = DataManager.loadData();
-
-    // 创建一个极简测试手机
-    const phone = {
-        id: 'minimal_test_' + Date.now(),
-        name: '测试手机',
-        model: 'Test Device',
-        apps: [{
-            id: 'minimal_app_' + Date.now(),
-            name: '测试应用',
-            targetAmount: 30,
-            balance: 15.0,
-            withdrawn: 45.0,
-            historicalWithdrawn: 100.0,
-            withdrawals: [
-                { date: new Date().toISOString().split('T')[0], amount: 15.0 }
-            ],
-            expenses: []
-        }]
-    };
-
-    data.phones.push(phone);
-    DataManager.saveData(data);
-
-    // 刷新页面
-    renderDashboard();
-    renderPhones();
-    renderStats();
-
-    showToast('极简测试数据添加成功！', 'success');
-}
-
-// 清空每日赚取记录
-function clearAllDailyEarnings() {
-    if (confirm('确定要清空所有每日赚取记录吗？此操作不可恢复！')) {
-        DataManager.clearAllDailyEarnings();
-        renderDashboard();
-        renderPhones();
-        showToast('每日赚取记录已清空！', 'success');
-    }
 }
 
 // 清空所有数据
@@ -10556,7 +9873,7 @@ function renderYearlyGoal() {
                         const isDayAchieved = day.amount >= dailyTargetAmount && dailyTargetAmount > 0;
                         const isToday = day.date === todayStr;
                         return `
-                        <div style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'};">
+                        <div onclick="showDailyEarningDetail('${day.date}')" style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'}; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                             <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">${day.date.slice(5)}</div>
                             <div style="font-size: 13px; font-weight: 600; color: ${isDayAchieved ? 'var(--success-color)' : 'var(--text-primary)'};">¥${day.amount.toFixed(0)}</div>
                             ${isDayAchieved ? '<div style="font-size: 9px; color: var(--success-color);">✓</div>' : ''}
@@ -10697,6 +10014,71 @@ function renderYearlyGoal() {
     `;
 
     container.innerHTML = html;
+}
+
+// 显示每日赚取详情
+function showDailyEarningDetail(date) {
+    const data = DataManager.loadData();
+    const goal = DataManager.getYearlyGoal();
+    const dailyTarget = DataManager.calculateDailyTarget();
+    
+    // 获取该日期所有软件的赚取详情
+    let appEarnings = [];
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (app.dailyEarnings && app.dailyEarnings[date]) {
+                appEarnings.push({
+                    phoneName: phone.name,
+                    appName: app.name,
+                    amount: parseFloat(app.dailyEarnings[date]) || 0
+                });
+            }
+        });
+    });
+    
+    // 按金额排序
+    appEarnings.sort((a, b) => b.amount - a.amount);
+    
+    const totalAmount = appEarnings.reduce((sum, item) => sum + item.amount, 0);
+    const isAchieved = dailyTarget.isValid && totalAmount >= dailyTarget.dailyTarget;
+    const isToday = date === new Date().toISOString().split('T')[0];
+    
+    let html = `
+        <div style="max-height: 60vh; overflow-y: auto;">
+            <div style="text-align: center; margin-bottom: 16px; padding: 16px; background: ${isAchieved ? '#f0fdf4' : '#fef2f2'}; border-radius: 12px; border: 1px solid ${isAchieved ? '#86efac' : '#fecaca'};">
+                <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px;">${isToday ? '今天' : date}</div>
+                <div style="font-size: 28px; font-weight: bold; color: ${isAchieved ? '#166534' : '#991b1b'};">¥${totalAmount.toFixed(2)}</div>
+                <div style="font-size: 12px; color: ${isAchieved ? '#166534' : '#991b1b'}; margin-top: 4px;">
+                    ${isAchieved ? '✅ 已达标' : '⏳ 未达标'}
+                    ${dailyTarget.isValid ? `· 目标: ¥${dailyTarget.dailyTarget.toFixed(2)}` : ''}
+                </div>
+            </div>
+            
+            ${appEarnings.length > 0 ? `
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">
+                📱 各软件详情 (${appEarnings.length}个)
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${appEarnings.map((item, index) => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 11px; color: var(--text-secondary); width: 20px;">${index + 1}</span>
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500; color: var(--text-primary);">${item.appName}</div>
+                                <div style="font-size: 10px; color: var(--text-secondary);">${item.phoneName}</div>
+                            </div>
+                        </div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--success-color);">+¥${item.amount.toFixed(2)}</div>
+                    </div>
+                `).join('')}
+            </div>
+            ` : '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无详细记录</div>'}
+        </div>
+    `;
+    
+    showModal(`${isToday ? '今天' : date} 赚取详情`, html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
 }
 
 // 保存收益目标
