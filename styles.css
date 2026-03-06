@@ -547,18 +547,30 @@
 
 /* 暗黑模式下的底部导航栏 */
 [data-theme="dark"] .tab-bar {
-    background: rgba(30, 41, 59, 0.9);
-    border: 2px solid rgba(51, 65, 85, 0.8);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 [data-theme="dark"] .tab-item {
     color: var(--text-secondary);
 }
 
+[data-theme="dark"] .tab-item:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
 [data-theme="dark"] .tab-item.active {
-    color: var(--primary-light);
-    background: rgba(99, 102, 241, 0.2);
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    box-shadow: 
+        0 4px 15px rgba(99, 102, 241, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="dark"] .tab-item.active .tab-text {
+    color: white;
 }
 
 /* 暗黑模式下的表单输入 */
@@ -2345,35 +2357,36 @@ body {
     z-index: 10;
 }
 
-/* 底部导航 - iOS风格浮动设计 */
+/* 底部导航 - 现代胶囊式设计 */
 .tab-bar {
     position: fixed;
-    bottom: 20px;
+    bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 32px);
-    max-width: 600px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(25px) saturate(180%);
-    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    width: calc(100% - 24px);
+    max-width: 500px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: center;
-    padding: 6px 8px;
+    padding: 8px 12px;
     box-shadow: 
-        0 10px 40px rgba(0, 0, 0, 0.12),
+        0 8px 32px rgba(0, 0, 0, 0.12),
         0 2px 8px rgba(0, 0, 0, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 28px;
     z-index: 100;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-sizing: border-box;
+    gap: 4px;
 }
 
 .tab-bar:hover {
     box-shadow: 
-        0 15px 50px rgba(17, 153, 142, 0.2),
+        0 12px 40px rgba(17, 153, 142, 0.15),
         0 4px 12px rgba(0, 0, 0, 0.1),
         inset 0 1px 0 rgba(255, 255, 255, 0.8);
     transform: translateX(-50%) translateY(-2px);
@@ -2384,17 +2397,18 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 6px 4px;
+    padding: 8px 12px;
     flex: 1;
     min-width: 0;
-    max-width: 80px;
+    max-width: 70px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: 16px;
+    border-radius: 20px;
     position: relative;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     box-sizing: border-box;
+    gap: 4px;
 }
 
 /* 点击波纹效果 */
@@ -2405,7 +2419,7 @@ body {
     left: 50%;
     width: 0;
     height: 0;
-    background: radial-gradient(circle, rgba(17, 153, 142, 0.3) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(17, 153, 142, 0.25) 0%, transparent 70%);
     border-radius: 50%;
     transform: translate(-50%, -50%);
     transition: width 0.4s ease, height 0.4s ease;
@@ -2413,53 +2427,55 @@ body {
 }
 
 .tab-item:active::after {
-    width: 60px;
-    height: 60px;
-}
-
-/* 悬浮光效 */
-.tab-item::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(17, 153, 142, 0.15), transparent);
-    transition: left 0.6s ease;
-}
-
-.tab-item:hover::before {
-    left: 100%;
+    width: 50px;
+    height: 50px;
 }
 
 .tab-item:hover {
-    background: rgba(17, 153, 142, 0.08);
-    transform: translateY(-2px);
+    background: rgba(17, 153, 142, 0.06);
 }
 
 .tab-item:active {
-    transform: scale(0.95);
+    transform: scale(0.92);
 }
 
-/* 选中状态 - 增强动画 */
+/* 选中状态 - 胶囊高亮 */
 .tab-item.active {
-    color: #11998e;
-    background: linear-gradient(135deg, rgba(17, 153, 142, 0.15), rgba(56, 239, 125, 0.08));
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
     box-shadow: 
-        0 4px 15px rgba(17, 153, 142, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        0 4px 15px rgba(17, 153, 142, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .tab-item.active .tab-icon {
-    transform: scale(1.25) translateY(-2px);
-    filter: drop-shadow(0 4px 8px rgba(17, 153, 142, 0.4));
-    animation: tabIconBounce 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: scale(1.1);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
 }
 
 .tab-item.active .tab-text {
-    font-weight: 800;
-    color: #11998e;
+    font-weight: 700;
+    color: white;
+}
+
+.tab-icon {
+    font-size: 22px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    line-height: 1;
+}
+
+.tab-text {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.tab-item.active .tab-text {
+    color: white;
 }
 
 /* 图标弹跳动画 */
