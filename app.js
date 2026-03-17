@@ -126,45 +126,12 @@ function closeModal() {
 }
 
 // 显示提示消息
-function showToast(message, type = 'success') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.style.display = 'block';
-    
-    // 移除所有类型类
-    toast.classList.remove('toast-success', 'toast-error', 'toast-warning', 'toast-info');
-    
-    // 添加对应类型类
-    toast.classList.add(`toast-${type}`);
-    
-    // 添加动画类
-    toast.classList.add('toast-animate');
-    
-    setTimeout(() => {
-        toast.style.display = 'none';
-        toast.classList.remove('toast-animate');
-    }, 2500);
-}
-
-// 显示成功提示
-function showSuccess(message) {
-    showToast(message, 'success');
-}
-
-// 显示错误提示
-function showError(message) {
-    showToast(message, 'error');
-}
-
-// 显示警告提示
-function showWarning(message) {
-    showToast(message, 'warning');
-}
-
-// 显示信息提示
-function showInfo(message) {
-    showToast(message, 'info');
-}
+// 提示功能已删除
+function showToast() {}
+function showSuccess() {}
+function showError() {}
+function showWarning() {}
+function showInfo() {}
 
 // 输入验证函数
 function validateInput(value, type, fieldName) {
