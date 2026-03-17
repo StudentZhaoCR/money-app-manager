@@ -1542,6 +1542,77 @@ class DataManager {
         };
     }
 
+    // 计算历史最高日赚
+    static calculateMaxDailyEarnings() {
+        const data = this.loadData();
+        let maxEarnings = 0;
+        const today = new Date().toISOString().split('T')[0];
+        
+        // 收集所有日期的 earnings
+        const dailyEarningsMap = new Map();
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.dailyEarnings) {
+                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
+                        // 只计算今天及以前的记录
+                        if (date <= today && amount > 0) {
+                            const earnings = parseFloat(amount) || 0;
+                            if (!dailyEarningsMap.has(date)) {
+                                dailyEarningsMap.set(date, 0);
+                            }
+                            dailyEarningsMap.set(date, dailyEarningsMap.get(date) + earnings);
+                        }
+                    });
+                }
+            });
+        });
+        
+        // 找出最大值
+        for (const [date, earnings] of dailyEarningsMap.entries()) {
+            if (earnings > maxEarnings) {
+                maxEarnings = earnings;
+            }
+        }
+        
+        return {
+            maxDailyEarnings: maxEarnings
+        };
+    }
+
+    // 计算还款所需日赚
+    static calculateRepaymentDailyNeeded() {
+        const data = this.loadData();
+        const today = new Date();
+        let totalRepayment = 0;
+        let daysUntilDue = 0;
+        
+        // 计算所有未还款的分期
+        data.installments.forEach(installment => {
+            const dueDate = new Date(installment.dueDate);
+            const amount = parseFloat(installment.amount) || 0;
+            
+            // 只计算未来的还款
+            if (dueDate > today && amount > 0) {
+                totalRepayment += amount;
+                const days = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                if (days > 0 && (daysUntilDue === 0 || days < daysUntilDue)) {
+                    daysUntilDue = days;
+                }
+            }
+        });
+        
+        // 计算每日所需还款额
+        const dailyNeeded = daysUntilDue > 0 ? totalRepayment / daysUntilDue : 0;
+        
+        return {
+            hasRepayment: totalRepayment > 0,
+            totalRepayment: totalRepayment,
+            daysUntilDue: daysUntilDue,
+            dailyNeeded: dailyNeeded
+        };
+    }
+
     // 计算目标完成情况（不限时目标）
     static calculateGoalProgress() {
         const goal = this.getYearlyGoal();
