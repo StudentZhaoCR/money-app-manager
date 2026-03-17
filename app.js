@@ -4756,7 +4756,6 @@ function showPage(pageName) {
     if (pageName === 'withdraw-records') renderWithdrawRecords();
     if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
-    if (pageName === 'games') renderGamesPage();
     if (pageName === 'assets') renderAssetsPage();
     
     // 再次恢复表单值（确保不被 render 函数覆盖）

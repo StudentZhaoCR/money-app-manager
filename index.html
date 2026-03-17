@@ -235,85 +235,6 @@
             </div>
         </div>
 
-        <!-- 游戏管理页面 -->
-        <div class="page" id="page-games">
-            <div class="date-container">
-                <span class="current-date" id="games-current-date"></span>
-            </div>
-
-            <!-- 今日游戏抽签 -->
-            <div class="card mt-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <div class="section-header">
-                    <div class="section-title" style="color: white;">🎲 今日游戏抽签</div>
-                    <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
-                </div>
-                <div id="today-game-result" style="text-align: center; padding: 20px;">
-                    <div style="font-size: 18px; margin-bottom: 16px;">点击下方按钮抽签决定今天玩哪个游戏</div>
-                    <button class="btn" onclick="drawTodayGame()" style="background: white; color: #667eea; font-weight: bold; font-size: 16px;">🎮 开始抽签</button>
-                </div>
-            </div>
-
-            <!-- 手机选择 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📱 选择手机</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">当前手机</label>
-                    <select id="game-phone-select" class="form-input" onchange="onGamePhoneChange()">
-                    </select>
-                </div>
-            </div>
-
-            <!-- 添加新游戏 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">➕ 添加新游戏</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">游戏名称</label>
-                    <input type="text" id="new-game-name" class="form-input" placeholder="输入游戏名称">
-                </div>
-                <button class="btn btn-primary w-full" onclick="addNewGame()">添加游戏</button>
-            </div>
-
-            <!-- 游戏统计 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📊 游戏统计</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="phone-game-stats">
-                    <!-- 动态生成各手机统计 -->
-                </div>
-            </div>
-
-            <!-- 游戏列表 -->
-            <div class="card mt-4">
-                <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <div class="section-title">🎮 游戏列表</div>
-                    <button class="btn btn-sm" onclick="showDeletedGamesModal()" style="font-size: 11px; padding: 4px 12px;">🗑️ 已删除记录</button>
-                </div>
-                <div class="section-divider"></div>
-                <div id="games-list">
-                    <div class="empty-state">暂无游戏，请添加新游戏</div>
-                </div>
-            </div>
-
-            <!-- 抽签历史 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📜 抽签历史</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="game-draw-history">
-                    <div class="empty-state">暂无抽签记录</div>
-                </div>
-            </div>
-        </div>
-
         <!-- 资产管理页面 -->
         <div class="page" id="page-assets">
             <div class="date-container">
@@ -528,10 +449,6 @@
         <div class="tab-item" data-page="stats" onclick="showPage('stats')">
             <span class="tab-icon">📈</span>
             <span class="tab-text">统计</span>
-        </div>
-        <div class="tab-item" data-page="games" onclick="showPage('games')">
-            <span class="tab-icon">🎮</span>
-            <span class="tab-text">游戏</span>
         </div>
         <div class="tab-item" data-page="assets" onclick="showPage('assets')">
             <span class="tab-icon">💼</span>
