@@ -1449,7 +1449,7 @@ class DataManager {
     static getAllDailyEarnings() {
         const data = this.loadData();
         const dailyTotals = {};
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         
         // 收集所有日期的赚取金额（只包括今天及以前的历史记录）
         data.phones.forEach(phone => {
@@ -1467,6 +1467,11 @@ class DataManager {
                 }
             });
         });
+        
+        // 确保包含今天的日期（即使没有记录）
+        if (!dailyTotals[today]) {
+            dailyTotals[today] = 0;
+        }
         
         // 转换为数组并排序（日期从早到晚）
         const result = Object.entries(dailyTotals)
@@ -2439,15 +2444,21 @@ class DataManager {
                     });
                     
                     // 检查是否达到日目标（基于总收益）
-                    const dailyTarget = this.calculateDailyTarget();
-                    console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTarget.dailyTarget, isValid: dailyTarget.isValid });
+                    // 使用与首页相同的目标计算逻辑：年度目标金额 ÷ 剩余天数
+                    const goal = this.getYearlyGoal();
+                    const currentDate = new Date();
+                    const yearEnd = new Date(goal.year, 11, 31); // 当年12月31日
+                    const daysRemaining = Math.ceil((yearEnd - currentDate) / (1000 * 60 * 60 * 24));
+                    const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
+                    
+                    console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTargetAmount });
                     
                     // 总是返回今日收益信息
                     app._todayEarnings = allAppsTodayEarnings;
                     
-                    if (dailyTarget.isValid) {
-                        app._dailyTarget = dailyTarget.dailyTarget;
-                        if (allAppsTodayEarnings >= dailyTarget.dailyTarget) {
+                    if (dailyTargetAmount > 0) {
+                        app._dailyTarget = dailyTargetAmount;
+                        if (allAppsTodayEarnings >= dailyTargetAmount) {
                             // 达到日目标
                             app._dailyTargetAchieved = true;
                             console.log('达到日目标！');
@@ -10152,7 +10163,12 @@ function renderYearlyGoal() {
 function showDailyEarningDetail(date) {
     const data = DataManager.loadData();
     const goal = DataManager.getYearlyGoal();
-    const dailyTarget = DataManager.calculateDailyTarget();
+    
+    // 计算每日目标（与首页保持一致：年度目标金额 ÷ 剩余天数）
+    const today = new Date();
+    const yearEnd = new Date(goal.year, 11, 31); // 当年12月31日
+    const daysRemaining = Math.ceil((yearEnd - today) / (1000 * 60 * 60 * 24));
+    const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
     
     // 获取该日期所有软件的赚取详情
     let appEarnings = [];
@@ -10172,8 +10188,8 @@ function showDailyEarningDetail(date) {
     appEarnings.sort((a, b) => b.amount - a.amount);
     
     const totalAmount = appEarnings.reduce((sum, item) => sum + item.amount, 0);
-    const isAchieved = dailyTarget.isValid && totalAmount >= dailyTarget.dailyTarget;
-    const isToday = date === new Date().toISOString().split('T')[0];
+    const isAchieved = totalAmount >= dailyTargetAmount && dailyTargetAmount > 0;
+    const isToday = date === getCurrentDate();
     
     let html = `
         <div style="max-height: 60vh; overflow-y: auto;">
@@ -10182,7 +10198,7 @@ function showDailyEarningDetail(date) {
                 <div style="font-size: 28px; font-weight: bold; color: ${isAchieved ? '#166534' : '#991b1b'};">¥${totalAmount.toFixed(2)}</div>
                 <div style="font-size: 12px; color: ${isAchieved ? '#166534' : '#991b1b'}; margin-top: 4px;">
                     ${isAchieved ? '✅ 已达标' : '⏳ 未达标'}
-                    ${dailyTarget.isValid ? `· 目标: ¥${dailyTarget.dailyTarget.toFixed(2)}` : ''}
+                    ${dailyTargetAmount > 0 ? `· 目标: ¥${dailyTargetAmount.toFixed(2)}` : ''}
                 </div>
             </div>
             
