@@ -1733,7 +1733,7 @@ class DataManager {
         let finalTarget = Math.max(abilityTarget, repaymentNeeded);
         
         // 4. 设置上限（防止目标过高）
-        const maxTarget = Math.max(maxDailyEarnings * 1.2, repaymentNeeded * 1.5, 100);
+        const maxTarget = Math.max(maxDailyEarnings.maxDailyEarnings * 1.2, repaymentNeeded * 1.5, 100);
         finalTarget = Math.min(finalTarget, maxTarget);
         
         return {
@@ -1742,7 +1742,7 @@ class DataManager {
             repaymentNeeded: repaymentNeeded,    // 还款所需
             avgDailyEarnings: avgStats.avgDailyEarnings,
             last7DaysAvg: last7DaysStats.avgDailyEarnings,
-            maxDailyEarnings: maxDailyEarnings,
+            maxDailyEarnings: maxDailyEarnings.maxDailyEarnings,
             daysWithData: avgStats.daysCount,
             dynamicFactor: dynamicFactor,
             performanceLevel: performanceLevel,
