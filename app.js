@@ -5877,7 +5877,7 @@ function showAppDetailModal(appId) {
             ${targetApp.dailyEarnings && Object.keys(targetApp.dailyEarnings).length > 0 ? `
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
                     <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">📈 每日赚取记录</div>
-                    <div style="max-height: 150px; overflow-y: auto;">
+                    <div style="max-height: 150px; overflow-y: auto;" id="daily-earnings-scroll-${targetApp.id}">
                         ${Object.entries(targetApp.dailyEarnings)
                             .sort((a, b) => new Date(b[0]) - new Date(a[0]))
                             .map(([date, amount]) => {
@@ -5890,6 +5890,14 @@ function showAppDetailModal(appId) {
                                 `;
                             }).join('')}
                     </div>
+                    <script>
+                        setTimeout(() => {
+                            const scrollElement = document.getElementById('daily-earnings-scroll-${targetApp.id}');
+                            if (scrollElement) {
+                                scrollElement.scrollTop = scrollElement.scrollHeight;
+                            }
+                        }, 100);
+                    </script>
                 </div>
             ` : '<div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center; color: var(--text-secondary); font-size: 12px;">暂无每日赚取记录</div>'}
             
@@ -9990,12 +9998,12 @@ function renderYearlyGoal() {
                     }).join('')}
                 </div>
                 <script>
-                    (function() {
+                    setTimeout(function() {
                         const container = document.getElementById('daily-earnings-container');
                         if (container) {
                             container.scrollLeft = container.scrollWidth;
                         }
-                    })();
+                    }, 100);
                 </script>
             </div>
             ` : ''}
