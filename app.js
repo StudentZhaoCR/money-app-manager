@@ -5913,18 +5913,20 @@ function renderAppEarningsRanking() {
 
     const data = DataManager.loadData();
     
-    // 收集所有软件的收益统计
+    // 收集所有有收益的软件
     const appEarnings = [];
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
             const stats = DataManager.getAppEarningsStats(app);
-            appEarnings.push({
-                phoneName: phone.name,
-                appName: app.name,
-                appId: app.id,
-                phoneId: phone.id,
-                ...stats
-            });
+            if (stats.total > 0 || app.dailyEarnings) {
+                appEarnings.push({
+                    phoneName: phone.name,
+                    appName: app.name,
+                    appId: app.id,
+                    phoneId: phone.id,
+                    ...stats
+                });
+            }
         });
     });
 
@@ -5936,12 +5938,12 @@ function renderAppEarningsRanking() {
     card.style.display = 'block';
 
     // 按今日收益排序
-    const sortedByToday = [...appEarnings].sort((a, b) => b.today - a.today).slice(0, 5);
+    const sortedByToday = [...appEarnings].sort((a, b) => b.today - a.today);
 
     let html = '';
 
     // 今日收益排行 - 毛玻璃效果
-    if (sortedByToday.length > 0) {
+    if (sortedByToday.some(a => a.today > 0)) {
         html += `
             <div style="margin-bottom: 20px;">
                 <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
@@ -5950,22 +5952,24 @@ function renderAppEarningsRanking() {
         `;
 
         sortedByToday.forEach((app, index) => {
-            const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-            const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b'];
-            const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
-            html += `
-                <div style="position: relative; background: linear-gradient(135deg, rgba(17, 153, 142, 0.3) 0%, rgba(56, 239, 125, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || '•'}</span>
-                        <div style="flex: 1;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
-                                <span style="font-weight: 800; color: ${app.today > 0 ? '#fbbf24' : 'rgba(255,255,255,0.7)';}; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">¥${app.today.toFixed(2)}</span>
+            if (app.today > 0) {
+                const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+                const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b'];
+                const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
+                html += `
+                    <div style="position: relative; background: linear-gradient(135deg, rgba(17, 153, 142, 0.3) 0%, rgba(56, 239, 125, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || (index + 1)}</span>
+                            <div style="flex: 1;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
+                                    <span style="font-weight: 800; color: #fbbf24; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">¥${app.today.toFixed(2)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         });
 
         html += `</div>`;
