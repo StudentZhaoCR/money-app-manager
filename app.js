@@ -2412,11 +2412,8 @@ class DataManager {
                     
                     // 检查是否达到日目标（基于总收益）
                     // 使用与首页相同的目标计算逻辑：年度目标金额 ÷ 剩余天数
-                    const goal = this.getYearlyGoal();
-                    const currentDate = new Date();
-                    const yearEnd = new Date(goal.year, 11, 31); // 当年12月31日
-                    const daysRemaining = Math.ceil((yearEnd - currentDate) / (1000 * 60 * 60 * 24));
-                    const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
+                    const yearlyDailyTarget = this.calculateYearlyDailyTarget();
+                    const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
                     
                     console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTargetAmount });
                     
@@ -5921,15 +5918,13 @@ function renderAppEarningsRanking() {
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
             const stats = DataManager.getAppEarningsStats(app);
-            if (stats.total > 0 || app.dailyEarnings) {
-                appEarnings.push({
-                    phoneName: phone.name,
-                    appName: app.name,
-                    appId: app.id,
-                    phoneId: phone.id,
-                    ...stats
-                });
-            }
+            appEarnings.push({
+                phoneName: phone.name,
+                appName: app.name,
+                appId: app.id,
+                phoneId: phone.id,
+                ...stats
+            });
         });
     });
 
@@ -5946,7 +5941,7 @@ function renderAppEarningsRanking() {
     let html = '';
 
     // 今日收益排行 - 毛玻璃效果
-    if (sortedByToday.some(a => a.today > 0)) {
+    if (sortedByToday.length > 0) {
         html += `
             <div style="margin-bottom: 20px;">
                 <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
@@ -5955,24 +5950,22 @@ function renderAppEarningsRanking() {
         `;
 
         sortedByToday.forEach((app, index) => {
-            if (app.today > 0) {
-                const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-                const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b'];
-                const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
-                html += `
-                    <div style="position: relative; background: linear-gradient(135deg, rgba(17, 153, 142, 0.3) 0%, rgba(56, 239, 125, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || '•'}</span>
-                            <div style="flex: 1;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
-                                    <span style="font-weight: 800; color: #fbbf24; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">¥${app.today.toFixed(2)}</span>
-                                </div>
+            const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+            const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b'];
+            const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
+            html += `
+                <div style="position: relative; background: linear-gradient(135deg, rgba(17, 153, 142, 0.3) 0%, rgba(56, 239, 125, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || '•'}</span>
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
+                                <span style="font-weight: 800; color: ${app.today > 0 ? '#fbbf24' : 'rgba(255,255,255,0.7)';}; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">¥${app.today.toFixed(2)}</span>
                             </div>
                         </div>
                     </div>
-                `;
-            }
+                </div>
+            `;
         });
 
         html += `</div>`;
@@ -9904,8 +9897,9 @@ function renderYearlyGoal() {
     const yearEnd = new Date(goal.year, 11, 31); // 当年12月31日
     const daysRemaining = Math.ceil((yearEnd - today) / (1000 * 60 * 60 * 24));
     
-    // 计算每日目标
-    const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
+    // 计算每日目标（考虑已赚取金额）
+    const yearlyDailyTarget = DataManager.calculateYearlyDailyTarget();
+    const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
     
     // 计算今日赚取金额
     const todayStr = getCurrentDate();
@@ -10140,11 +10134,9 @@ function showDailyEarningDetail(date) {
     const data = DataManager.loadData();
     const goal = DataManager.getYearlyGoal();
     
-    // 计算每日目标（与首页保持一致：年度目标金额 ÷ 剩余天数）
-    const today = new Date();
-    const yearEnd = new Date(goal.year, 11, 31); // 当年12月31日
-    const daysRemaining = Math.ceil((yearEnd - today) / (1000 * 60 * 60 * 24));
-    const dailyTargetAmount = daysRemaining > 0 ? goal.amount / daysRemaining : 0;
+    // 计算每日目标（与首页保持一致：考虑已赚取金额）
+    const yearlyDailyTarget = DataManager.calculateYearlyDailyTarget();
+    const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
     
     // 获取该日期所有软件的赚取详情
     let appEarnings = [];
