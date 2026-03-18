@@ -10013,8 +10013,17 @@ function renderYearlyGoal() {
     if (distribution.apps.length === 0) {
         html += `<div class="empty-state">暂无软件数据</div>`;
     } else {
-        // 按排名排序显示（收益高的排在前面）
-        const sortedApps = [...distribution.apps].sort((a, b) => b.totalEarned - a.totalEarned);
+        // 按剩余金额从小到大排序，达成的放到最底部
+        const sortedApps = [...distribution.apps].sort((a, b) => {
+            // 先处理达成状态：未达成的排在前面
+            if (a.totalEarned >= a.adjustedTarget && b.totalEarned < b.adjustedTarget) return 1;
+            if (a.totalEarned < a.adjustedTarget && b.totalEarned >= b.adjustedTarget) return -1;
+            
+            // 都是未达成或都是达成的，按剩余金额排序
+            const remainingA = a.adjustedTarget - a.totalEarned;
+            const remainingB = b.adjustedTarget - b.totalEarned;
+            return remainingA - remainingB;
+        });
         
         sortedApps.forEach((app, index) => {
             const appProgress = Math.min(100, (app.totalEarned / app.adjustedTarget * 100)).toFixed(1);
