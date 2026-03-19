@@ -8268,6 +8268,14 @@ function openGameResultPopup(result) {
     const dateEl = document.getElementById('popup-draw-date');
     const listEl = document.getElementById('popup-game-result-list');
     
+    // 保存抽签结果到全局变量
+    todayDrawResult = result;
+    
+    // 重置计时器状态
+    gameTimerStates = {};
+    gameTimers = {};
+    saveTimerState();
+    
     // 设置日期
     const drawDate = new Date();
     dateEl.textContent = formatDate(drawDate);
@@ -8276,12 +8284,24 @@ function openGameResultPopup(result) {
     let html = '';
     result.forEach((game, index) => {
         const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
+        const totalSeconds = playTime * 60;
         html += `
             <div class="popup-game-item" style="animation-delay: ${index * 0.15}s">
                 <div class="popup-game-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);">${index + 1}</div>
                 <div class="popup-game-info">
                     <span class="popup-game-name">${game.name}</span>
-                    <span class="popup-game-time">⏱️ ${playTime} 分钟</span>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        <span class="popup-game-time">⏱️ ${playTime} 分钟</span>
+                        <div style="flex: 1; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
+                            <div class="countdown-progress" data-game-index="${index}" style="width: 100%; height: 100%; background: linear-gradient(90deg, #10b981, #34d399); transition: width 1s linear;"></div>
+                        </div>
+                        <span class="countdown-timer" data-game-index="${index}">${playTime}:00</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 4px; margin-top: 8px;">
+                    <button class="btn btn-sm" onclick="startGameTimerByIndex(${index})" style="font-size: 10px; padding: 2px 8px;">开始</button>
+                    <button class="btn btn-sm" onclick="pauseGameTimer(${index})" style="font-size: 10px; padding: 2px 8px;">暂停</button>
+                    <button class="btn btn-sm" onclick="resetGameTimer(${index})" style="font-size: 10px; padding: 2px 8px;">重置</button>
                 </div>
             </div>
         `;
@@ -8293,6 +8313,14 @@ function openGameResultPopup(result) {
     // 强制重绘以触发动画
     popup.offsetHeight;
     popup.classList.add('show');
+    
+    // 抽签后自动开始计时
+    setTimeout(() => {
+        result.forEach((game, index) => {
+            console.log('自动启动游戏计时器:', index, game.name);
+            startGameTimerByIndex(index);
+        });
+    }, 1000);
 }
 
 // 关闭抽签结果弹窗
@@ -8323,6 +8351,129 @@ let currentGamePhoneId = null;
 
 // 今天的抽签结果（内存中存储，不保存到localStorage）
 let todayDrawResult = null;
+
+// 倒计时相关变量
+let gameTimers = {}; // 存储每个游戏的计时器
+let gameTimerStates = {}; // 存储每个游戏的计时状态
+
+// 保存倒计时状态到localStorage
+function saveTimerState() {
+    localStorage.setItem('gameTimerStates', JSON.stringify(gameTimerStates));
+}
+
+// 从localStorage加载倒计时状态
+function loadTimerState() {
+    const saved = localStorage.getItem('gameTimerStates');
+    if (saved) {
+        gameTimerStates = JSON.parse(saved);
+    }
+}
+
+// 格式化时间为 MM:SS 格式
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+// 开始游戏倒计时
+
+
+// 暂停游戏倒计时
+function pauseGameTimer(gameIndex) {
+    console.log('暂停游戏计时器:', gameIndex);
+    
+    const state = gameTimerStates[gameIndex];
+    if (state) {
+        state.isRunning = false;
+        if (gameTimers[gameIndex]) {
+            clearInterval(gameTimers[gameIndex]);
+            delete gameTimers[gameIndex];
+        }
+        saveTimerState();
+        console.log('计时器已暂停');
+    }
+}
+
+// 重置游戏倒计时
+function resetGameTimer(gameIndex) {
+    console.log('重置游戏计时器:', gameIndex);
+    
+    if (!todayDrawResult || !todayDrawResult[gameIndex]) {
+        console.error('错误: 没有找到游戏结果或游戏索引无效');
+        return;
+    }
+    
+    const game = todayDrawResult[gameIndex];
+    
+    // 确保playTime有值
+    let playTime = game.playTime;
+    if (!playTime || isNaN(playTime)) {
+        playTime = getRandomPlayTime();
+        console.log('生成随机游玩时间:', playTime);
+    }
+    
+    const totalSeconds = playTime * 60;
+    
+    // 清除计时器
+    if (gameTimers[gameIndex]) {
+        clearInterval(gameTimers[gameIndex]);
+        delete gameTimers[gameIndex];
+    }
+    
+    // 重置状态
+    gameTimerStates[gameIndex] = {
+        totalSeconds: totalSeconds,
+        remainingSeconds: totalSeconds,
+        isRunning: false,
+        lastUpdated: Date.now()
+    };
+    
+    console.log('游戏计时器已重置:', gameIndex, '时长', playTime, '分钟');
+
+    // 更新UI
+    updateTimerUI(gameIndex, totalSeconds, totalSeconds);
+    saveTimerState();
+}
+
+// 更新计时器UI
+function updateTimerUI(gameIndex, remainingSeconds, totalSeconds) {
+    console.log('=== 更新计时器UI ===', gameIndex, '剩余:', remainingSeconds, '总:', totalSeconds);
+    
+    // 直接通过索引查找元素
+    const popupGameItems = document.querySelectorAll('.popup-game-item');
+    if (popupGameItems.length > gameIndex) {
+        const gameItem = popupGameItems[gameIndex];
+        console.log('找到游戏项:', gameItem);
+        
+        // 查找计时器元素
+        const timerEl = gameItem.querySelector('.countdown-timer');
+        if (timerEl) {
+            timerEl.textContent = formatTime(remainingSeconds);
+            console.log('更新计时器显示:', formatTime(remainingSeconds));
+        } else {
+            console.error('未找到计时器元素');
+        }
+        
+        // 查找进度条元素
+        const progressEl = gameItem.querySelector('.countdown-progress');
+        if (progressEl) {
+            const percentage = (remainingSeconds / totalSeconds) * 100;
+            progressEl.style.width = `${percentage}%`;
+            console.log('更新进度条:', percentage);
+        } else {
+            console.error('未找到进度条元素');
+        }
+    } else {
+        console.error('未找到游戏项，索引:', gameIndex, '总数:', popupGameItems.length);
+    }
+}
+
+// 页面加载时加载计时器状态
+window.addEventListener('load', function() {
+    loadTimerState();
+    console.log('页面加载，已加载计时器状态');
+});
 
 // ==================== 资产管理页面 ====================
 
@@ -9460,29 +9611,64 @@ function startGameTimer(gameId, durationMinutes) {
     // 清除之前的计时器
     stopGameTimerInternal();
 
+    console.log('=== 开始游戏计时器 ===');
+    console.log('gameId:', gameId);
+    console.log('durationMinutes:', durationMinutes);
+    console.log('todayDrawResult:', todayDrawResult);
+    
+    // 获取游戏对象
+    let playTime = durationMinutes;
+    console.log('初始playTime:', playTime);
+    
+    // 确保playTime是有效的数字
+    if (!playTime || isNaN(playTime)) {
+        console.log('需要获取playTime');
+        // 尝试从todayDrawResult获取
+        if (todayDrawResult && Array.isArray(todayDrawResult) && todayDrawResult[gameId]) {
+            console.log('找到游戏对象:', todayDrawResult[gameId]);
+            playTime = todayDrawResult[gameId].playTime;
+            console.log('从游戏对象获取的playTime:', playTime);
+        }
+        
+        // 如果还是无效，生成随机时间
+        if (!playTime || isNaN(playTime)) {
+            playTime = getRandomPlayTime();
+            console.log('生成随机游玩时间:', playTime);
+            // 如果有游戏对象，保存生成的时间
+            if (todayDrawResult && Array.isArray(todayDrawResult) && todayDrawResult[gameId]) {
+                todayDrawResult[gameId].playTime = playTime;
+            }
+        }
+    }
+    
+    console.log('最终playTime:', playTime);
+
+    // 再次确保playTime是有效的数字
+    if (!playTime || isNaN(playTime)) {
+        playTime = 30; // 默认30分钟
+        console.log('使用默认游玩时间:', playTime);
+    }
+
     const timerData = DataManager.getGameTimer(gameId);
     let startTime;
     let pausedDuration = 0;
     let isPaused = false;
     let pausedTime = null;
 
-    if (timerData && !timerData.isCompleted) {
-        // 恢复已有计时器
-        startTime = new Date(timerData.startTime);
-        pausedDuration = timerData.pausedDuration || 0;
-        isPaused = timerData.isPaused || false;
-        pausedTime = timerData.pausedTime ? new Date(timerData.pausedTime) : null;
-    } else {
-        // 新建计时器
-        startTime = new Date();
-    }
+    // 每次点击开始按钮都创建一个新的计时器
+    // 这样可以确保计时器从完整的时长开始倒计时
+    let finalDuration = playTime;
+    startTime = new Date();
+    pausedDuration = 0;
+    isPaused = false;
+    pausedTime = null;
 
     // 保存计时器状态到 localStorage（用于后台计时）
     const newTimerData = {
         gameId: gameId,
         startTime: startTime.toISOString(),
-        duration: durationMinutes,
-        originalDuration: durationMinutes,
+        duration: finalDuration,
+        originalDuration: finalDuration,
         isPaused: isPaused,
         isCompleted: false,
         pausedDuration: pausedDuration,
@@ -9493,7 +9679,7 @@ function startGameTimer(gameId, durationMinutes) {
 
     // 更新全局状态
     gameTimerState.gameId = gameId;
-    gameTimerState.originalDuration = durationMinutes;
+    gameTimerState.originalDuration = finalDuration;
     gameTimerState.isPaused = isPaused;
     gameTimerState.pausedTime = pausedTime;
 
@@ -9513,7 +9699,37 @@ function startGameTimer(gameId, durationMinutes) {
         }
     }, 1000);
 
-    console.log(`游戏计时器已启动: ${gameId}, 时长 ${durationMinutes} 分钟`);
+    console.log(`游戏计时器已启动: ${gameId}, 时长 ${playTime} 分钟`);
+}
+
+// 启动游戏计时器（兼容旧接口，使用游戏索引）
+function startGameTimerByIndex(gameIndex) {
+    console.log('=== 开始游戏计时器（按索引）===', gameIndex);
+    
+    // 检查游戏结果是否存在
+    if (!todayDrawResult || !todayDrawResult[gameIndex]) {
+        console.error('错误: 没有找到游戏结果或游戏索引无效');
+        return;
+    }
+    
+    const game = todayDrawResult[gameIndex];
+    console.log('完整游戏对象:', game);
+    
+    // 确保playTime有值
+    let playTime = game.playTime;
+    console.log('原始playTime:', playTime);
+    
+    if (!playTime || isNaN(playTime)) {
+        playTime = getRandomPlayTime();
+        console.log('生成随机游玩时间:', playTime);
+        // 同时更新游戏对象的playTime
+        game.playTime = playTime;
+    }
+    
+    console.log('游戏信息:', { gameIndex, gameName: game.name, playTime });
+    
+    // 调用新的计时器函数
+    startGameTimer(gameIndex, playTime);
 }
 
 // 从存储中计算并更新计时器显示（支持后台运行）
@@ -9698,15 +9914,8 @@ function onTimerComplete(gameId) {
         DataManager.saveGameTimer(gameId, timerData);
     }
 
-    // 更新 todayDrawResult 的天数
-    if (todayDrawResult) {
-        todayDrawResult.daysPlayed = (todayDrawResult.daysPlayed || 0) + 1;
-        todayDrawResult.remainingDays = Math.max(0, (todayDrawResult._remainingDays || todayDrawResult.remainingDays || 7) - todayDrawResult.daysPlayed);
-
-        // 保存到抽签历史
-        const today = getCurrentDate();
-        DataManager.updateDrawHistoryDays(todayDrawResult._phoneId || currentGamePhoneId, today, todayDrawResult.daysPlayed);
-    }
+    // 自动标记今日完成
+    completeTodayGame();
 
     // 更新显示
     const displayEl = document.getElementById('game-timer-display');
@@ -9724,12 +9933,32 @@ function onTimerComplete(gameId) {
 
 // 更新计时器显示
 function updateTimerDisplay(remainingSeconds) {
+    // 更新主计时器显示
     const displayEl = document.getElementById('game-timer-display');
-    if (!displayEl) return;
+    if (displayEl) {
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        displayEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
     
-    const minutes = Math.floor(remainingSeconds / 60);
-    const seconds = remainingSeconds % 60;
-    displayEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    // 更新弹窗中的计时器显示
+    const gameId = gameTimerState.gameId;
+    if (gameId !== null) {
+        const countdownTimer = document.querySelector(`.countdown-timer[data-game-index="${gameId}"]`);
+        if (countdownTimer) {
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            countdownTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+        
+        // 更新进度条
+        const progressBar = document.querySelector(`.countdown-progress[data-game-index="${gameId}"]`);
+        if (progressBar && gameTimerState.originalDuration) {
+            const totalSeconds = gameTimerState.originalDuration * 60;
+            const progress = (remainingSeconds / totalSeconds) * 100;
+            progressBar.style.width = `${Math.max(0, progress)}%`;
+        }
+    }
 }
 
 // 格式化已用时间
