@@ -1778,6 +1778,73 @@ class DataManager {
         };
     }
 
+    // 计算全年目标预测完成日期
+    static calculatePredictedCompletionDate() {
+        const goal = this.getYearlyGoal();
+        if (goal.amount <= 0) {
+            return null;
+        }
+        
+        // 计算已赚取金额
+        const data = this.loadData();
+        let totalEarned = 0;
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                totalEarned += (app.withdrawn || 0) + (app.historicalWithdrawn || 0) + (app.balance || 0);
+            });
+        });
+        
+        // 如果已经完成目标
+        if (totalEarned >= goal.amount) {
+            return new Date();
+        }
+        
+        // 计算剩余金额
+        const remainingAmount = goal.amount - totalEarned;
+        
+        // 计算最近7天的平均每日收益
+        let recentEarnings = [];
+        const now = new Date();
+        
+        for (let i = 1; i <= 7; i++) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            
+            let dayEarnings = 0;
+            data.phones.forEach(phone => {
+                phone.apps.forEach(app => {
+                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
+                        dayEarnings += parseFloat(app.dailyEarnings[dateStr]) || 0;
+                    }
+                });
+            });
+            
+            if (dayEarnings > 0) {
+                recentEarnings.push(dayEarnings);
+            }
+        }
+        
+        // 计算平均每日收益
+        let avgDailyEarnings = 0;
+        if (recentEarnings.length > 0) {
+            avgDailyEarnings = recentEarnings.reduce((sum, earnings) => sum + earnings, 0) / recentEarnings.length;
+        } else {
+            // 如果没有近期数据，使用每日目标作为估计
+            const dailyTarget = this.calculateYearlyDailyTarget();
+            avgDailyEarnings = dailyTarget.dailyTarget || 10; // 默认每天10元
+        }
+        
+        // 计算还需要多少天
+        const daysNeeded = Math.ceil(remainingAmount / avgDailyEarnings);
+        
+        // 计算预测完成日期
+        const predictedDate = new Date(now);
+        predictedDate.setDate(predictedDate.getDate() + daysNeeded);
+        
+        return predictedDate;
+    }
+
     // 检查并记录今日缺口（应在每天结束时调用）
     static checkAndRecordTodayGap() {
         const dailyTarget = this.calculateYearlyDailyTarget();
@@ -10202,6 +10269,15 @@ function renderYearlyGoal() {
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
                         <span style="color: rgba(255,255,255,0.9);">剩余: <strong style="color: #ffffff;">¥${distribution.remaining.toFixed(2)}</strong></span>
                         ${goalProgress.estimatedDaysNeeded > 0 ? `<br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预计还需 ${goalProgress.estimatedDaysNeeded} 天完成</span>` : ''}
+                        <!-- 预测完成日期 -->
+                        ${(() => {
+                            const predictedDate = DataManager.calculatePredictedCompletionDate();
+                            if (predictedDate) {
+                                const formattedDate = `${predictedDate.getFullYear()}-${String(predictedDate.getMonth() + 1).padStart(2, '0')}-${String(predictedDate.getDate()).padStart(2, '0')}`;
+                                return `<br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预测完成日期: ${formattedDate}</span>`;
+                            }
+                            return '';
+                        })()}
                     </div>
                     `}
                 </div>
