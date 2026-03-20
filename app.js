@@ -1796,7 +1796,10 @@ class DataManager {
         
         // 如果已经完成目标
         if (totalEarned >= goal.amount) {
-            return new Date();
+            return {
+                date: new Date(),
+                daysNeeded: 0
+            };
         }
         
         // 计算剩余金额
@@ -1873,7 +1876,10 @@ class DataManager {
         const predictedDate = new Date();
         predictedDate.setDate(predictedDate.getDate() + daysNeeded);
         
-        return predictedDate;
+        return {
+            date: predictedDate,
+            daysNeeded: daysNeeded
+        };
     }
 
     // 获取收益趋势数据（用于可视化）
@@ -10331,13 +10337,15 @@ function renderYearlyGoal() {
                     ` : `
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
                         <span style="color: rgba(255,255,255,0.9);">剩余: <strong style="color: #ffffff;">¥${distribution.remaining.toFixed(2)}</strong></span>
-                        ${goalProgress.estimatedDaysNeeded > 0 ? `<br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预计还需 ${goalProgress.estimatedDaysNeeded} 天完成</span>` : ''}
-                        <!-- 预测完成日期 -->
+                        <!-- 预测完成日期和预计还需天数 -->
                         ${(() => {
-                            const predictedDate = DataManager.calculatePredictedCompletionDate();
-                            if (predictedDate) {
-                                const formattedDate = `${predictedDate.getFullYear()}-${String(predictedDate.getMonth() + 1).padStart(2, '0')}-${String(predictedDate.getDate()).padStart(2, '0')}`;
-                                return `<br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预测完成日期: ${formattedDate}</span>`;
+                            const prediction = DataManager.calculatePredictedCompletionDate();
+                            if (prediction) {
+                                const formattedDate = `${prediction.date.getFullYear()}-${String(prediction.date.getMonth() + 1).padStart(2, '0')}-${String(prediction.date.getDate()).padStart(2, '0')}`;
+                                return `
+                                <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预计还需 ${prediction.daysNeeded} 天完成</span>
+                                <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预测完成日期: ${formattedDate}</span>
+                                `;
                             }
                             return '';
                         })()}
