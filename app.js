@@ -1778,7 +1778,7 @@ class DataManager {
         };
     }
 
-    // 计算全年目标预测完成日期
+    // 计算全年目标预测完成日期（动态加权趋势预测）
     static calculatePredictedCompletionDate() {
         const goal = this.getYearlyGoal();
         if (goal.amount <= 0) {
@@ -1802,47 +1802,103 @@ class DataManager {
         // 计算剩余金额
         const remainingAmount = goal.amount - totalEarned;
         
-        // 计算最近7天的平均每日收益
-        let recentEarnings = [];
-        const now = new Date();
+        // 获取最近30天的每日收益数据
+        const allDailyEarnings = this.getAllDailyEarnings();
+        const recentEarnings = allDailyEarnings.slice(-30); // 最近30天
         
-        for (let i = 1; i <= 7; i++) {
-            const date = new Date(now);
-            date.setDate(date.getDate() - i);
-            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        // 计算加权平均每日收益
+        let weightedSum = 0;
+        let weightSum = 0;
+        
+        recentEarnings.forEach((day, index) => {
+            const daysAgo = recentEarnings.length - index - 1;
+            let weight = 1;
             
-            let dayEarnings = 0;
-            data.phones.forEach(phone => {
-                phone.apps.forEach(app => {
-                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
-                        dayEarnings += parseFloat(app.dailyEarnings[dateStr]) || 0;
-                    }
-                });
-            });
+            // 加权规则：最近7天权重3，8-14天权重2，15-30天权重1
+            if (daysAgo <= 6) {
+                weight = 3;
+            } else if (daysAgo <= 13) {
+                weight = 2;
+            } else {
+                weight = 1;
+            }
             
-            if (dayEarnings > 0) {
-                recentEarnings.push(dayEarnings);
+            weightedSum += day.amount * weight;
+            weightSum += weight;
+        });
+        
+        // 计算加权平均
+        let predictedDailyEarnings = 0;
+        if (weightSum > 0) {
+            predictedDailyEarnings = weightedSum / weightSum;
+        }
+        
+        // 趋势分析：使用线性回归计算趋势
+        if (recentEarnings.length >= 7) {
+            // 准备数据
+            const xValues = recentEarnings.map((_, index) => index);
+            const yValues = recentEarnings.map(day => day.amount);
+            
+            // 计算线性回归
+            const n = xValues.length;
+            const sumX = xValues.reduce((a, b) => a + b, 0);
+            const sumY = yValues.reduce((a, b) => a + b, 0);
+            const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+            const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
+            
+            // 计算斜率
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            
+            // 基于趋势调整预测
+            if (!isNaN(slope)) {
+                // 趋势调整因子：斜率的10%，但不超过50%
+                const trendFactor = Math.max(-0.5, Math.min(0.5, slope * 0.1));
+                predictedDailyEarnings *= (1 + trendFactor);
             }
         }
         
-        // 计算平均每日收益
-        let avgDailyEarnings = 0;
-        if (recentEarnings.length > 0) {
-            avgDailyEarnings = recentEarnings.reduce((sum, earnings) => sum + earnings, 0) / recentEarnings.length;
-        } else {
-            // 如果没有近期数据，使用每日目标作为估计
+        // 如果没有数据，使用每日目标作为估计
+        if (predictedDailyEarnings <= 0) {
             const dailyTarget = this.calculateYearlyDailyTarget();
-            avgDailyEarnings = dailyTarget.dailyTarget || 10; // 默认每天10元
+            predictedDailyEarnings = dailyTarget.dailyTarget || 10; // 默认每天10元
         }
         
+        // 确保预测收益为正数
+        predictedDailyEarnings = Math.max(0.1, predictedDailyEarnings);
+        
         // 计算还需要多少天
-        const daysNeeded = Math.ceil(remainingAmount / avgDailyEarnings);
+        const daysNeeded = Math.ceil(remainingAmount / predictedDailyEarnings);
         
         // 计算预测完成日期
-        const predictedDate = new Date(now);
+        const predictedDate = new Date();
         predictedDate.setDate(predictedDate.getDate() + daysNeeded);
         
         return predictedDate;
+    }
+
+    // 获取收益趋势数据（用于可视化）
+    static getEarningsTrendData() {
+        const allDailyEarnings = this.getAllDailyEarnings();
+        const recentEarnings = allDailyEarnings.slice(-30); // 最近30天
+        
+        // 转换为图表需要的数据格式
+        const labels = recentEarnings.map(day => day.date.slice(5)); // 只显示月-日
+        const data = recentEarnings.map(day => day.amount);
+        
+        // 计算移动平均线（7天）
+        const movingAverage = [];
+        for (let i = 0; i < data.length; i++) {
+            const start = Math.max(0, i - 6);
+            const slice = data.slice(start, i + 1);
+            const avg = slice.reduce((sum, val) => sum + val, 0) / slice.length;
+            movingAverage.push(avg);
+        }
+        
+        return {
+            labels,
+            data,
+            movingAverage
+        };
     }
 
     // 检查并记录今日缺口（应在每天结束时调用）
@@ -10283,6 +10339,18 @@ function renderYearlyGoal() {
                 </div>
             </div>
 
+            <!-- 收益趋势图表 -->
+            ${allDailyEarnings.length >= 7 ? `
+            <div style="margin-bottom: 20px;">
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
+                    📊 收益趋势 (最近30天)
+                </div>
+                <div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color);">
+                    <canvas id="earnings-trend-chart" width="400" height="200"></canvas>
+                </div>
+            </div>
+            ` : ''}
+
             <!-- 每日赚取记录 -->
             ${allDailyEarnings.length > 0 ? `
             <div style="margin-bottom: 20px;">
@@ -10312,6 +10380,137 @@ function renderYearlyGoal() {
                 </script>
             </div>
             ` : ''}
+
+            <!-- 绘制收益趋势图表 -->
+            <script>
+                function drawEarningsTrendChart() {
+                    const canvas = document.getElementById('earnings-trend-chart');
+                    if (!canvas) return;
+                    
+                    const ctx = canvas.getContext('2d');
+                    const trendData = DataManager.getEarningsTrendData();
+                    
+                    if (!trendData || trendData.data.length === 0) return;
+                    
+                    // 清除画布
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // 计算数据范围
+                    const maxValue = Math.max(...trendData.data, ...trendData.movingAverage) * 1.1;
+                    const minValue = 0;
+                    const valueRange = maxValue - minValue;
+                    
+                    // 计算坐标
+                    const padding = 40;
+                    const chartWidth = canvas.width - padding * 2;
+                    const chartHeight = canvas.height - padding * 2;
+                    
+                    // 绘制网格线
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                    ctx.lineWidth = 1;
+                    
+                    // 水平网格线
+                    for (let i = 0; i <= 5; i++) {
+                        const y = padding + (chartHeight / 5) * i;
+                        ctx.beginPath();
+                        ctx.moveTo(padding, y);
+                        ctx.lineTo(canvas.width - padding, y);
+                        ctx.stroke();
+                        
+                        // 绘制数值
+                        ctx.fillStyle = 'var(--text-secondary)';
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'right';
+                        ctx.fillText((maxValue - (valueRange / 5) * i).toFixed(1), padding - 5, y + 4);
+                    }
+                    
+                    // 垂直网格线
+                    const step = Math.max(1, Math.floor(trendData.labels.length / 6));
+                    for (let i = 0; i < trendData.labels.length; i += step) {
+                        const x = padding + (chartWidth / (trendData.labels.length - 1)) * i;
+                        ctx.beginPath();
+                        ctx.moveTo(x, padding);
+                        ctx.lineTo(x, canvas.height - padding);
+                        ctx.stroke();
+                        
+                        // 绘制日期
+                        ctx.fillStyle = 'var(--text-secondary)';
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(trendData.labels[i], x, canvas.height - padding + 15);
+                    }
+                    
+                    // 绘制收益数据折线
+                    ctx.strokeStyle = 'var(--primary-color)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    trendData.data.forEach((value, index) => {
+                        const x = padding + (chartWidth / (trendData.data.length - 1)) * index;
+                        const y = padding + chartHeight - ((value - minValue) / valueRange) * chartHeight;
+                        
+                        if (index === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+                    ctx.stroke();
+                    
+                    // 绘制移动平均线
+                    ctx.strokeStyle = 'var(--success-color)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    trendData.movingAverage.forEach((value, index) => {
+                        const x = padding + (chartWidth / (trendData.movingAverage.length - 1)) * index;
+                        const y = padding + chartHeight - ((value - minValue) / valueRange) * chartHeight;
+                        
+                        if (index === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // 绘制数据点
+                    trendData.data.forEach((value, index) => {
+                        const x = padding + (chartWidth / (trendData.data.length - 1)) * index;
+                        const y = padding + chartHeight - ((value - minValue) / valueRange) * chartHeight;
+                        
+                        ctx.fillStyle = 'var(--primary-color)';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                    
+                    // 绘制图例
+                    ctx.fillStyle = 'var(--text-primary)';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'left';
+                    
+                    // 收益数据图例
+                    ctx.fillStyle = 'var(--primary-color)';
+                    ctx.fillRect(padding, 10, 10, 2);
+                    ctx.fillStyle = 'var(--text-primary)';
+                    ctx.fillText('每日收益', padding + 15, 18);
+                    
+                    // 移动平均线图例
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeStyle = 'var(--success-color)';
+                    ctx.beginPath();
+                    ctx.moveTo(padding + 100, 10);
+                    ctx.lineTo(padding + 110, 10);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = 'var(--text-primary)';
+                    ctx.fillText('7天平均', padding + 115, 18);
+                }
+                
+                // 页面加载后绘制图表
+                setTimeout(drawEarningsTrendChart, 100);
+            </script>
 
             <!-- 软件目标分配 -->
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
