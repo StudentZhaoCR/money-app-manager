@@ -1878,12 +1878,18 @@ class DataManager {
 
     // 获取收益趋势数据（用于可视化）
     static getEarningsTrendData() {
+        console.log('获取收益趋势数据');
         const allDailyEarnings = this.getAllDailyEarnings();
+        console.log('所有每日收益:', allDailyEarnings);
+        
         const recentEarnings = allDailyEarnings.slice(-30); // 最近30天
+        console.log('最近30天收益:', recentEarnings);
         
         // 转换为图表需要的数据格式
         const labels = recentEarnings.map(day => day.date.slice(5)); // 只显示月-日
         const data = recentEarnings.map(day => day.amount);
+        console.log('labels:', labels);
+        console.log('data:', data);
         
         // 计算移动平均线（7天）
         const movingAverage = [];
@@ -1893,6 +1899,7 @@ class DataManager {
             const avg = slice.reduce((sum, val) => sum + val, 0) / slice.length;
             movingAverage.push(avg);
         }
+        console.log('movingAverage:', movingAverage);
         
         return {
             labels,
@@ -10339,22 +10346,7 @@ function renderYearlyGoal() {
                 </div>
             </div>
 
-            <!-- 收益趋势图表 -->
-            <div style="margin-bottom: 20px;">
-                <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
-                    📊 收益趋势 (最近30天)
-                </div>
-                <div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color);">
-                    ${allDailyEarnings.length >= 2 ? `
-                    <canvas id="earnings-trend-chart" width="400" height="200"></canvas>
-                    ` : `
-                    <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary); font-size: 14px;">
-                        📈 暂无足够数据显示趋势图表
-                        <div style="font-size: 12px; margin-top: 8px;">需要至少2天的收益数据</div>
-                    </div>
-                    `}
-                </div>
-            </div>
+
 
             <!-- 每日赚取记录 -->
             ${allDailyEarnings.length > 0 ? `
@@ -10386,136 +10378,7 @@ function renderYearlyGoal() {
             </div>
             ` : ''}
 
-            <!-- 绘制收益趋势图表 -->
-            <script>
-                function drawEarningsTrendChart() {
-                    const canvas = document.getElementById('earnings-trend-chart');
-                    if (!canvas) return;
-                    
-                    const ctx = canvas.getContext('2d');
-                    const trendData = DataManager.getEarningsTrendData();
-                    
-                    if (!trendData || trendData.data.length === 0) return;
-                    
-                    // 清除画布
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    
-                    // 计算数据范围
-                    const maxValue = Math.max(...trendData.data, ...trendData.movingAverage) * 1.1;
-                    const minValue = 0;
-                    const valueRange = maxValue - minValue;
-                    
-                    // 计算坐标
-                    const padding = 40;
-                    const chartWidth = canvas.width - padding * 2;
-                    const chartHeight = canvas.height - padding * 2;
-                    
-                    // 绘制网格线
-                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-                    ctx.lineWidth = 1;
-                    
-                    // 水平网格线
-                    for (let i = 0; i <= 5; i++) {
-                        const y = padding + (chartHeight / 5) * i;
-                        ctx.beginPath();
-                        ctx.moveTo(padding, y);
-                        ctx.lineTo(canvas.width - padding, y);
-                        ctx.stroke();
-                        
-                        // 绘制数值
-                        ctx.fillStyle = 'var(--text-secondary)';
-                        ctx.font = '10px Arial';
-                        ctx.textAlign = 'right';
-                        ctx.fillText((maxValue - (valueRange / 5) * i).toFixed(1), padding - 5, y + 4);
-                    }
-                    
-                    // 垂直网格线
-                    const step = Math.max(1, Math.floor(trendData.labels.length / 6));
-                    for (let i = 0; i < trendData.labels.length; i += step) {
-                        const x = padding + (chartWidth / (trendData.labels.length - 1)) * i;
-                        ctx.beginPath();
-                        ctx.moveTo(x, padding);
-                        ctx.lineTo(x, canvas.height - padding);
-                        ctx.stroke();
-                        
-                        // 绘制日期
-                        ctx.fillStyle = 'var(--text-secondary)';
-                        ctx.font = '10px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(trendData.labels[i], x, canvas.height - padding + 15);
-                    }
-                    
-                    // 绘制收益数据折线
-                    ctx.strokeStyle = 'var(--primary-color)';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    trendData.data.forEach((value, index) => {
-                        const x = padding + (chartWidth / (trendData.data.length - 1)) * index;
-                        const y = padding + chartHeight - ((value - minValue) / valueRange) * chartHeight;
-                        
-                        if (index === 0) {
-                            ctx.moveTo(x, y);
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
-                    });
-                    ctx.stroke();
-                    
-                    // 绘制移动平均线
-                    ctx.strokeStyle = 'var(--success-color)';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([5, 5]);
-                    ctx.beginPath();
-                    trendData.movingAverage.forEach((value, index) => {
-                        const x = padding + (chartWidth / (trendData.movingAverage.length - 1)) * index;
-                        const y = padding + chartHeight - ((value - minValue) / valueRange) * chartHeight;
-                        
-                        if (index === 0) {
-                            ctx.moveTo(x, y);
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
-                    });
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    
-                    // 绘制数据点
-                    trendData.data.forEach((value, index) => {
-                        const x = padding + (chartWidth / (trendData.data.length - 1)) * index;
-                        const y = padding + chartHeight - ((value - minValue) / valueRange) * chartHeight;
-                        
-                        ctx.fillStyle = 'var(--primary-color)';
-                        ctx.beginPath();
-                        ctx.arc(x, y, 3, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-                    
-                    // 绘制图例
-                    ctx.fillStyle = 'var(--text-primary)';
-                    ctx.font = '12px Arial';
-                    ctx.textAlign = 'left';
-                    
-                    // 收益数据图例
-                    ctx.fillStyle = 'var(--primary-color)';
-                    ctx.fillRect(padding, 10, 10, 2);
-                    ctx.fillStyle = 'var(--text-primary)';
-                    ctx.fillText('每日收益', padding + 15, 18);
-                    
-                    // 移动平均线图例
-                    ctx.setLineDash([5, 5]);
-                    ctx.strokeStyle = 'var(--success-color)';
-                    ctx.beginPath();
-                    ctx.moveTo(padding + 100, 10);
-                    ctx.lineTo(padding + 110, 10);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    ctx.fillStyle = 'var(--text-primary)';
-                    ctx.fillText('7天平均', padding + 115, 18);
-                }
-                
-                // 页面加载后绘制图表
-                setTimeout(drawEarningsTrendChart, 100);
-            </script>
+
 
             <!-- 软件目标分配 -->
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
