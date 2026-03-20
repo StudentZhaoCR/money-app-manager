@@ -10340,16 +10340,21 @@ function renderYearlyGoal() {
             </div>
 
             <!-- 收益趋势图表 -->
-            ${allDailyEarnings.length >= 7 ? `
             <div style="margin-bottom: 20px;">
                 <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
                     📊 收益趋势 (最近30天)
                 </div>
                 <div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color);">
+                    ${allDailyEarnings.length >= 2 ? `
                     <canvas id="earnings-trend-chart" width="400" height="200"></canvas>
+                    ` : `
+                    <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary); font-size: 14px;">
+                        📈 暂无足够数据显示趋势图表
+                        <div style="font-size: 12px; margin-top: 8px;">需要至少2天的收益数据</div>
+                    </div>
+                    `}
                 </div>
             </div>
-            ` : ''}
 
             <!-- 每日赚取记录 -->
             ${allDailyEarnings.length > 0 ? `
