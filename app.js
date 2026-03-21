@@ -817,6 +817,35 @@ class DataManager {
         parsed.yearlyGoalAutoDistribute = autoDistribute;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
     }
+    
+    // 基于软件最小提现金额计算年度目标
+    static calculateYearlyGoalFromMinWithdraw() {
+        const data = this.loadData();
+        const allApps = data.phones.flatMap(phone => phone.apps);
+        
+        // 计算每个软件的年度目标（最小提现金额 * 365天）
+        const appYearlyGoals = allApps.map(app => {
+            const minWithdraw = app.minWithdraw || 0.3; // 默认最小提现0.3元
+            const yearlyGoal = minWithdraw * 365;
+            return {
+                appId: app.id,
+                appName: app.name,
+                minWithdraw: minWithdraw,
+                yearlyGoal: yearlyGoal
+            };
+        });
+        
+        // 计算总年度目标
+        const totalYearlyGoal = appYearlyGoals.reduce((sum, app) => sum + app.yearlyGoal, 0);
+        
+        // 保存总年度目标
+        this.saveYearlyGoal(totalYearlyGoal, new Date().getFullYear());
+        
+        return {
+            totalYearlyGoal: totalYearlyGoal,
+            appYearlyGoals: appYearlyGoals
+        };
+    }
 
     // 获取所有软件的年度收益统计
     static getAppsYearlyStats(targetYear = null) {
@@ -873,6 +902,7 @@ class DataManager {
     static calculateYearlyGoalDistribution() {
         const goal = this.getYearlyGoal();
         const stats = this.getAppsYearlyStats(goal.year);
+        const data = this.loadData();
 
         if (goal.amount <= 0 || stats.length === 0) {
             return { goal: goal, apps: [], totalEarned: 0, remaining: 0, progress: 0 };
@@ -883,19 +913,20 @@ class DataManager {
         const remaining = Math.max(0, goal.amount - totalEarned);
         const progress = Math.min(100, (totalEarned / goal.amount * 100)).toFixed(1);
 
-        // 每个软件的年目标 = 总目标 / 软件数量
-        const yearlyTargetPerApp = goal.amount / stats.length;
-        
-        // 每个软件的日目标 = 年目标 / 365天
-        const dailyTargetPerApp = yearlyTargetPerApp / 365;
-
-        // 计算每个软件的目标分配
+        // 计算每个软件的年目标（基于最小提现金额）
         const apps = stats.map((stat, index) => {
+            // 找到对应的app对象以获取最小提现金额
+            const app = data.phones.flatMap(phone => phone.apps).find(a => a.id === stat.appId);
+            const minWithdraw = app ? app.minWithdraw || 0.3 : 0.3;
+            const yearlyTargetPerApp = minWithdraw * 365;
+            const dailyTargetPerApp = yearlyTargetPerApp / 365;
+            
             // 计算差额
             const diff = stat.totalEarned - yearlyTargetPerApp;
 
             return {
                 ...stat,
+                minWithdraw: minWithdraw,
                 baseTarget: yearlyTargetPerApp,
                 adjustedTarget: yearlyTargetPerApp,
                 performanceFactor: 1.0,
@@ -904,16 +935,24 @@ class DataManager {
                 status: diff >= 0 ? '超额' : '缺口',
                 progress: stat.totalEarned / yearlyTargetPerApp * 100,
                 // 日目标 = 年目标 / 365
-                dailyTarget: dailyTargetPerApp
+                dailyTarget: dailyTargetPerApp,
+                // 预测完成时间
+                predictedCompletion: this.calculateAppPredictedCompletion(app)
             };
         });
 
+        // 计算总目标（基于所有软件的最小提现金额）
+        const totalYearlyGoal = apps.reduce((sum, app) => sum + app.baseTarget, 0);
+
         return {
-            goal: goal,
+            goal: {
+                ...goal,
+                amount: totalYearlyGoal // 更新为基于最小提现金额的总目标
+            },
             apps: apps,
             totalEarned: totalEarned,
-            remaining: remaining,
-            progress: progress,
+            remaining: Math.max(0, totalYearlyGoal - totalEarned),
+            progress: Math.min(100, (totalEarned / totalYearlyGoal * 100)).toFixed(1),
             estimatedDays: 365,
             avgDailyEarnings: totalEarned / 365
         };
@@ -1881,6 +1920,113 @@ class DataManager {
             daysNeeded: daysNeeded
         };
     }
+    
+    // 计算单个软件的预测完成时间
+    static calculateAppPredictedCompletion(app) {
+        if (!app) return null;
+        
+        // 计算软件的年度目标（基于最小提现金额）
+        const minWithdraw = app.minWithdraw || 0.3;
+        const yearlyTarget = minWithdraw * 365;
+        
+        // 计算已赚取金额
+        const totalEarned = (app.withdrawn || 0) + (app.historicalWithdrawn || 0) + (app.balance || 0);
+        
+        // 如果已经完成目标
+        if (totalEarned >= yearlyTarget) {
+            return {
+                date: new Date(),
+                daysNeeded: 0,
+                progress: 100
+            };
+        }
+        
+        // 计算剩余金额
+        const remainingAmount = yearlyTarget - totalEarned;
+        
+        // 获取该软件最近30天的每日收益数据
+        const appDailyEarnings = app.dailyEarnings || {};
+        const allDailyEarnings = Object.entries(appDailyEarnings)
+            .map(([date, amount]) => ({ date, amount: parseFloat(amount) || 0 }))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        const recentEarnings = allDailyEarnings.slice(-30); // 最近30天
+        
+        // 计算加权平均每日收益
+        let weightedSum = 0;
+        let weightSum = 0;
+        
+        recentEarnings.forEach((day, index) => {
+            const daysAgo = recentEarnings.length - index - 1;
+            let weight = 1;
+            
+            // 加权规则：最近7天权重3，8-14天权重2，15-30天权重1
+            if (daysAgo <= 6) {
+                weight = 3;
+            } else if (daysAgo <= 13) {
+                weight = 2;
+            } else {
+                weight = 1;
+            }
+            
+            weightedSum += day.amount * weight;
+            weightSum += weight;
+        });
+        
+        // 计算加权平均
+        let predictedDailyEarnings = 0;
+        if (weightSum > 0) {
+            predictedDailyEarnings = weightedSum / weightSum;
+        }
+        
+        // 趋势分析：使用线性回归计算趋势
+        if (recentEarnings.length >= 7) {
+            // 准备数据
+            const xValues = recentEarnings.map((_, index) => index);
+            const yValues = recentEarnings.map(day => day.amount);
+            
+            // 计算线性回归
+            const n = xValues.length;
+            const sumX = xValues.reduce((a, b) => a + b, 0);
+            const sumY = yValues.reduce((a, b) => a + b, 0);
+            const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+            const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
+            
+            // 计算斜率
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            
+            // 基于趋势调整预测
+            if (!isNaN(slope)) {
+                // 趋势调整因子：斜率的10%，但不超过50%
+                const trendFactor = Math.max(-0.5, Math.min(0.5, slope * 0.1));
+                predictedDailyEarnings *= (1 + trendFactor);
+            }
+        }
+        
+        // 如果没有数据，使用最小提现金额作为每日目标
+        if (predictedDailyEarnings <= 0) {
+            predictedDailyEarnings = minWithdraw;
+        }
+        
+        // 确保预测收益为正数
+        predictedDailyEarnings = Math.max(0.1, predictedDailyEarnings);
+        
+        // 计算还需要多少天
+        const daysNeeded = Math.ceil(remainingAmount / predictedDailyEarnings);
+        
+        // 计算预测完成日期
+        const predictedDate = new Date();
+        predictedDate.setDate(predictedDate.getDate() + daysNeeded);
+        
+        // 计算进度
+        const progress = (totalEarned / yearlyTarget) * 100;
+        
+        return {
+            date: predictedDate,
+            daysNeeded: daysNeeded,
+            progress: progress
+        };
+    }
 
     // 获取收益趋势数据（用于可视化）
     static getEarningsTrendData() {
@@ -2464,13 +2610,18 @@ class DataManager {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
         if (phone) {
+            // 检查最小提现金额是否大于0
+            if (!appData.minWithdraw || parseFloat(appData.minWithdraw) <= 0) {
+                throw new Error('最小提现金额必须大于0');
+            }
+            
             // 生成唯一ID：时间戳 + 随机数 + 手机ID的一部分
             const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + phoneId.substr(-4);
             const app = {
                 id: uniqueId,
                 name: appData.name,
                 balance: appData.balance || 0,  // 当前余额
-                minWithdraw: appData.minWithdraw || 0,  // 最低提现门槛
+                minWithdraw: parseFloat(appData.minWithdraw),  // 最低提现门槛
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -2489,12 +2640,17 @@ class DataManager {
         if (phone) {
             const app = phone.apps.find(a => a.id === appId);
             if (app) {
+                // 检查最小提现金额是否大于0
+                if (!appData.minWithdraw || parseFloat(appData.minWithdraw) <= 0) {
+                    throw new Error('最小提现金额必须大于0');
+                }
+                
                 const oldBalance = app.balance || 0;
                 const newBalance = appData.balance || 0;
                 
                 app.name = appData.name;
                 app.balance = newBalance;  // 更新余额
-                app.minWithdraw = appData.minWithdraw || 0;  // 更新提现门槛
+                app.minWithdraw = parseFloat(appData.minWithdraw);  // 更新提现门槛
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
                 
@@ -6616,9 +6772,9 @@ function openAddAppModal(phoneId) {
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
         <div class="form-group">
-            <label class="form-label">提现门槛 (元)</label>
-            <input type="number" id="app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0">
-            <div class="form-hint">达到此金额才能提现（0表示无门槛）</div>
+            <label class="form-label">提现门槛 (元) <span style="color: #ef4444;">*</span></label>
+            <input type="number" id="app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
+            <div class="form-hint">达到此金额才能提现，必须大于0</div>
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -6628,19 +6784,31 @@ function openAddAppModal(phoneId) {
             action: () => {
                 const input = document.getElementById('app-names').value.trim();
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
-                const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value) || 0;
+                const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
 
-                if (input) {
-                    // 解析软件名称（支持换行或逗号分隔）
-                    const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
-                    let addedCount = 0;
-                    names.forEach(name => {
+                if (!input) {
+                    showToast('请输入软件名称');
+                    return;
+                }
+                
+                if (!minWithdraw || minWithdraw <= 0) {
+                    showToast('最小提现金额必须大于0');
+                    return;
+                }
+
+                // 解析软件名称（支持换行或逗号分隔）
+                const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
+                let addedCount = 0;
+                names.forEach(name => {
+                    try {
                         DataManager.addApp(phoneId, { name, balance, minWithdraw });
                         addedCount++;
-                    });
-                    renderPhones();
-                    showToast(`成功添加 ${addedCount} 个软件！`);
-                }
+                    } catch (error) {
+                        showToast(error.message);
+                    }
+                });
+                renderPhones();
+                showToast(`成功添加 ${addedCount} 个软件！`);
                 closeModal();
             }
         }
@@ -6843,9 +7011,9 @@ function openBatchAddAppsModal() {
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
         <div class="form-group">
-            <label class="form-label">提现门槛 (元)</label>
-            <input type="number" id="batch-app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0">
-            <div class="form-hint">批量添加时所有软件的默认提现门槛</div>
+            <label class="form-label">提现门槛 (元) <span style="color: #ef4444;">*</span></label>
+            <input type="number" id="batch-app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
+            <div class="form-hint">批量添加时所有软件的默认提现门槛，必须大于0</div>
         </div>
         <div class="form-group">
             <div class="form-hint" style="background: var(--bg-cream); padding: 12px; border-radius: 8px;">
@@ -6860,28 +7028,40 @@ function openBatchAddAppsModal() {
             action: () => {
                 const input = document.getElementById('batch-app-names').value.trim();
                 const balance = parseFloat(document.getElementById('batch-app-balance').value) || 0;
-                const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value) || 0;
+                const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value);
 
-                if (input) {
-                    // 重新获取最新数据
-                    const currentData = DataManager.loadData();
-                    const currentPhoneCount = currentData.phones.length;
-                    
-                    // 解析软件名称（支持换行或逗号分隔）
-                    const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
-                    let totalAddedCount = 0;
+                if (!input) {
+                    showToast('请输入软件名称');
+                    return;
+                }
+                
+                if (!minWithdraw || minWithdraw <= 0) {
+                    showToast('最小提现金额必须大于0');
+                    return;
+                }
 
-                    // 为每部手机添加软件
-                    currentData.phones.forEach(phone => {
-                        names.forEach(name => {
+                // 重新获取最新数据
+                const currentData = DataManager.loadData();
+                const currentPhoneCount = currentData.phones.length;
+                
+                // 解析软件名称（支持换行或逗号分隔）
+                const names = input.split(/[\n,]/).map(n => n.trim()).filter(n => n);
+                let totalAddedCount = 0;
+
+                // 为每部手机添加软件
+                currentData.phones.forEach(phone => {
+                    names.forEach(name => {
+                        try {
                             DataManager.addApp(phone.id, { name, balance, minWithdraw });
                             totalAddedCount++;
-                        });
+                        } catch (error) {
+                            showToast(error.message);
+                        }
                     });
+                });
 
-                    renderPhones();
-                    showToast(`成功为 ${currentPhoneCount} 部手机各添加 ${names.length} 个软件，共 ${totalAddedCount} 个！`);
-                }
+                renderPhones();
+                showToast(`成功为 ${currentPhoneCount} 部手机各添加 ${names.length} 个软件，共 ${totalAddedCount} 个！`);
                 closeModal();
             }
         }
@@ -6895,6 +7075,58 @@ function deleteApp(phoneId, appId) {
         renderPhones();
         showToast('软件已删除！');
     }
+}
+
+// 检查没有输入最小提现金额的软件
+function checkAppsWithoutMinWithdraw() {
+    const data = DataManager.loadData();
+    const appsWithoutMinWithdraw = [];
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (!app.minWithdraw || app.minWithdraw <= 0) {
+                appsWithoutMinWithdraw.push({
+                    phoneName: phone.name,
+                    appName: app.name,
+                    appId: app.id,
+                    phoneId: phone.id
+                });
+            }
+        });
+    });
+    
+    if (appsWithoutMinWithdraw.length === 0) {
+        showToast('所有软件都已设置了最小提现金额');
+        return;
+    }
+    
+    // 生成HTML列表
+    let html = `
+        <div style="max-height: 400px; overflow-y: auto;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
+                📋 未设置最小提现金额的软件 (${appsWithoutMinWithdraw.length}个)
+            </div>
+            <div style="space-y: 8px;">
+                ${appsWithoutMinWithdraw.map((item, index) => `
+                    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600; color: var(--text-primary);">${item.appName}</div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">所属手机: ${item.phoneName}</div>
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="openEditAppModal('${item.phoneId}', '${item.appId}')">
+                                编辑
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    showModal('检查最小提现金额', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
 }
 
 // 渲染统计分析页面
@@ -10245,6 +10477,9 @@ function renderYearlyGoal() {
     const container = document.getElementById('yearly-goal-content');
     if (!container) return;
 
+    // 基于软件最小提现金额计算年度目标
+    DataManager.calculateYearlyGoalFromMinWithdraw();
+    
     const distribution = DataManager.autoDistributeSurplus();
     const goal = distribution.goal;
 
@@ -10498,6 +10733,20 @@ function renderYearlyGoal() {
                             </span>
                         </div>
                     </div>
+                    
+                    <!-- 预测完成时间 -->
+                    ${app.predictedCompletion ? `
+                    <div style="background: rgba(14, 165, 233, 0.15); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-left: 8px; margin-top: 8px; border: 1px solid rgba(14, 165, 233, 0.25);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                            <span style="color: #1e40af;">
+                                预测完成: <strong style="color: #1e3a8a;">${app.predictedCompletion.date.getFullYear()}-${String(app.predictedCompletion.date.getMonth() + 1).padStart(2, '0')}-${String(app.predictedCompletion.date.getDate()).padStart(2, '0')}</strong>
+                            </span>
+                            <span style="color: #1e40af; font-size: 10px; font-weight: 600;">
+                                还需 ${app.predictedCompletion.daysNeeded} 天
+                            </span>
+                        </div>
+                    </div>
+                    ` : ''}
                     
                     ${hasAllocation ? `
                     <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(120, 53, 15, 0.2); font-size: 12px; color: #be185d; padding-left: 8px;">
