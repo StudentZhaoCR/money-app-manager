@@ -28,8 +28,12 @@ let modalIsShowing = false;
 
 // 显示模态框
 function showModal(title, body, buttons, enableScroll = false) {
+    console.log('showModal called with:', title, buttons.length);
     // 防止重复触发
-    if (modalIsShowing) return;
+    if (modalIsShowing) {
+        console.log('modalIsShowing is true, returning');
+        return;
+    }
     
     const modal = document.getElementById('modal');
     const modalContent = document.querySelector('.modal-content');
@@ -83,14 +87,18 @@ function showModal(title, body, buttons, enableScroll = false) {
     
     // 设置模态框显示状态
     modalIsShowing = true;
+    console.log('modalIsShowing set to true');
     
     // 设置更高的z-index，确保在其他弹窗之上
     modal.style.zIndex = '2000';
+    console.log('modal z-index set to 2000');
     
     // 先设置为flex，然后添加show类触发动画
     modal.style.display = 'flex';
+    console.log('modal display set to flex');
     // 使用setTimeout确保DOM更新后再添加类
     setTimeout(() => {
+        console.log('Adding show class to modal');
         modal.classList.add('show');
         
         // 检查是否包含日期输入字段，如果包含，初始化日历
@@ -825,7 +833,10 @@ class DataManager {
         
         // 计算每个软件的年度目标（最小提现金额 * 365天）
         const appYearlyGoals = allApps.map(app => {
-            const minWithdraw = app.minWithdraw || 0.3; // 默认最小提现0.3元
+            // 处理异常值：最小提现金额不能为负数或过大
+            let minWithdraw = app.minWithdraw || 0.3; // 默认最小提现0.3元
+            // 限制最小提现金额范围：0.1-10元
+            minWithdraw = Math.max(0.1, Math.min(10, minWithdraw));
             const yearlyGoal = minWithdraw * 365;
             return {
                 appId: app.id,
@@ -917,7 +928,9 @@ class DataManager {
         const apps = stats.map((stat, index) => {
             // 找到对应的app对象以获取最小提现金额
             const app = data.phones.flatMap(phone => phone.apps).find(a => a.id === stat.appId);
-            const minWithdraw = app ? app.minWithdraw || 0.3 : 0.3;
+            let minWithdraw = app ? app.minWithdraw || 0.3 : 0.3;
+            // 限制最小提现金额范围：0.1-10元
+            minWithdraw = Math.max(0.1, Math.min(10, minWithdraw));
             const yearlyTargetPerApp = minWithdraw * 365;
             const dailyTargetPerApp = yearlyTargetPerApp / 365;
             
@@ -6817,14 +6830,21 @@ function openAddAppModal(phoneId) {
 
 // 打开编辑软件模态框
 function openEditAppModal(phoneId, appId) {
+    console.log('openEditAppModal called with:', phoneId, appId);
     currentPhoneId = phoneId;
     currentAppId = appId;
     
     const data = DataManager.loadData();
+    console.log('Loaded data:', data);
     const phone = data.phones.find(p => p.id === phoneId);
+    console.log('Found phone:', phone);
     const app = phone ? phone.apps.find(a => a.id === appId) : null;
+    console.log('Found app:', app);
     
-    if (!app) return;
+    if (!app) {
+        console.log('App not found');
+        return;
+    }
     
     showModal('编辑软件', `
         <div class="form-group">
@@ -6858,59 +6878,63 @@ function openEditAppModal(phoneId, appId) {
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
-                    const result = DataManager.editApp(phoneId, appId, {
-                        name,
-                        balance,
-                        minWithdraw,
-                        historicalWithdrawn
-                    });
-                    renderPhones();
+                    try {
+                        const result = DataManager.editApp(phoneId, appId, {
+                            name,
+                            balance,
+                            minWithdraw,
+                            historicalWithdrawn
+                        });
+                        renderPhones();
                     
-                    // 获取更新后的软件信息
-                    const phone = result.phones.find(p => p.id === phoneId);
-                    const app = phone ? phone.apps.find(a => a.id === appId) : null;
-                    
-                    if (app) {
-                        // 获取各类目标信息
-                        const dailyTarget = DataManager.calculateDailyTarget();
-                        const yearlyGoal = DataManager.getYearlyGoal();
-                        const appStats = DataManager.getAppEarningsStats(app);
+                        // 获取更新后的软件信息
+                        const phone = result.phones.find(p => p.id === phoneId);
+                        const app = phone ? phone.apps.find(a => a.id === appId) : null;
                         
-                        // 构建提示信息
-                        let messages = [];
-                        
-                        // 1. 今日收益提示
-                        if (appStats.today > 0) {
-                            messages.push(`今日收益¥${appStats.today.toFixed(2)}`);
-                        }
-                        
-                        // 2. 年目标提示
-                        if (yearlyGoal.amount > 0 && dailyTarget.isValid) {
-                            const todayEarned = appStats.today;
-                            const dailyTargetAmount = dailyTarget.dailyTarget;
+                        if (app) {
+                            // 获取各类目标信息
+                            const dailyTarget = DataManager.calculateDailyTarget();
+                            const yearlyGoal = DataManager.getYearlyGoal();
+                            const appStats = DataManager.getAppEarningsStats(app);
                             
-                            if (todayEarned >= dailyTargetAmount) {
-                                messages.push(`🎉 已达到今日目标¥${dailyTargetAmount.toFixed(2)}！`);
-                            } else {
-                                const remaining = dailyTargetAmount - todayEarned;
-                                messages.push(`距离今日目标还差¥${remaining.toFixed(2)}`);
+                            // 构建提示信息
+                            let messages = [];
+                            
+                            // 1. 今日收益提示
+                            if (appStats.today > 0) {
+                                messages.push(`今日收益¥${appStats.today.toFixed(2)}`);
                             }
-                        }
-                        
-                        // 显示综合提示
-                        if (messages.length > 0) {
-                            showToast(messages.join('，'), 'info');
+                            
+                            // 2. 年目标提示
+                            if (yearlyGoal.amount > 0 && dailyTarget.isValid) {
+                                const todayEarned = appStats.today;
+                                const dailyTargetAmount = dailyTarget.dailyTarget;
+                                
+                                if (todayEarned >= dailyTargetAmount) {
+                                    messages.push(`🎉 已达到今日目标¥${dailyTargetAmount.toFixed(2)}！`);
+                                } else {
+                                    const remaining = dailyTargetAmount - todayEarned;
+                                    messages.push(`距离今日目标还差¥${remaining.toFixed(2)}`);
+                                }
+                            }
+                            
+                            // 显示综合提示
+                            if (messages.length > 0) {
+                                showToast(messages.join('，'), 'info');
+                            } else {
+                                showToast('软件已更新！');
+                            }
+                            
+                            // 清除标记
+                            delete app._dailyTargetAchieved;
+                            delete app._todayEarnings;
+                            delete app._dailyTarget;
+                            DataManager.saveData(result);
                         } else {
                             showToast('软件已更新！');
                         }
-                        
-                        // 清除标记
-                        delete app._dailyTargetAchieved;
-                        delete app._todayEarnings;
-                        delete app._dailyTarget;
-                        DataManager.saveData(result);
-                    } else {
-                        showToast('软件已更新！');
+                    } catch (error) {
+                        showToast(error.message, 'error');
                     }
                 }
                 closeModal();
@@ -11275,8 +11299,7 @@ function saveAppDailyGoal() {
         return;
     }
     
-    DataManager.saveAppDailyGoal(currentDailyGoalAppId, amount, enabled, false);
-    showToast('每日目标已保存', 'success');
+    DataManager.saveAppDailyGoal(currentDailyGoalAppId, amount, enabled, false);    showToast('每日目标已保存', 'success');
     renderDailyGoalContent();
 }
 
