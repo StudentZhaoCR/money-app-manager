@@ -134,12 +134,34 @@ function closeModal() {
 }
 
 // 显示提示消息
-// 提示功能已删除
-function showToast() {}
-function showSuccess() {}
-function showError() {}
-function showWarning() {}
-function showInfo() {}
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    
+    toast.textContent = message;
+    toast.className = `toast ${type}`;
+    toast.style.display = 'block';
+    
+    setTimeout(() => {
+        toast.style.display = 'none';
+    }, 3000);
+}
+
+function showSuccess(message) {
+    showToast(message, 'success');
+}
+
+function showError(message) {
+    showToast(message, 'error');
+}
+
+function showWarning(message) {
+    showToast(message, 'warning');
+}
+
+function showInfo(message) {
+    showToast(message, 'info');
+}
 
 // 输入验证函数
 function validateInput(value, type, fieldName) {
@@ -6939,7 +6961,10 @@ function openEditAppModal(phoneId, appId) {
                         showToast(error.message, 'error');
                     }
                 }
-                closeModal();
+                // 编辑完成后重新检查最小提现金额
+                setTimeout(() => {
+                    checkAppsWithoutMinWithdraw();
+                }, 100);
             }
         }
     ]);
