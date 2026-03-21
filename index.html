@@ -365,11 +365,31 @@
                             超额完成的收益自动分配给收益不足的软件
                         </div>
                     </div>
-                    <div class="flex gap-4">
-                        <button class="btn btn-primary flex-1" onclick="saveYearlyGoal()">💾 保存目标</button>
-                        <button class="btn btn-secondary flex-1" onclick="viewYearlyGoalDetail()">📊 详情</button>
+                <div class="flex gap-4">
+                    <button class="btn btn-primary flex-1" onclick="saveYearlyGoal()">💾 保存目标</button>
+                    <button class="btn btn-secondary flex-1" onclick="viewYearlyGoalDetail()">📊 详情</button>
+                </div>
+                
+                <!-- 年目标计算过程 -->
+                <div style="margin-top: 20px; padding: 16px; background: rgba(240, 249, 255, 0.8); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #1e40af;">
+                        📝 年目标计算过程
+                    </div>
+                    <div id="yearly-goal-calculation" style="font-size: 13px; color: #374151;">
+                        <!-- 计算过程将由JS动态生成 -->
                     </div>
                 </div>
+                
+                <!-- 软件列表 -->
+                <div style="margin-top: 20px; padding: 16px; background: rgba(240, 255, 240, 0.8); border-radius: 12px; border: 1px solid rgba(52, 211, 153, 0.3);">
+                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #166534;">
+                        📱 软件列表
+                    </div>
+                    <div id="app-list" style="font-size: 13px; color: #374151;">
+                        <!-- 软件列表将由JS动态生成 -->
+                    </div>
+                </div>
+            </div>
 
                 <!-- 软件检查 -->
                 <div class="settings-card card mb-4">
