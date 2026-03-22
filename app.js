@@ -8072,8 +8072,8 @@ function generateBackupCode() {
     const jsonStr = JSON.stringify(simplifiedData);
     const compressed = LZString.compressToBase64(jsonStr);
     
-    // 转换为中文
-    const backupCode = base64ToChinese(compressed);
+    // 转换为中文（简化版）
+    const backupCode = simpleBase64ToChinese(compressed);
     
     showModal('备份码（请复制保存）', `
         <div class="form-group">
@@ -8097,62 +8097,40 @@ function generateBackupCode() {
     ]);
 }
 
-// Base64转中文
-function base64ToChinese(base64) {
-    // Base64字符集
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+// 简化版Base64转中文
+function simpleBase64ToChinese(base64) {
+    // 只使用前128个常用汉字
+    const simpleChars = CHINESE_CHARS.substring(0, 128);
     let result = '';
     
-    // 将Base64转换为索引
-    for (let i = 0; i < base64.length; i++) {
-        const index = base64Chars.indexOf(base64[i]);
-        if (index !== -1) {
-            // 每3个Base64字符对应2个汉字
-            if (i % 3 === 0 && i + 2 < base64.length) {
-                const idx1 = base64Chars.indexOf(base64[i]);
-                const idx2 = base64Chars.indexOf(base64[i+1]);
-                const idx3 = base64Chars.indexOf(base64[i+2]);
-                
-                // 计算两个汉字的索引
-                const char1Index = (idx1 * 64 + idx2) % CHINESE_CHARS.length;
-                const char2Index = (idx2 * 64 + idx3) % CHINESE_CHARS.length;
-                
-                result += CHINESE_CHARS[char1Index] + CHINESE_CHARS[char2Index];
-            }
-        }
+    // 每2个Base64字符对应1个汉字
+    for (let i = 0; i < base64.length; i += 2) {
+        const char1 = base64[i];
+        const char2 = base64[i+1] || 'A';
+        
+        // 计算汉字索引
+        const index = (char1.charCodeAt(0) * 128 + char2.charCodeAt(0)) % simpleChars.length;
+        result += simpleChars[index];
     }
     
     return result;
 }
 
-// 中文转Base64
-function chineseToBase64(chinese) {
-    // Base64字符集
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+// 简化版中文转Base64
+function simpleChineseToBase64(chinese) {
+    // 只使用前128个常用汉字
+    const simpleChars = CHINESE_CHARS.substring(0, 128);
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     
-    // 将中文转换为Base64
-    for (let i = 0; i < chinese.length; i += 2) {
-        const char1 = chinese[i];
-        const char2 = chinese[i+1] || chinese[i];
+    for (let char of chinese) {
+        const index = simpleChars.indexOf(char);
+        if (index === -1) continue;
         
-        const idx1 = CHINESE_CHARS.indexOf(char1);
-        const idx2 = CHINESE_CHARS.indexOf(char2);
-        
-        if (idx1 !== -1 && idx2 !== -1) {
-            // 计算Base64索引
-            const b1 = Math.floor(idx1 / 64);
-            const b2 = idx1 % 64;
-            const b3 = Math.floor(idx2 / 64);
-            const b4 = idx2 % 64;
-            
-            result += base64Chars[b1] + base64Chars[b2] + base64Chars[b3] + base64Chars[b4];
-        }
-    }
-    
-    // 补充padding
-    while (result.length % 4) {
-        result += '=';
+        // 计算两个Base64字符
+        const b1 = base64Chars[index % 64];
+        const b2 = base64Chars[Math.floor(index / 64)];
+        result += b1 + b2;
     }
     
     return result;
@@ -8192,7 +8170,7 @@ function processBackupCode(code) {
         // 检查是否为中文备份码
         if (/[\u4e00-\u9fa5]/.test(code)) {
             // 中文备份码处理
-            const base64 = chineseToBase64(code);
+            const base64 = simpleChineseToBase64(code);
             if (!base64) {
                 throw new Error('无效的中文字符');
             }
