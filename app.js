@@ -8070,60 +8070,135 @@ function generateBackupCode() {
     ]);
 }
 
-// 简单的字符串压缩函数
-function simpleCompress(str) {
-    try {
-        // 使用JSON.stringify和Base64编码
-        return btoa(unescape(encodeURIComponent(str)));
-    } catch (e) {
-        console.error('压缩失败:', e);
-        return btoa(str);
-    }
-}
-
-// 简单的字符串解压函数
-function simpleDecompress(compressed) {
-    try {
-        // 使用Base64解码和JSON.parse
-        return decodeURIComponent(escape(atob(compressed)));
-    } catch (e) {
-        console.error('解压失败:', e);
-        return atob(compressed);
-    }
-}
-
-// 生成易读的备份码
-function generateReadableBackupCode(data) {
-    // 字符集：去掉容易混淆的字符
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ234567';
-    let result = '';
+// 生成备份码
+function generateBackupCode() {
+    const data = DataManager.loadData();
     
-    // 对数据进行简单编码
-    for (let i = 0; i < data.length; i++) {
-        const charCode = data.charCodeAt(i);
-        result += chars[charCode % chars.length];
-    }
-    
-    return result;
-}
-
-// 解析易读的备份码
-function parseReadableBackupCode(backupCode) {
-    // 字符集：与生成时使用的相同
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ234567';
-    let result = '';
-    
-    // 对备份码进行解码
-    for (let i = 0; i < backupCode.length; i++) {
-        const char = backupCode[i];
-        const index = chars.indexOf(char);
-        if (index !== -1) {
-            // 将索引转换回字符
-            result += String.fromCharCode(index);
+    // 简化数据结构
+    const simplifiedData = {
+        v: 3,
+        p: data.phones.map(phone => ({
+            n: phone.name,
+            a: phone.apps.map(app => ({
+                n: app.name,
+                w: app.withdrawn || 0,
+                h: app.historicalWithdrawn || 0,
+                m: app.minWithdraw || 0,
+                b: app.balance || 0
+            }))
+        })),
+        s: {
+            ga: data.settings.yearlyGoalAmount || 0,
+            gy: data.settings.yearlyGoalYear || new Date().getFullYear()
         }
-    }
+    };
     
-    return result;
+    // 转换为JSON字符串
+    const jsonStr = JSON.stringify(simplifiedData);
+    
+    // 使用标准Base64编码
+    const backupCode = btoa(unescape(encodeURIComponent(jsonStr)));
+    
+    showModal('备份码（请复制保存）', `
+        <div class="form-group">
+            <textarea class="form-input" rows="3" readonly>${backupCode}</textarea>
+        </div>
+        <div class="form-hint">请将此备份码复制保存，用于数据恢复</div>
+        <div class="form-hint" style="font-size: 12px; color: var(--text-secondary);">
+            💡 提示：备份码为Base64格式，可直接复制粘贴
+        </div>
+    `, [
+        { 
+            text: '复制', 
+            class: 'btn-primary', 
+            action: () => {
+                navigator.clipboard.writeText(backupCode).then(() => {
+                    showToast('已复制到剪贴板');
+                });
+            }
+        },
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 从备份码恢复数据
+function restoreFromBackupCode() {
+    showModal('恢复数据', `
+        <div class="form-group">
+            <label class="form-label">请输入备份码</label>
+            <textarea class="form-input" rows="3" id="backup-code-input" placeholder="粘贴Base64格式的备份码"></textarea>
+        </div>
+        <div class="form-hint" style="font-size: 12px; color: var(--text-secondary);">
+            💡 提示：请完整复制粘贴备份码，不要修改任何字符
+        </div>
+    `, [
+        { 
+            text: '恢复', 
+            class: 'btn-primary', 
+            action: () => {
+                const backupCode = document.getElementById('backup-code-input').value.trim();
+                if (!backupCode) {
+                    showToast('请输入备份码');
+                    return;
+                }
+                processBackupCode(backupCode);
+                closeModal();
+            }
+        },
+        { text: '取消', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 处理备份码
+function processBackupCode(code) {
+    try {
+        // 解码Base64
+        const jsonStr = decodeURIComponent(escape(atob(code)));
+        
+        // 解析JSON
+        const data = JSON.parse(jsonStr);
+        
+        if (!data.v || !data.p || !Array.isArray(data.p)) {
+            showToast('备份码格式错误');
+            return;
+        }
+        
+        const restoredData = {
+            phones: data.p.map((phone, phoneIndex) => ({
+                id: Date.now().toString() + phoneIndex,
+                name: phone.n,
+                apps: phone.a.map((app, appIndex) => ({
+                    id: Date.now().toString() + phoneIndex + appIndex,
+                    name: app.n,
+                    withdrawn: app.w || 0,
+                    historicalWithdrawn: app.h || 0,
+                    minWithdraw: app.m || 0,
+                    balance: app.b || 0,
+                    lastUpdated: new Date().toISOString()
+                }))
+            })),
+            expenses: [],
+            installments: [],
+            settings: {
+                yearlyGoalAmount: data.s?.ga || 0,
+                yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
+                yearlyGoalAutoDistribute: true,
+                yearlyGoalHistory: []
+            }
+        };
+        
+        if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
+            DataManager.saveData(restoredData);
+            renderDashboard();
+            renderPhones();
+            renderStats();
+            renderSettings();
+            showToast('恢复成功！');
+        }
+    } catch (error) {
+        console.error('恢复数据失败:', error);
+        showToast('备份码无效或已损坏');
+    }
 }
 
 // 从备份码恢复数据
