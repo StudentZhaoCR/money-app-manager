@@ -8019,32 +8019,6 @@ function calculateInstallmentGoalsGlobal() {
     showToast('计算完成！');
 }
 
-// 中文字符库（常用汉字，便于记忆和输入）
-const CHINESE_CHARS = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制改级地化把制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海权世等花口放究必群导条较克器志观指流北集劳境判吸修更需九您证清议今但林史称斤植般史优织谈音波亲选英近亮初仍毛球片科授梁援慢球惠伊吉敬维雷托靠震限伍超伦毕尚票渡宪择卡祖帮祝庄康供优课鸟喊降蛋察渐招吴刘赖抱轨瑞迅英拔何罗咨判德卢梅肯泰尔勒穆锡黎肯普曼迪布康罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪肯罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪肯罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪肯罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪';
-
-// 将二进制数据转换为中文
-function binaryToChinese(binary) {
-    let result = '';
-    for (let i = 0; i < binary.length; i += 10) { // 10位二进制对应一个汉字
-        const chunk = binary.substr(i, 10).padEnd(10, '0');
-        const index = parseInt(chunk, 2) % CHINESE_CHARS.length;
-        result += CHINESE_CHARS[index];
-    }
-    return result;
-}
-
-// 将中文转换为二进制
-function chineseToBinary(chinese) {
-    let result = '';
-    for (let char of chinese) {
-        const index = CHINESE_CHARS.indexOf(char);
-        if (index === -1) return null; // 无效字符
-        const binary = index.toString(2).padStart(10, '0');
-        result += binary;
-    }
-    return result;
-}
-
 // 生成中文备份码
 function generateBackupCode() {
     const data = DataManager.loadData();
@@ -8072,16 +8046,16 @@ function generateBackupCode() {
     const jsonStr = JSON.stringify(simplifiedData);
     const compressed = LZString.compressToBase64(jsonStr);
     
-    // 转换为中文（简化版）
-    const backupCode = simpleBase64ToChinese(compressed);
+    // 生成中文备份码（使用拼音首字母 + 数字）
+    const backupCode = generateReadableBackupCode(compressed);
     
     showModal('备份码（请复制保存）', `
         <div class="form-group">
             <textarea class="form-input" rows="3" readonly>${backupCode}</textarea>
         </div>
-        <div class="form-hint">请将此中文备份码复制保存，用于数据恢复</div>
+        <div class="form-hint">请将此备份码复制保存，用于数据恢复</div>
         <div class="form-hint" style="font-size: 12px; color: var(--text-secondary);">
-            💡 提示：中文备份码更易手动输入和记忆
+            💡 提示：备份码由拼音首字母和数字组成，更易手动输入
         </div>
     `, [
         { 
@@ -8097,40 +8071,54 @@ function generateBackupCode() {
     ]);
 }
 
-// 简化版Base64转中文
-function simpleBase64ToChinese(base64) {
-    // 只使用前128个常用汉字
-    const simpleChars = CHINESE_CHARS.substring(0, 128);
+// 生成易读的备份码（拼音首字母 + 数字）
+function generateReadableBackupCode(base64) {
+    // 拼音首字母字符集
+    const pinyinChars = 'ABCDEFGHJKLMNPQRSTWXYZ'; // 去掉容易混淆的字母
+    const numbers = '0123456789';
     let result = '';
     
-    // 每2个Base64字符对应1个汉字
-    for (let i = 0; i < base64.length; i += 2) {
-        const char1 = base64[i];
-        const char2 = base64[i+1] || 'A';
+    // 每3个Base64字符生成2个备份码字符
+    for (let i = 0; i < base64.length; i += 3) {
+        const chunk = base64.substr(i, 3).padEnd(3, 'A');
+        const hash = chunk.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
         
-        // 计算汉字索引
-        const index = (char1.charCodeAt(0) * 128 + char2.charCodeAt(0)) % simpleChars.length;
-        result += simpleChars[index];
+        // 生成拼音首字母
+        const pinyinIndex = hash % pinyinChars.length;
+        // 生成数字
+        const numberIndex = (hash >> 4) % numbers.length;
+        
+        result += pinyinChars[pinyinIndex] + numbers[numberIndex];
     }
     
     return result;
 }
 
-// 简化版中文转Base64
-function simpleChineseToBase64(chinese) {
-    // 只使用前128个常用汉字
-    const simpleChars = CHINESE_CHARS.substring(0, 128);
+// 解析易读的备份码
+function parseReadableBackupCode(backupCode) {
+    // 拼音首字母字符集
+    const pinyinChars = 'ABCDEFGHJKLMNPQRSTWXYZ';
+    const numbers = '0123456789';
     const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     
-    for (let char of chinese) {
-        const index = simpleChars.indexOf(char);
-        if (index === -1) continue;
+    // 每2个备份码字符生成3个Base64字符
+    for (let i = 0; i < backupCode.length; i += 2) {
+        const char1 = backupCode[i];
+        const char2 = backupCode[i+1] || '0';
         
-        // 计算两个Base64字符
-        const b1 = base64Chars[index % 64];
-        const b2 = base64Chars[Math.floor(index / 64)];
-        result += b1 + b2;
+        const pinyinIndex = pinyinChars.indexOf(char1);
+        const numberIndex = numbers.indexOf(char2);
+        
+        if (pinyinIndex === -1 || numberIndex === -1) continue;
+        
+        // 计算Base64索引
+        const hash = pinyinIndex + (numberIndex << 4);
+        const b1 = base64Chars[hash % 64];
+        const b2 = base64Chars[(hash >> 6) % 64];
+        const b3 = base64Chars[(hash >> 12) % 64];
+        
+        result += b1 + b2 + b3;
     }
     
     return result;
@@ -8164,115 +8152,75 @@ function restoreFromBackupCode() {
     ]);
 }
 
-// 处理中文备份码
+// 处理备份码
 function processBackupCode(code) {
     try {
-        // 检查是否为中文备份码
-        if (/[\u4e00-\u9fa5]/.test(code)) {
-            // 中文备份码处理
-            const base64 = simpleChineseToBase64(code);
-            if (!base64) {
-                throw new Error('无效的中文字符');
-            }
-            
-            // 解压缩数据
-            const jsonStr = LZString.decompressFromBase64(base64);
-            if (!jsonStr) {
-                throw new Error('解压失败');
-            }
-            
-            const data = JSON.parse(jsonStr);
-            
-            if (!data.v || !data.p || !Array.isArray(data.p)) {
-                showToast('备份码格式错误');
-                return;
-            }
-            
-            const restoredData = {
-                phones: data.p.map((phone, phoneIndex) => ({
-                    id: Date.now().toString() + phoneIndex,
-                    name: phone.n,
-                    apps: phone.a.map((app, appIndex) => ({
-                        id: Date.now().toString() + phoneIndex + appIndex,
-                        name: app.n,
-                        withdrawn: app.w || 0,
-                        historicalWithdrawn: app.h || 0,
-                        minWithdraw: app.m || 0,
-                        balance: app.b || 0,
-                        lastUpdated: new Date().toISOString()
-                    }))
-                })),
-                expenses: [],
-                installments: [],
-                settings: {
-                    yearlyGoalAmount: data.s?.ga || 0,
-                    yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
-                    yearlyGoalAutoDistribute: true,
-                    yearlyGoalHistory: []
-                }
-            };
-            
-            if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
-                DataManager.saveData(restoredData);
-                renderDashboard();
-                renderPhones();
-                renderStats();
-                renderSettings();
-                showToast('恢复成功！');
-            }
+        let base64;
+        
+        // 检查是否为易读备份码（字母+数字）
+        if (/^[A-Z0-9]+$/.test(code)) {
+            // 解析易读备份码
+            base64 = parseReadableBackupCode(code);
+        } else if (/[\u4e00-\u9fa5]/.test(code)) {
+            // 兼容旧的中文备份码
+            showToast('请使用新格式的备份码', 'warning');
+            return;
         } else {
             // 兼容旧的Base64备份码
-            // 还原备份码格式
-            let processedCode = code.replace(/-/g, '+').replace(/_/g, '/');
-            while (processedCode.length % 4) {
-                processedCode += '=';
+            base64 = code.replace(/-/g, '+').replace(/_/g, '/');
+            while (base64.length % 4) {
+                base64 += '=';
             }
-            
-            // 解压缩数据
-            const jsonStr = LZString.decompressFromBase64(processedCode);
-            if (!jsonStr) {
-                throw new Error('解压失败');
+        }
+        
+        if (!base64) {
+            throw new Error('无效的备份码');
+        }
+        
+        // 解压缩数据
+        const jsonStr = LZString.decompressFromBase64(base64);
+        if (!jsonStr) {
+            throw new Error('解压失败');
+        }
+        
+        const data = JSON.parse(jsonStr);
+        
+        if (!data.v || !data.p || !Array.isArray(data.p)) {
+            showToast('备份码格式错误');
+            return;
+        }
+        
+        const restoredData = {
+            phones: data.p.map((phone, phoneIndex) => ({
+                id: Date.now().toString() + phoneIndex,
+                name: phone.n,
+                apps: phone.a.map((app, appIndex) => ({
+                    id: Date.now().toString() + phoneIndex + appIndex,
+                    name: app.n,
+                    withdrawn: app.w || 0,
+                    historicalWithdrawn: app.h || 0,
+                    minWithdraw: app.m || 0,
+                    balance: app.b || 0,
+                    lastUpdated: new Date().toISOString()
+                }))
+            })),
+            expenses: [],
+            installments: [],
+            settings: {
+                yearlyGoalAmount: data.s?.ga || 0,
+                yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
+                yearlyGoalAutoDistribute: true,
+                yearlyGoalHistory: []
             }
-            
-            const data = JSON.parse(jsonStr);
-            
-            if (!data.v || !data.p || !Array.isArray(data.p)) {
-                showToast('备份码格式错误');
-                return;
-            }
-            
-            const restoredData = {
-                phones: data.p.map((phone, phoneIndex) => ({
-                    id: Date.now().toString() + phoneIndex,
-                    name: phone.n,
-                    apps: phone.a.map((app, appIndex) => ({
-                        id: Date.now().toString() + phoneIndex + appIndex,
-                        name: app.n,
-                        withdrawn: app.w || 0,
-                        historicalWithdrawn: app.h || 0,
-                        minWithdraw: app.m || 0,
-                        balance: app.b || 0,
-                        lastUpdated: new Date().toISOString()
-                    }))
-                })),
-                expenses: [],
-                installments: [],
-                settings: {
-                    yearlyGoalAmount: data.s?.ga || 0,
-                    yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
-                    yearlyGoalAutoDistribute: true,
-                    yearlyGoalHistory: []
-                }
-            };
-            
-            if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
-                DataManager.saveData(restoredData);
-                renderDashboard();
-                renderPhones();
-                renderStats();
-                renderSettings();
-                showToast('恢复成功！');
-            }
+        };
+        
+        if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
+            DataManager.saveData(restoredData);
+            renderDashboard();
+            renderPhones();
+            renderStats();
+            renderSettings();
+            showToast('恢复成功！');
         }
     } catch (error) {
         console.error('恢复数据失败:', error);
