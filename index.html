@@ -370,40 +370,21 @@
                     <button class="btn btn-secondary flex-1" onclick="viewYearlyGoalDetail()">📊 详情</button>
                 </div>
                 
-                <!-- 年目标计算过程 -->
-                <div style="margin-top: 20px; padding: 16px; background: rgba(240, 249, 255, 0.8); border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
-                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #1e40af;">
-                        📝 年目标计算过程
-                    </div>
-                    <div id="yearly-goal-calculation" style="font-size: 13px; color: #374151;">
-                        <!-- 计算过程将由JS动态生成 -->
-                    </div>
-                </div>
-                
-                <!-- 软件列表 -->
-                <div style="margin-top: 20px; padding: 16px; background: rgba(240, 255, 240, 0.8); border-radius: 12px; border: 1px solid rgba(52, 211, 153, 0.3);">
-                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #166534;">
-                        📱 软件列表
-                    </div>
-                    <div id="app-list" style="font-size: 13px; color: #374151;">
-                        <!-- 软件列表将由JS动态生成 -->
-                    </div>
-                </div>
             </div>
 
-                <!-- 软件检查 -->
+                <!-- 年度目标历史 -->
                 <div class="settings-card card mb-4">
                     <div class="settings-card-header">
-                        <span class="settings-icon">🔍</span>
-                        <span class="settings-title">软件检查</span>
+                        <span class="settings-icon">📈</span>
+                        <span class="settings-title">年度目标历史</span>
                     </div>
                     <div class="form-group mb-3">
                         <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
-                            检查软件的最小提现金额设置，确保所有软件都已配置
+                            查看历年目标完成情况
                         </div>
                     </div>
                     <div class="flex gap-4">
-                        <button class="btn btn-primary flex-1" onclick="checkAppsWithoutMinWithdraw()">🔍 检查最小提现金额</button>
+                        <button class="btn btn-primary flex-1" onclick="viewYearlyGoalHistory()">📋 查看历史</button>
                     </div>
                 </div>
 

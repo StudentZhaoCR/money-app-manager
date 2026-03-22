@@ -134,16 +134,86 @@ function closeModal() {
 }
 
 // 显示提示消息
+// 防重复提示机制
+let lastToastTime = 0;
+const TOAST_DELAY = 3000; // 3秒内不显示任何提示
+let toastTimeout = null;
+let isToastVisible = false;
+let currentToastMessage = '';
+
 function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
-    if (!toast) return;
+    // 打印调用信息
+    console.log('showToast 被调用:', { message, type, timestamp: new Date().toISOString() });
     
+    // 防重复：3秒内不显示相同的提示
+    const now = Date.now();
+    if ((now - lastToastTime) < TOAST_DELAY && message === currentToastMessage) {
+        console.log('短时间内重复相同提示被阻止:', message);
+        return;
+    }
+    
+    // 如果已有提示正在显示，不重复显示
+    if (isToastVisible) {
+        console.log('提示已在显示中，阻止重复显示:', message);
+        return;
+    }
+    
+    // 清除之前的超时
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+        toastTimeout = null;
+    }
+    
+    lastToastTime = now;
+    isToastVisible = true;
+    currentToastMessage = message;
+    
+    // 确保 toast 元素存在
+    let toast = document.getElementById('toast');
+    if (!toast) {
+        // 如果 toast 元素不存在，创建一个
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.className = 'toast';
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '8px';
+        toast.style.color = 'white';
+        toast.style.fontSize = '14px';
+        toast.style.fontWeight = '600';
+        toast.style.zIndex = '9999';
+        toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        toast.style.display = 'none';
+        document.body.appendChild(toast);
+    }
+    
+    // 设置提示内容和样式
     toast.textContent = message;
     toast.className = `toast ${type}`;
     toast.style.display = 'block';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(-20px)';
     
+    // 触发动画
     setTimeout(() => {
-        toast.style.display = 'none';
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    }, 10);
+    
+    // 设置自动隐藏
+    toastTimeout = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(-20px)';
+        
+        setTimeout(() => {
+            toast.style.display = 'none';
+            isToastVisible = false;
+            currentToastMessage = '';
+            toastTimeout = null;
+        }, 300);
     }, 3000);
 }
 
@@ -846,6 +916,81 @@ class DataManager {
         parsed.yearlyGoalYear = parseInt(year) || new Date().getFullYear();
         parsed.yearlyGoalAutoDistribute = autoDistribute;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
+    }
+    
+    // 保存年度目标历史
+    static saveYearlyGoalHistory(year, goalAmount, actualAmount) {
+        const settings = localStorage.getItem(SETTINGS_KEY);
+        const parsed = settings ? JSON.parse(settings) : {};
+        
+        if (!parsed.yearlyGoalHistory) {
+            parsed.yearlyGoalHistory = [];
+        }
+        
+        // 检查是否已有该年份的记录
+        const existingIndex = parsed.yearlyGoalHistory.findIndex(item => item.year === year);
+        
+        if (existingIndex >= 0) {
+            // 更新现有记录
+            parsed.yearlyGoalHistory[existingIndex] = {
+                year: year,
+                goalAmount: goalAmount,
+                actualAmount: actualAmount,
+                completed: actualAmount >= goalAmount,
+                completionRate: goalAmount > 0 ? (actualAmount / goalAmount) * 100 : 0,
+                updatedAt: new Date().toISOString()
+            };
+        } else {
+            // 添加新记录
+            parsed.yearlyGoalHistory.push({
+                year: year,
+                goalAmount: goalAmount,
+                actualAmount: actualAmount,
+                completed: actualAmount >= goalAmount,
+                completionRate: goalAmount > 0 ? (actualAmount / goalAmount) * 100 : 0,
+                updatedAt: new Date().toISOString()
+            });
+        }
+        
+        // 按年份排序
+        parsed.yearlyGoalHistory.sort((a, b) => b.year - a.year);
+        
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
+    }
+    
+    // 获取年度目标历史
+    static getYearlyGoalHistory() {
+        const settings = localStorage.getItem(SETTINGS_KEY);
+        const parsed = settings ? JSON.parse(settings) : {};
+        return parsed.yearlyGoalHistory || [];
+    }
+    
+    // 获取指定年份的总收益
+    static getYearlyEarnings(year) {
+        const data = this.loadData();
+        const startDate = new Date(`${year}-01-01`);
+        const endDate = new Date(`${year}-12-31`);
+        
+        let totalEarnings = 0;
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.withdrawals) {
+                    app.withdrawals.forEach(withdrawal => {
+                        const withdrawDate = new Date(withdrawal.date);
+                        if (withdrawDate >= startDate && withdrawDate <= endDate) {
+                            totalEarnings += withdrawal.amount;
+                        }
+                    });
+                }
+                // 加上历史提现金额
+                if (app.historicalWithdrawn) {
+                    totalEarnings += app.historicalWithdrawn;
+                }
+            });
+        });
+        
+        return totalEarnings;
     }
     
     // 基于软件最小提现金额计算年度目标
@@ -6898,17 +7043,26 @@ function openEditAppModal(phoneId, appId) {
 
                 if (name) {
                     try {
+                        // 确保最小提现金额大于0
+                        if (minWithdraw <= 0) {
+                            showToast('最小提现金额必须大于0', 'error');
+                            return;
+                        }
+                        
                         const result = DataManager.editApp(phoneId, appId, {
                             name,
                             balance,
                             minWithdraw,
                             historicalWithdrawn
                         });
-                        renderPhones();
                         
                         // 只显示编辑成功的提示
                         showToast('软件编辑成功！', 'success');
-                        closeModal();
+                        // 延迟渲染和关闭模态框，确保提示信息能够完全显示
+                        setTimeout(() => {
+                            renderPhones();
+                            closeModal();
+                        }, 1000);
                     } catch (error) {
                         console.error('编辑软件失败:', error);
                         showToast('编辑失败，请重试', 'error');
@@ -7075,57 +7229,6 @@ function deleteApp(phoneId, appId) {
         renderPhones();
         showToast('软件已删除！');
     }
-}
-
-// 检查没有输入最小提现金额的软件
-function checkAppsWithoutMinWithdraw() {
-    const data = DataManager.loadData();
-    const appsWithoutMinWithdraw = [];
-    
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            if (!app.minWithdraw || app.minWithdraw <= 0) {
-                appsWithoutMinWithdraw.push({
-                    phoneName: phone.name,
-                    appName: app.name,
-                    appId: app.id,
-                    phoneId: phone.id
-                });
-            }
-        });
-    });
-    
-    if (appsWithoutMinWithdraw.length === 0) {
-        return;
-    }
-    
-    // 生成HTML列表
-    let html = `
-        <div style="max-height: 400px; overflow-y: auto;">
-            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
-                📋 未设置最小提现金额的软件 (${appsWithoutMinWithdraw.length}个)
-            </div>
-            <div style="space-y: 8px;">
-                ${appsWithoutMinWithdraw.map((item, index) => `
-                    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <div style="font-weight: 600; color: var(--text-primary);">${item.appName}</div>
-                                <div style="font-size: 12px; color: var(--text-secondary);">所属手机: ${item.phoneName}</div>
-                            </div>
-                            <button class="btn btn-sm btn-primary" onclick="openEditAppModal('${item.phoneId}', '${item.appId}')">
-                                编辑
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `;
-    
-    showModal('检查最小提现金额', html, [
-        { text: '关闭', class: 'btn-secondary', action: closeModal }
-    ]);
 }
 
 // 渲染统计分析页面
@@ -7343,74 +7446,39 @@ function renderWithdrawRecords() {
 }
 
 // 渲染支出记录
-function renderExpenseRecords(filterCategory = 'all') {
+function renderExpenseRecords() {
     const data = DataManager.loadData();
     const container = document.getElementById('expense-records-list');
     
-    let allExpenses = data.expenses || [];
+    let expenses = data.expenses || [];
     
     // 为每条记录添加类别
-    allExpenses = allExpenses.map(e => ({
+    expenses = expenses.map(e => ({
         ...e,
         category: getExpenseCategory(e.purpose)
     }));
     
-    // 按类别筛选
-    let filteredExpenses = allExpenses;
-    if (filterCategory !== 'all') {
-        filteredExpenses = allExpenses.filter(e => e.category === filterCategory);
-    }
-    
-    // 计算总支出（根据筛选条件）
-    const totalExpense = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-    
-    // 获取所有类别统计
-    const categoryStats = getCategoryStats(allExpenses);
+    // 计算总支出
+    const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
     
     // 按日期排序
-    filteredExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+    expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
     
-    if (allExpenses.length === 0) {
+    if (expenses.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无支出记录</div>';
         return;
     }
     
-    // 生成类别筛选按钮
-    const categoryButtonsHtml = categoryStats.map(cat => `
-        <button onclick="renderExpenseRecords('${cat.category}')" 
-                class="category-filter-btn ${filterCategory === cat.category ? 'active' : ''}"
-                style="padding: 8px 16px; margin: 4px; border: 1px solid ${filterCategory === cat.category ? '#ef4444' : 'var(--border-color)'}; 
-                       border-radius: 20px; background: ${filterCategory === cat.category ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-secondary)'}; 
-                       color: ${filterCategory === cat.category ? '#ef4444' : 'var(--text-secondary)'}; font-size: 13px; cursor: pointer;
-                       transition: all 0.2s;">
-            ${cat.category} (${cat.count})
-        </button>
-    `).join('');
-    
-    // 添加总支出卡片 + 类别筛选 + 记录列表
+    // 添加总支出卡片 + 记录列表
     container.innerHTML = `
         <div class="expense-total-card" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border: 2px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: center;">
-            <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">${filterCategory === 'all' ? '💰 总支出' : `💰 ${filterCategory}支出`}</div>
+            <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">💰 总支出</div>
             <div style="font-size: 32px; font-weight: 700; color: #ef4444;">¥${totalExpense.toFixed(2)}</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">共 ${filteredExpenses.length} 笔支出记录</div>
-        </div>
-        
-        <div class="category-filter" style="margin-bottom: 16px;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">按类别筛选：</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                <button onclick="renderExpenseRecords('all')" 
-                        class="category-filter-btn ${filterCategory === 'all' ? 'active' : ''}"
-                        style="padding: 8px 16px; margin: 4px; border: 1px solid ${filterCategory === 'all' ? '#ef4444' : 'var(--border-color)'}; 
-                               border-radius: 20px; background: ${filterCategory === 'all' ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-secondary)'}; 
-                               color: ${filterCategory === 'all' ? '#ef4444' : 'var(--text-secondary)'}; font-size: 13px; cursor: pointer;">
-                    全部 (${allExpenses.length})
-                </button>
-                ${categoryButtonsHtml}
-            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">共 ${expenses.length} 笔支出记录</div>
         </div>
         
         <div class="expense-records-list">
-            ${filteredExpenses.length === 0 ? '<div class="empty-state">该类别暂无支出记录</div>' : filteredExpenses.map(e => `
+            ${expenses.map(e => `
                 <div class="expense-record-item">
                     <div class="expense-record-header">
                         <span class="expense-tag">💰 ${e.category}</span>
@@ -7472,21 +7540,6 @@ function getExpenseCategory(purpose) {
     }
     
     return '其他';
-}
-
-// 获取类别统计
-function getCategoryStats(expenses) {
-    const stats = {};
-    expenses.forEach(e => {
-        const category = e.category;
-        if (!stats[category]) {
-            stats[category] = { category, count: 0, total: 0 };
-        }
-        stats[category].count++;
-        stats[category].total += e.amount;
-    });
-    
-    return Object.values(stats).sort((a, b) => b.total - a.total);
 }
 
 // 渲染分期还款页面
@@ -10664,9 +10717,9 @@ function renderYearlyGoal() {
                 rankColor = '#f093fb';
             }
 
-            // 使用正确的日目标计算逻辑
-            const goalInfo = DataManager.getAppDailyGoal(app.appId);
-            const dailyTarget = goalInfo.amount;
+            // 使用基础日目标（总日目标 ÷ 软件数量），确保每个软件的日目标相同
+            const dailyTargetInfo = DataManager.calculateYearlyDailyTarget();
+            const dailyTarget = dailyTargetInfo.isValid ? dailyTargetInfo.perAppDailyTarget : 0;
             const dailyStats = DataManager.calculateAppAchievementStats(app.appId);
             
             // 根据状态确定边框颜色
@@ -10900,131 +10953,87 @@ function loadYearlyGoalSettings() {
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
     if (autoDistributeCheckbox) autoDistributeCheckbox.checked = goal.autoDistribute;
     
-    // 更新年目标计算过程
-    updateYearlyGoalCalculation();
+
     
-    // 更新软件列表
-    updateAppList();
 }
 
-// 更新年目标计算过程
-function updateYearlyGoalCalculation() {
-    const container = document.getElementById('yearly-goal-calculation');
-    if (!container) return;
-    
-    const data = DataManager.loadData();
-    const allApps = data.phones.flatMap(phone => phone.apps);
-    const appCount = allApps.length;
-    
-    // 统计提现金额情况
-    const amountCounts = {};
-    let notSetCount = 0;
-    
-    allApps.forEach(app => {
-        if (app.minWithdraw === undefined || app.minWithdraw === null || app.minWithdraw <= 0) {
-            notSetCount++;
-            amountCounts['未设置'] = (amountCounts['未设置'] || 0) + 1;
-        } else {
-            const amount = app.minWithdraw;
-            amountCounts[amount] = (amountCounts[amount] || 0) + 1;
-        }
-    });
-    
-    // 计算实际的提现金额范围
-    const validWithdraws = allApps.filter(app => app.minWithdraw && app.minWithdraw > 0).map(app => app.minWithdraw);
-    const minWithdraw = validWithdraws.length > 0 ? Math.min(...validWithdraws) : 0;
-    const maxWithdraw = validWithdraws.length > 0 ? Math.max(...validWithdraws) : 0;
-    
-    // 计算年目标（使用系统实际的计算逻辑）
-    let totalYearlyGoal = 0;
-    const formulas = [];
-    
-    allApps.forEach((app, index) => {
-        let minWithdraw = app.minWithdraw || 0.3;
-        minWithdraw = Math.max(0.1, Math.min(10, minWithdraw));
-        const yearlyGoal = minWithdraw * 365;
-        totalYearlyGoal += yearlyGoal;
-        
-        formulas.push(`软件${index + 1}: ¥${minWithdraw.toFixed(2)} × 365天 = ¥${yearlyGoal.toFixed(2)}`);
-    });
-    
-    // 生成分布统计
-    const distribution = [];
-    for (const [amount, count] of Object.entries(amountCounts)) {
-        if (amount === '未设置') {
-            distribution.push(`${amount}: ${count}个`);
-        } else {
-            distribution.push(`¥${amount}: ${count}个`);
-        }
-    }
-    
-    let html = `
-        <div style="margin-bottom: 8px;">
-            <strong>软件数量:</strong> ${appCount}个
-        </div>
-        <div style="margin-bottom: 8px;">
-            <strong>未设置提现金额:</strong> ${notSetCount}个
-        </div>
-        <div style="margin-bottom: 8px;">
-            <strong>提现金额范围:</strong> ${validWithdraws.length > 0 ? `¥${minWithdraw.toFixed(2)} - ¥${maxWithdraw.toFixed(2)}` : '无'}
-        </div>
-        <div style="margin-bottom: 8px;">
-            <strong>提现金额分布:</strong> ${distribution.join(', ')}
-        </div>
-        <div style="margin-bottom: 8px;">
-            <strong>总年目标计算:</strong>
-            <div style="margin-top: 4px; padding: 8px; background: rgba(255, 255, 255, 0.6); border-radius: 6px; font-size: 12px;">
-                ${formulas.join('<br>')}
-                <br>总计: ${formulas.map(f => f.split(' = ')[1]).join(' + ')} = ¥${totalYearlyGoal.toFixed(2)}
-            </div>
-        </div>
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(59, 130, 246, 0.3);">
-            <strong>说明:</strong> 系统自动限制最小提现金额在0.1-10元之间，未设置的软件使用默认值0.3元。
-        </div>
-    `;
-    
-    container.innerHTML = html;
-}
 
-// 更新软件列表
-function updateAppList() {
-    const container = document.getElementById('app-list');
-    if (!container) return;
+
+// 显示年度目标历史
+function viewYearlyGoalHistory() {
+    const history = DataManager.getYearlyGoalHistory();
+    const currentYear = new Date().getFullYear();
     
-    const data = DataManager.loadData();
-    const allApps = data.phones.flatMap(phone => phone.apps.map(app => ({ ...app, phoneName: phone.name, phoneId: phone.id })));
-    
-    if (allApps.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">暂无软件数据</div>';
-        return;
+    // 为当前年份创建记录（如果不存在）
+    const currentYearRecord = history.find(item => item.year === currentYear);
+    if (!currentYearRecord) {
+        const goal = DataManager.getYearlyGoal();
+        const actualAmount = DataManager.getYearlyEarnings(currentYear);
+        DataManager.saveYearlyGoalHistory(currentYear, goal.amount, actualAmount);
     }
     
-    let html = `
-        <div style="max-height: 300px; overflow-y: auto;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; font-weight: 600; font-size: 12px; color: #166534;">
-                <div>软件名称</div>
-                <div>所属手机</div>
-                <div>最小提现</div>
-                <div>操作</div>
-            </div>
-    `;
+    // 重新获取更新后的历史
+    const updatedHistory = DataManager.getYearlyGoalHistory();
     
-    allApps.forEach((app, index) => {
-        const minWithdraw = app.minWithdraw || '未设置';
-        html += `
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; padding: 8px; border-bottom: 1px solid rgba(52, 211, 153, 0.2); align-items: center;">
-                <div style="font-size: 12px;">${app.name}</div>
-                <div style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</div>
-                <div style="font-size: 12px;">${minWithdraw === '未设置' ? '未设置' : `¥${minWithdraw}`}</div>
-                <div>
-                    <button class="btn btn-sm btn-primary" onclick="openEditAppModal('${app.phoneId}', '${app.id}')" style="font-size: 11px; padding: 4px 8px;">编辑</button>
+    let html = `
+        <div style="max-height: 60vh; overflow-y: auto;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary); text-align: center;">
+                📈 年度目标完成历史
+            </div>
+            
+            ${updatedHistory.length === 0 ? `
+                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                    暂无历史记录
                 </div>
-            </div>
-        `;
-    });
+            ` : `
+                <div style="space-y: 12px;">
+                    ${updatedHistory.map(item => {
+                        const isCurrentYear = item.year === currentYear;
+                        const isCompleted = item.completed;
+                        const progressBarWidth = Math.min(item.completionRate, 100);
+                        const progressColor = isCompleted ? '#22c55e' : '#f59e0b';
+                        
+                        return `
+                            <div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color); ${isCurrentYear ? 'border-left: 4px solid #3b82f6;' : ''}">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                    <div style="font-size: 16px; font-weight: 600; color: var(--text-primary);">
+                                        ${item.year}年 ${isCurrentYear ? '(当前年份)' : ''}
+                                    </div>
+                                    <div style="font-size: 14px; font-weight: 600; color: ${isCompleted ? '#22c55e' : '#f59e0b'};">
+                                        ${isCompleted ? '✅ 已完成' : '⏳ 进行中'}
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 8px; font-size: 13px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                        <span style="color: var(--text-secondary);">目标金额:</span>
+                                        <span style="font-weight: 600;">¥${item.goalAmount.toFixed(2)}</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                        <span style="color: var(--text-secondary);">实际金额:</span>
+                                        <span style="font-weight: 600;">¥${item.actualAmount.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 4px; font-size: 12px; display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">完成率:</span>
+                                    <span style="font-weight: 600;">${item.completionRate.toFixed(1)}%</span>
+                                </div>
+                                
+                                <div style="width: 100%; height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
+                                    <div style="width: ${progressBarWidth}%; height: 100%; background: ${progressColor}; border-radius: 4px; transition: width 0.5s ease;"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
+        </div>
+    `;
     
-    html += `</div>`;
-    container.innerHTML = html;
+    showModal('年度目标历史', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
 }
 
 // 显示每日目标缺口详情弹窗
