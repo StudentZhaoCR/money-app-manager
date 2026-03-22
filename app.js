@@ -8019,10 +8019,37 @@ function calculateInstallmentGoalsGlobal() {
     showToast('计算完成！');
 }
 
-// 生成备份码
+// 中文字符库（常用汉字，便于记忆和输入）
+const CHINESE_CHARS = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制改级地化把制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海权世等花口放究必群导条较克器志观指流北集劳境判吸修更需九您证清议今但林史称斤植般史优织谈音波亲选英近亮初仍毛球片科授梁援慢球惠伊吉敬维雷托靠震限伍超伦毕尚票渡宪择卡祖帮祝庄康供优课鸟喊降蛋察渐招吴刘赖抱轨瑞迅英拔何罗咨判德卢梅肯泰尔勒穆锡黎肯普曼迪布康罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪肯罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪肯罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪肯罗威麦维彼尔豪贾赖托恩尤伊科林卢布林厄尔梅迪';
+
+// 将二进制数据转换为中文
+function binaryToChinese(binary) {
+    let result = '';
+    for (let i = 0; i < binary.length; i += 10) { // 10位二进制对应一个汉字
+        const chunk = binary.substr(i, 10).padEnd(10, '0');
+        const index = parseInt(chunk, 2) % CHINESE_CHARS.length;
+        result += CHINESE_CHARS[index];
+    }
+    return result;
+}
+
+// 将中文转换为二进制
+function chineseToBinary(chinese) {
+    let result = '';
+    for (let char of chinese) {
+        const index = CHINESE_CHARS.indexOf(char);
+        if (index === -1) return null; // 无效字符
+        const binary = index.toString(2).padStart(10, '0');
+        result += binary;
+    }
+    return result;
+}
+
+// 生成中文备份码
 function generateBackupCode() {
     const data = DataManager.loadData();
     
+    // 简化数据结构
     const simplifiedData = {
         v: 3,
         p: data.phones.map(phone => ({
@@ -8031,283 +8058,207 @@ function generateBackupCode() {
                 n: app.name,
                 w: app.withdrawn || 0,
                 h: app.historicalWithdrawn || 0,
-                ws: app.withdrawals || [],
                 m: app.minWithdraw || 0,
                 b: app.balance || 0
             }))
         })),
         s: {
             ga: data.settings.yearlyGoalAmount || 0,
-            gy: data.settings.yearlyGoalYear || new Date().getFullYear(),
-            gad: data.settings.yearlyGoalAutoDistribute !== false,
-            gh: data.settings.yearlyGoalHistory || []
-        },
-        e: data.expenses || [],
-        i: data.installments || []
+            gy: data.settings.yearlyGoalYear || new Date().getFullYear()
+        }
     };
     
+    // 压缩数据
     const jsonStr = JSON.stringify(simplifiedData);
-    const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+    const compressed = LZString.compressToUint8Array(jsonStr);
     
-    // 生成二维码
-    const qrCodeId = 'backup-qr-code-' + Date.now();
+    // 转换为二进制字符串
+    let binaryStr = '';
+    for (let byte of compressed) {
+        binaryStr += byte.toString(2).padStart(8, '0');
+    }
     
-    showModal('备份码（请复制保存或扫描二维码）', `
+    // 转换为中文
+    const backupCode = binaryToChinese(binaryStr);
+    
+    showModal('备份码（请复制保存）', `
         <div class="form-group">
-            <textarea class="form-input" rows="6" readonly>${base64}</textarea>
+            <textarea class="form-input" rows="3" readonly>${backupCode}</textarea>
         </div>
-        <div class="form-hint">请将此代码复制保存，用于数据恢复</div>
-        
-        <div style="margin-top: 20px; text-align: center;">
-            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
-                📱 扫描二维码同步数据
-            </div>
-            <div id="${qrCodeId}" style="display: inline-block;"></div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-                使用其他设备的摄像头扫描此二维码
-            </div>
+        <div class="form-hint">请将此中文备份码复制保存，用于数据恢复</div>
+        <div class="form-hint" style="font-size: 12px; color: var(--text-secondary);">
+            💡 提示：中文备份码更易手动输入和记忆
         </div>
     `, [
         { 
             text: '复制', 
             class: 'btn-primary', 
             action: () => {
-                navigator.clipboard.writeText(base64).then(() => {
+                navigator.clipboard.writeText(backupCode).then(() => {
                     showToast('已复制到剪贴板');
                 });
             }
         },
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
-    
-    // 生成二维码
-    setTimeout(() => {
-        const qrCodeElement = document.getElementById(qrCodeId);
-        if (qrCodeElement) {
-            // 创建canvas元素
-            const canvas = document.createElement('canvas');
-            qrCodeElement.appendChild(canvas);
-            
-            QRCode.toCanvas(canvas, base64, {
-                width: 200,
-                margin: 2,
-                color: {
-                    dark: '#000000',
-                    light: '#ffffff'
-                }
-            }, function (error) {
-                if (error) {
-                    console.error('生成二维码失败:', error);
-                    qrCodeElement.innerHTML = '<div style="color: var(--text-secondary);">二维码生成失败</div>';
-                }
-            });
-        }
-    }, 100);
 }
 
-// 处理备份码
-function processBackupCode(code) {
-    try {
-        const jsonStr = decodeURIComponent(escape(atob(code)));
-        const data = JSON.parse(jsonStr);
-        
-        if (!data.v || !data.p || !Array.isArray(data.p)) {
-            showToast('备份码格式错误');
-            return;
-        }
-        
-        const restoredData = {
-            phones: data.p.map((phone, phoneIndex) => ({
-                id: Date.now().toString() + phoneIndex,
-                name: phone.n,
-                apps: phone.a.map((app, appIndex) => ({
-                    id: Date.now().toString() + phoneIndex + appIndex,
-                    name: app.n,
-                    withdrawn: app.w || 0,
-                    historicalWithdrawn: app.h || 0,
-                    withdrawals: app.ws || [],
-                    minWithdraw: app.m || 0,
-                    balance: app.b || 0,
-                    lastUpdated: new Date().toISOString()
-                }))
-            })),
-            expenses: data.e || [],
-            installments: data.i || [],
-            settings: {
-                yearlyGoalAmount: data.s?.ga || 0,
-                yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
-                yearlyGoalAutoDistribute: data.s?.gad !== false,
-                yearlyGoalHistory: data.s?.gh || []
-            }
-        };
-        
-        if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
-            DataManager.saveData(restoredData);
-            renderDashboard();
-            renderPhones();
-            renderStats();
-            renderSettings();
-            showToast('恢复成功！');
-        }
-    } catch (error) {
-        showToast('备份码无效');
-    }
-}
-
-// 扫描二维码恢复数据
-function scanQRCodeForRestore() {
-    // 检查浏览器是否支持摄像头
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showToast('浏览器不支持摄像头功能', 'error');
-        return;
-    }
-    
-    // 打开摄像头扫描
-    showModal('扫描二维码', `
-        <div style="text-align: center;">
-            <div style="font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">
-                📷 请将二维码对准摄像头
-            </div>
-            <video id="qr-video" style="width: 100%; max-width: 300px; border: 2px solid var(--border-color); border-radius: 8px;"></video>
-            <div id="qr-result" style="margin-top: 16px; font-size: 13px; color: var(--text-secondary);"></div>
-        </div>
-    `, [
-        { text: '取消', class: 'btn-secondary', action: closeModal }
-    ]);
-    
-    setTimeout(() => {
-        const video = document.getElementById('qr-video');
-        const resultDiv = document.getElementById('qr-result');
-        
-        if (!video) return;
-        
-        // 获取摄像头权限
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-            .then(stream => {
-                video.srcObject = stream;
-                video.play();
-                
-                // 开始扫描
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                function scan() {
-                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height);
-                        
-                        if (code) {
-                            // 扫描成功
-                            const backupCode = code.data;
-                            resultDiv.textContent = '扫描成功！正在恢复数据...';
-                            resultDiv.style.color = '#22c55e';
-                            
-                            // 停止摄像头
-                            stream.getTracks().forEach(track => track.stop());
-                            
-                            // 关闭当前模态框
-                            closeModal();
-                            
-                            // 处理备份码
-                            processBackupCode(backupCode);
-                        } else {
-                            resultDiv.textContent = '正在扫描...请将二维码对准摄像头';
-                            resultDiv.style.color = 'var(--text-secondary)';
-                            requestAnimationFrame(scan);
-                        }
-                    } else {
-                        requestAnimationFrame(scan);
-                    }
-                }
-                
-                scan();
-            })
-            .catch(err => {
-                console.error('无法访问摄像头:', err);
-                resultDiv.textContent = '无法访问摄像头，请手动输入备份码';
-                resultDiv.style.color = '#ef4444';
-            });
-    }, 100);
-}
-
-// 从备份码恢复
-function restoreFromCode() {
+// 从备份码恢复数据
+function restoreFromBackupCode() {
     showModal('恢复数据', `
         <div class="form-group">
-            <label class="form-label">备份码</label>
-            <textarea id="restore-code" class="form-input" rows="6" placeholder="粘贴备份码"></textarea>
+            <label class="form-label">请输入中文备份码</label>
+            <textarea class="form-input" rows="3" id="backup-code-input" placeholder="粘贴中文备份码"></textarea>
         </div>
-        <div class="form-hint">恢复数据将覆盖当前所有数据</div>
-        
-        <div style="margin-top: 20px; text-align: center;">
-            <button id="scan-qr-code-btn" class="btn btn-secondary" style="width: 100%; padding: 10px;">
-                📷 扫描二维码恢复
-            </button>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-                使用摄像头扫描其他设备生成的二维码
-            </div>
+        <div class="form-hint" style="font-size: 12px; color: var(--text-secondary);">
+            💡 提示：中文备份码更易手动输入和记忆
         </div>
     `, [
-        { text: '取消', class: 'btn-secondary', action: closeModal },
         { 
             text: '恢复', 
             class: 'btn-primary', 
             action: () => {
-                const code = document.getElementById('restore-code').value.replace(/\s/g, '');
-                
-                try {
-                    const jsonStr = decodeURIComponent(escape(atob(code)));
-                    const data = JSON.parse(jsonStr);
-                    
-                    if (!data.v || !data.p || !Array.isArray(data.p)) {
-                        showToast('备份码格式错误');
-                        return;
-                    }
-                    
-                    const restoredData = {
-                        phones: data.p.map((phone, phoneIndex) => ({
-                            id: Date.now().toString() + phoneIndex,
-                            name: phone.n,
-                            apps: phone.a.map((app, appIndex) => ({
-                                id: Date.now().toString() + phoneIndex + appIndex,
-                                name: app.n,
-                                withdrawn: app.w || 0,
-                                historicalWithdrawn: app.h || 0,
-                                withdrawals: app.ws || [],
-                                lastUpdated: new Date().toISOString()
-                            }))
-                        })),
-                        settings: {}
-                    };
-                    
-                    if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
-                        DataManager.saveData(restoredData);
-                        renderDashboard();
-                        renderPhones();
-                        renderStats();
-                        renderSettings();
-                        showToast('恢复成功！');
-                    }
-                } catch (error) {
-                    showToast('备份码无效');
+                const backupCode = document.getElementById('backup-code-input').value.trim();
+                if (!backupCode) {
+                    showToast('请输入备份码');
+                    return;
                 }
+                processBackupCode(backupCode);
                 closeModal();
             }
-        }
+        },
+        { text: '取消', class: 'btn-secondary', action: closeModal }
     ]);
-    
-    // 添加扫描二维码按钮点击事件
-    setTimeout(() => {
-        const scanBtn = document.getElementById('scan-qr-code-btn');
-        if (scanBtn) {
-            scanBtn.addEventListener('click', scanQRCodeForRestore);
-        }
-    }, 100);
 }
+
+// 处理中文备份码
+function processBackupCode(code) {
+    try {
+        // 检查是否为中文备份码
+        if (/[\u4e00-\u9fa5]/.test(code)) {
+            // 中文备份码处理
+            const binaryStr = chineseToBinary(code);
+            if (!binaryStr) {
+                throw new Error('无效的中文字符');
+            }
+            
+            // 转换为Uint8Array
+            const compressed = [];
+            for (let i = 0; i < binaryStr.length; i += 8) {
+                const byte = binaryStr.substr(i, 8);
+                if (byte.length === 8) {
+                    compressed.push(parseInt(byte, 2));
+                }
+            }
+            
+            // 解压缩数据
+            const jsonStr = LZString.decompressFromUint8Array(new Uint8Array(compressed));
+            if (!jsonStr) {
+                throw new Error('解压失败');
+            }
+            
+            const data = JSON.parse(jsonStr);
+            
+            if (!data.v || !data.p || !Array.isArray(data.p)) {
+                showToast('备份码格式错误');
+                return;
+            }
+            
+            const restoredData = {
+                phones: data.p.map((phone, phoneIndex) => ({
+                    id: Date.now().toString() + phoneIndex,
+                    name: phone.n,
+                    apps: phone.a.map((app, appIndex) => ({
+                        id: Date.now().toString() + phoneIndex + appIndex,
+                        name: app.n,
+                        withdrawn: app.w || 0,
+                        historicalWithdrawn: app.h || 0,
+                        minWithdraw: app.m || 0,
+                        balance: app.b || 0,
+                        lastUpdated: new Date().toISOString()
+                    }))
+                })),
+                expenses: [],
+                installments: [],
+                settings: {
+                    yearlyGoalAmount: data.s?.ga || 0,
+                    yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
+                    yearlyGoalAutoDistribute: true,
+                    yearlyGoalHistory: []
+                }
+            };
+            
+            if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
+                DataManager.saveData(restoredData);
+                renderDashboard();
+                renderPhones();
+                renderStats();
+                renderSettings();
+                showToast('恢复成功！');
+            }
+        } else {
+            // 兼容旧的Base64备份码
+            // 还原备份码格式
+            let processedCode = code.replace(/-/g, '+').replace(/_/g, '/');
+            while (processedCode.length % 4) {
+                processedCode += '=';
+            }
+            
+            // 解压缩数据
+            const jsonStr = LZString.decompressFromBase64(processedCode);
+            if (!jsonStr) {
+                throw new Error('解压失败');
+            }
+            
+            const data = JSON.parse(jsonStr);
+            
+            if (!data.v || !data.p || !Array.isArray(data.p)) {
+                showToast('备份码格式错误');
+                return;
+            }
+            
+            const restoredData = {
+                phones: data.p.map((phone, phoneIndex) => ({
+                    id: Date.now().toString() + phoneIndex,
+                    name: phone.n,
+                    apps: phone.a.map((app, appIndex) => ({
+                        id: Date.now().toString() + phoneIndex + appIndex,
+                        name: app.n,
+                        withdrawn: app.w || 0,
+                        historicalWithdrawn: app.h || 0,
+                        minWithdraw: app.m || 0,
+                        balance: app.b || 0,
+                        lastUpdated: new Date().toISOString()
+                    }))
+                })),
+                expenses: [],
+                installments: [],
+                settings: {
+                    yearlyGoalAmount: data.s?.ga || 0,
+                    yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
+                    yearlyGoalAutoDistribute: true,
+                    yearlyGoalHistory: []
+                }
+            };
+            
+            if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
+                DataManager.saveData(restoredData);
+                renderDashboard();
+                renderPhones();
+                renderStats();
+                renderSettings();
+                showToast('恢复成功！');
+            }
+        }
+    } catch (error) {
+        console.error('恢复数据失败:', error);
+        showToast('备份码无效或已损坏');
+    }
+}
+
+
+
+
 
 // 清空所有数据
 function clearAllData() {

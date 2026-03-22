@@ -290,10 +290,10 @@
                     <div class="section-title">数据同步</div>
                     <div class="section-divider"></div>
                 </div>
-                <div class="form-hint mb-4">通过二维码在电脑和手机之间同步数据</div>
+                <div class="form-hint mb-4">通过备份码在设备之间同步数据</div>
                 <div class="flex flex-col gap-4">
                     <button class="btn btn-primary" onclick="generateBackupCode()">📤 生成备份码</button>
-                    <button class="btn btn-secondary" id="scan-qr-code-btn">📷 扫描恢复</button>
+                    <button class="btn btn-secondary" onclick="restoreFromBackupCode()">🔄 恢复数据</button>
                     <div class="form-hint" style="font-size: 12px; text-align: center;">
                         注意：备份码包含所有软件数据，请妥善保管
                     </div>
@@ -606,8 +606,7 @@
     <!-- 提示消息 -->
     <div class="toast" id="toast" style="display: none;"></div>
 
-    <script src="./qrcode.min.js"></script>
-    <script src="./jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <script src="app.js"></script>
     <script src="cross_phone_draw.js"></script>
     <script src="app_functions.js"></script>
