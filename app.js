@@ -8070,16 +8070,10 @@ function generateBackupCode() {
     
     // 压缩数据
     const jsonStr = JSON.stringify(simplifiedData);
-    const compressed = LZString.compressToUint8Array(jsonStr);
-    
-    // 转换为二进制字符串
-    let binaryStr = '';
-    for (let byte of compressed) {
-        binaryStr += byte.toString(2).padStart(8, '0');
-    }
+    const compressed = LZString.compressToBase64(jsonStr);
     
     // 转换为中文
-    const backupCode = binaryToChinese(binaryStr);
+    const backupCode = base64ToChinese(compressed);
     
     showModal('备份码（请复制保存）', `
         <div class="form-group">
@@ -8101,6 +8095,67 @@ function generateBackupCode() {
         },
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
+}
+
+// Base64转中文
+function base64ToChinese(base64) {
+    // Base64字符集
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let result = '';
+    
+    // 将Base64转换为索引
+    for (let i = 0; i < base64.length; i++) {
+        const index = base64Chars.indexOf(base64[i]);
+        if (index !== -1) {
+            // 每3个Base64字符对应2个汉字
+            if (i % 3 === 0 && i + 2 < base64.length) {
+                const idx1 = base64Chars.indexOf(base64[i]);
+                const idx2 = base64Chars.indexOf(base64[i+1]);
+                const idx3 = base64Chars.indexOf(base64[i+2]);
+                
+                // 计算两个汉字的索引
+                const char1Index = (idx1 * 64 + idx2) % CHINESE_CHARS.length;
+                const char2Index = (idx2 * 64 + idx3) % CHINESE_CHARS.length;
+                
+                result += CHINESE_CHARS[char1Index] + CHINESE_CHARS[char2Index];
+            }
+        }
+    }
+    
+    return result;
+}
+
+// 中文转Base64
+function chineseToBase64(chinese) {
+    // Base64字符集
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let result = '';
+    
+    // 将中文转换为Base64
+    for (let i = 0; i < chinese.length; i += 2) {
+        const char1 = chinese[i];
+        const char2 = chinese[i+1] || chinese[i];
+        
+        const idx1 = CHINESE_CHARS.indexOf(char1);
+        const idx2 = CHINESE_CHARS.indexOf(char2);
+        
+        if (idx1 !== -1 && idx2 !== -1) {
+            // 计算Base64索引
+            const b1 = Math.floor(idx1 / 64);
+            const b2 = idx1 % 64;
+            const b3 = Math.floor(idx2 / 64);
+            const b4 = idx2 % 64;
+            
+            result += base64Chars[b1] + base64Chars[b2] + base64Chars[b3] + base64Chars[b4];
+        }
+    }
+    
+    // 补充padding
+    while (result.length % 4) {
+        result += '=';
+    }
+    
+    return result;
 }
 
 // 从备份码恢复数据
@@ -8137,22 +8192,13 @@ function processBackupCode(code) {
         // 检查是否为中文备份码
         if (/[\u4e00-\u9fa5]/.test(code)) {
             // 中文备份码处理
-            const binaryStr = chineseToBinary(code);
-            if (!binaryStr) {
+            const base64 = chineseToBase64(code);
+            if (!base64) {
                 throw new Error('无效的中文字符');
             }
             
-            // 转换为Uint8Array
-            const compressed = [];
-            for (let i = 0; i < binaryStr.length; i += 8) {
-                const byte = binaryStr.substr(i, 8);
-                if (byte.length === 8) {
-                    compressed.push(parseInt(byte, 2));
-                }
-            }
-            
             // 解压缩数据
-            const jsonStr = LZString.decompressFromUint8Array(new Uint8Array(compressed));
+            const jsonStr = LZString.decompressFromBase64(base64);
             if (!jsonStr) {
                 throw new Error('解压失败');
             }
