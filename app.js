@@ -8044,10 +8044,9 @@ function generateBackupCode() {
     
     // 压缩数据
     const jsonStr = JSON.stringify(simplifiedData);
-    const compressed = simpleCompress(jsonStr);
     
-    // 生成中文备份码（使用拼音首字母 + 数字）
-    const backupCode = generateReadableBackupCode(compressed);
+    // 生成易读的备份码
+    const backupCode = generateReadableBackupCode(jsonStr);
     
     showModal('备份码（请复制保存）', `
         <div class="form-group">
@@ -8093,24 +8092,16 @@ function simpleDecompress(compressed) {
     }
 }
 
-// 生成易读的备份码（拼音首字母 + 数字）
-function generateReadableBackupCode(base64) {
-    // 拼音首字母字符集
-    const pinyinChars = 'ABCDEFGHJKLMNPQRSTWXYZ'; // 去掉容易混淆的字母
-    const numbers = '0123456789';
+// 生成易读的备份码
+function generateReadableBackupCode(data) {
+    // 字符集：去掉容易混淆的字符
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ234567';
     let result = '';
     
-    // 每3个Base64字符生成2个备份码字符
-    for (let i = 0; i < base64.length; i += 3) {
-        const chunk = base64.substr(i, 3).padEnd(3, 'A');
-        const hash = chunk.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-        
-        // 生成拼音首字母
-        const pinyinIndex = hash % pinyinChars.length;
-        // 生成数字
-        const numberIndex = (hash >> 4) % numbers.length;
-        
-        result += pinyinChars[pinyinIndex] + numbers[numberIndex];
+    // 对数据进行简单编码
+    for (let i = 0; i < data.length; i++) {
+        const charCode = data.charCodeAt(i);
+        result += chars[charCode % chars.length];
     }
     
     return result;
@@ -8118,29 +8109,18 @@ function generateReadableBackupCode(base64) {
 
 // 解析易读的备份码
 function parseReadableBackupCode(backupCode) {
-    // 拼音首字母字符集
-    const pinyinChars = 'ABCDEFGHJKLMNPQRSTWXYZ';
-    const numbers = '0123456789';
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    // 字符集：与生成时使用的相同
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ234567';
     let result = '';
     
-    // 每2个备份码字符生成3个Base64字符
-    for (let i = 0; i < backupCode.length; i += 2) {
-        const char1 = backupCode[i];
-        const char2 = backupCode[i+1] || '0';
-        
-        const pinyinIndex = pinyinChars.indexOf(char1);
-        const numberIndex = numbers.indexOf(char2);
-        
-        if (pinyinIndex === -1 || numberIndex === -1) continue;
-        
-        // 计算Base64索引
-        const hash = pinyinIndex + (numberIndex << 4);
-        const b1 = base64Chars[hash % 64];
-        const b2 = base64Chars[(hash >> 6) % 64];
-        const b3 = base64Chars[(hash >> 12) % 64];
-        
-        result += b1 + b2 + b3;
+    // 对备份码进行解码
+    for (let i = 0; i < backupCode.length; i++) {
+        const char = backupCode[i];
+        const index = chars.indexOf(char);
+        if (index !== -1) {
+            // 将索引转换回字符
+            result += String.fromCharCode(index);
+        }
     }
     
     return result;
@@ -8177,32 +8157,23 @@ function restoreFromBackupCode() {
 // 处理备份码
 function processBackupCode(code) {
     try {
-        let base64;
+        let jsonStr;
         
         // 检查是否为易读备份码（字母+数字）
-        if (/^[A-Z0-9]+$/.test(code)) {
+        if (/^[A-Z2-7]+$/.test(code)) {
             // 解析易读备份码
-            base64 = parseReadableBackupCode(code);
+            jsonStr = parseReadableBackupCode(code);
         } else if (/[\u4e00-\u9fa5]/.test(code)) {
             // 兼容旧的中文备份码
             showToast('请使用新格式的备份码', 'warning');
             return;
         } else {
-            // 兼容旧的Base64备份码
-            base64 = code.replace(/-/g, '+').replace(/_/g, '/');
-            while (base64.length % 4) {
-                base64 += '=';
-            }
+            // 直接使用原始代码
+            jsonStr = code;
         }
         
-        if (!base64) {
-            throw new Error('无效的备份码');
-        }
-        
-        // 解压缩数据
-        const jsonStr = simpleDecompress(base64);
         if (!jsonStr) {
-            throw new Error('解压失败');
+            throw new Error('无效的备份码');
         }
         
         const data = JSON.parse(jsonStr);
