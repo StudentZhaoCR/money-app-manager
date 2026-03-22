@@ -8044,7 +8044,7 @@ function generateBackupCode() {
     
     // 压缩数据
     const jsonStr = JSON.stringify(simplifiedData);
-    const compressed = LZString.compressToBase64(jsonStr);
+    const compressed = simpleCompress(jsonStr);
     
     // 生成中文备份码（使用拼音首字母 + 数字）
     const backupCode = generateReadableBackupCode(compressed);
@@ -8069,6 +8069,28 @@ function generateBackupCode() {
         },
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
+}
+
+// 简单的字符串压缩函数
+function simpleCompress(str) {
+    try {
+        // 使用JSON.stringify和Base64编码
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        console.error('压缩失败:', e);
+        return btoa(str);
+    }
+}
+
+// 简单的字符串解压函数
+function simpleDecompress(compressed) {
+    try {
+        // 使用Base64解码和JSON.parse
+        return decodeURIComponent(escape(atob(compressed)));
+    } catch (e) {
+        console.error('解压失败:', e);
+        return atob(compressed);
+    }
 }
 
 // 生成易读的备份码（拼音首字母 + 数字）
@@ -8178,7 +8200,7 @@ function processBackupCode(code) {
         }
         
         // 解压缩数据
-        const jsonStr = LZString.decompressFromBase64(base64);
+        const jsonStr = simpleDecompress(base64);
         if (!jsonStr) {
             throw new Error('解压失败');
         }
