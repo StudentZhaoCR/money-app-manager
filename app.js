@@ -8024,27 +8024,49 @@ function generateBackupCode() {
     const data = DataManager.loadData();
     
     const simplifiedData = {
-        v: 2,
+        v: 3,
         p: data.phones.map(phone => ({
             n: phone.name,
             a: phone.apps.map(app => ({
                 n: app.name,
                 w: app.withdrawn || 0,
                 h: app.historicalWithdrawn || 0,
-                ws: app.withdrawals || []
+                ws: app.withdrawals || [],
+                m: app.minWithdraw || 0,
+                b: app.balance || 0
             }))
         })),
-        s: {}
+        s: {
+            ga: data.settings.yearlyGoalAmount || 0,
+            gy: data.settings.yearlyGoalYear || new Date().getFullYear(),
+            gad: data.settings.yearlyGoalAutoDistribute !== false,
+            gh: data.settings.yearlyGoalHistory || []
+        },
+        e: data.expenses || [],
+        i: data.installments || []
     };
     
     const jsonStr = JSON.stringify(simplifiedData);
     const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
     
-    showModal('备份码（请复制保存）', `
+    // 生成二维码
+    const qrCodeId = 'backup-qr-code-' + Date.now();
+    
+    showModal('备份码（请复制保存或扫描二维码）', `
         <div class="form-group">
             <textarea class="form-input" rows="6" readonly>${base64}</textarea>
         </div>
         <div class="form-hint">请将此代码复制保存，用于数据恢复</div>
+        
+        <div style="margin-top: 20px; text-align: center;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
+                📱 扫描二维码同步数据
+            </div>
+            <div id="${qrCodeId}" style="display: inline-block;"></div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                使用其他设备的摄像头扫描此二维码
+            </div>
+        </div>
     `, [
         { 
             text: '复制', 
@@ -8057,6 +8079,159 @@ function generateBackupCode() {
         },
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
+    
+    // 生成二维码
+    setTimeout(() => {
+        const qrCodeElement = document.getElementById(qrCodeId);
+        if (qrCodeElement) {
+            // 创建canvas元素
+            const canvas = document.createElement('canvas');
+            qrCodeElement.appendChild(canvas);
+            
+            QRCode.toCanvas(canvas, base64, {
+                width: 200,
+                margin: 2,
+                color: {
+                    dark: '#000000',
+                    light: '#ffffff'
+                }
+            }, function (error) {
+                if (error) {
+                    console.error('生成二维码失败:', error);
+                    qrCodeElement.innerHTML = '<div style="color: var(--text-secondary);">二维码生成失败</div>';
+                }
+            });
+        }
+    }, 100);
+}
+
+// 处理备份码
+function processBackupCode(code) {
+    try {
+        const jsonStr = decodeURIComponent(escape(atob(code)));
+        const data = JSON.parse(jsonStr);
+        
+        if (!data.v || !data.p || !Array.isArray(data.p)) {
+            showToast('备份码格式错误');
+            return;
+        }
+        
+        const restoredData = {
+            phones: data.p.map((phone, phoneIndex) => ({
+                id: Date.now().toString() + phoneIndex,
+                name: phone.n,
+                apps: phone.a.map((app, appIndex) => ({
+                    id: Date.now().toString() + phoneIndex + appIndex,
+                    name: app.n,
+                    withdrawn: app.w || 0,
+                    historicalWithdrawn: app.h || 0,
+                    withdrawals: app.ws || [],
+                    minWithdraw: app.m || 0,
+                    balance: app.b || 0,
+                    lastUpdated: new Date().toISOString()
+                }))
+            })),
+            expenses: data.e || [],
+            installments: data.i || [],
+            settings: {
+                yearlyGoalAmount: data.s?.ga || 0,
+                yearlyGoalYear: data.s?.gy || new Date().getFullYear(),
+                yearlyGoalAutoDistribute: data.s?.gad !== false,
+                yearlyGoalHistory: data.s?.gh || []
+            }
+        };
+        
+        if (confirm(`将恢复 ${restoredData.phones.length} 部手机的数据，是否继续？`)) {
+            DataManager.saveData(restoredData);
+            renderDashboard();
+            renderPhones();
+            renderStats();
+            renderSettings();
+            showToast('恢复成功！');
+        }
+    } catch (error) {
+        showToast('备份码无效');
+    }
+}
+
+// 扫描二维码恢复数据
+function scanQRCodeForRestore() {
+    // 检查浏览器是否支持摄像头
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('浏览器不支持摄像头功能', 'error');
+        return;
+    }
+    
+    // 打开摄像头扫描
+    showModal('扫描二维码', `
+        <div style="text-align: center;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">
+                📷 请将二维码对准摄像头
+            </div>
+            <video id="qr-video" style="width: 100%; max-width: 300px; border: 2px solid var(--border-color); border-radius: 8px;"></video>
+            <div id="qr-result" style="margin-top: 16px; font-size: 13px; color: var(--text-secondary);"></div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal }
+    ]);
+    
+    setTimeout(() => {
+        const video = document.getElementById('qr-video');
+        const resultDiv = document.getElementById('qr-result');
+        
+        if (!video) return;
+        
+        // 获取摄像头权限
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+            .then(stream => {
+                video.srcObject = stream;
+                video.play();
+                
+                // 开始扫描
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                function scan() {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+                        
+                        if (code) {
+                            // 扫描成功
+                            const backupCode = code.data;
+                            resultDiv.textContent = '扫描成功！正在恢复数据...';
+                            resultDiv.style.color = '#22c55e';
+                            
+                            // 停止摄像头
+                            stream.getTracks().forEach(track => track.stop());
+                            
+                            // 关闭当前模态框
+                            closeModal();
+                            
+                            // 处理备份码
+                            processBackupCode(backupCode);
+                        } else {
+                            resultDiv.textContent = '正在扫描...请将二维码对准摄像头';
+                            resultDiv.style.color = 'var(--text-secondary)';
+                            requestAnimationFrame(scan);
+                        }
+                    } else {
+                        requestAnimationFrame(scan);
+                    }
+                }
+                
+                scan();
+            })
+            .catch(err => {
+                console.error('无法访问摄像头:', err);
+                resultDiv.textContent = '无法访问摄像头，请手动输入备份码';
+                resultDiv.style.color = '#ef4444';
+            });
+    }, 100);
 }
 
 // 从备份码恢复
@@ -8067,6 +8242,15 @@ function restoreFromCode() {
             <textarea id="restore-code" class="form-input" rows="6" placeholder="粘贴备份码"></textarea>
         </div>
         <div class="form-hint">恢复数据将覆盖当前所有数据</div>
+        
+        <div style="margin-top: 20px; text-align: center;">
+            <button id="scan-qr-code-btn" class="btn btn-secondary" style="width: 100%; padding: 10px;">
+                📷 扫描二维码恢复
+            </button>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                使用摄像头扫描其他设备生成的二维码
+            </div>
+        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
         { 
@@ -8115,6 +8299,14 @@ function restoreFromCode() {
             }
         }
     ]);
+    
+    // 添加扫描二维码按钮点击事件
+    setTimeout(() => {
+        const scanBtn = document.getElementById('scan-qr-code-btn');
+        if (scanBtn) {
+            scanBtn.addEventListener('click', scanQRCodeForRestore);
+        }
+    }, 100);
 }
 
 // 清空所有数据
@@ -11719,6 +11911,15 @@ document.addEventListener('DOMContentLoaded', function() {
     initCalendars();
     restoreGameTimer(); // 恢复计时器状态
     loadYearlyGoalSettings(); // 加载年度目标设置
+    
+    // 添加导航栏点击事件监听器
+    const tabItems = document.querySelectorAll('.tab-item');
+    tabItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const pageName = this.dataset.page;
+            showPage(pageName);
+        });
+    });
     
     // 滚动性能优化
     initScrollOptimization();
