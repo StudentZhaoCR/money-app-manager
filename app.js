@@ -8152,8 +8152,21 @@ function restoreFromBackupCode() {
 // 处理备份码
 function processBackupCode(code) {
     try {
-        // 解码Base64
-        const jsonStr = decodeURIComponent(escape(atob(code)));
+        // 解码Base64（处理UTF-8字符）
+        let jsonStr;
+        try {
+            // 方法1：使用decodeURIComponent和escape
+            jsonStr = decodeURIComponent(escape(atob(code)));
+        } catch (e1) {
+            try {
+                // 方法2：直接使用atob
+                jsonStr = atob(code);
+            } catch (e2) {
+                throw new Error('解码失败');
+            }
+        }
+        
+        console.log('解码后的字符串:', jsonStr);
         
         // 解析JSON
         const data = JSON.parse(jsonStr);
