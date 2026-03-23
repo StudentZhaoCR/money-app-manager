@@ -7056,13 +7056,13 @@ function openEditAppModal(phoneId, appId) {
                             historicalWithdrawn
                         });
                         
-                        // 只显示编辑成功的提示
-                        showToast('软件编辑成功！', 'success');
-                        // 延迟渲染和关闭模态框，确保提示信息能够完全显示
+                        // 先关闭模态框，然后显示提示
+                        closeModal();
+                        renderPhones();
+                        // 延迟显示提示，确保防重复机制生效
                         setTimeout(() => {
-                            renderPhones();
-                            closeModal();
-                        }, 1000);
+                            showToast('软件编辑成功！', 'success');
+                        }, 100);
                     } catch (error) {
                         console.error('编辑软件失败:', error);
                         showToast('编辑失败，请重试', 'error');
