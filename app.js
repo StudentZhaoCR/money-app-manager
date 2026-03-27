@@ -2837,6 +2837,9 @@ class DataManager {
                 // 记录余额变化（只记录增加的情况，提现不算）
                 let todayTotalEarnings = 0;
                 if (newBalance > oldBalance) {
+                    // 检查是否是第一次添加软件且有余额（没有历史记录且余额大于0）
+                    const isFirstAddWithBalance = !app.balanceHistory || app.balanceHistory.length === 0 && oldBalance === 0 && newBalance > 0;
+                    
                     if (!app.balanceHistory) {
                         app.balanceHistory = [];
                     }
@@ -2845,7 +2848,7 @@ class DataManager {
                     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                     const change = newBalance - oldBalance;
                     
-                    console.log('记录余额变化:', { oldBalance, newBalance, change, today });
+                    console.log('记录余额变化:', { oldBalance, newBalance, change, today, isFirstAddWithBalance });
                     
                     // 检查今天是否已有记录
                     const todayRecord = app.balanceHistory.find(h => h.date === today);
@@ -2859,45 +2862,50 @@ class DataManager {
                             date: today,
                             balance: newBalance,
                             change: change,
-                            note: '手动编辑'
+                            note: isFirstAddWithBalance ? '初始余额' : '手动编辑'
                         });
                     }
                     
-                    // 更新每日收益统计
-                    if (!app.dailyEarnings) {
-                        app.dailyEarnings = {};
-                    }
-                    app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
-                    todayTotalEarnings = app.dailyEarnings[today];
-                    
-                    console.log('更新 dailyEarnings:', app.dailyEarnings);
-                    
-                    // 计算今日所有软件的总收益
-                    let allAppsTodayEarnings = 0;
-                    data.phones.forEach(p => {
-                        p.apps.forEach(a => {
-                            if (a.dailyEarnings && a.dailyEarnings[today]) {
-                                allAppsTodayEarnings += a.dailyEarnings[today];
-                            }
-                        });
-                    });
-                    
-                    // 检查是否达到日目标（基于总收益）
-                    // 使用与首页相同的目标计算逻辑：年度目标金额 ÷ 剩余天数
-                    const yearlyDailyTarget = this.calculateYearlyDailyTarget();
-                    const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
-                    
-                    console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTargetAmount });
-                    
-                    // 不设置标记，避免重复显示提示
-                    console.log('今日总收益:', allAppsTodayEarnings);
-                    if (dailyTargetAmount > 0) {
-                        console.log('日目标:', dailyTargetAmount);
-                        if (allAppsTodayEarnings >= dailyTargetAmount) {
-                            console.log('达到日目标！');
-                        } else {
-                            console.log('未达到日目标');
+                    // 只有当不是第一次添加且有余额时，才更新每日收益统计
+                    if (!isFirstAddWithBalance) {
+                        // 更新每日收益统计
+                        if (!app.dailyEarnings) {
+                            app.dailyEarnings = {};
                         }
+                        app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
+                        todayTotalEarnings = app.dailyEarnings[today];
+                        
+                        console.log('更新 dailyEarnings:', app.dailyEarnings);
+                        
+                        // 计算今日所有软件的总收益
+                        let allAppsTodayEarnings = 0;
+                        data.phones.forEach(p => {
+                            p.apps.forEach(a => {
+                                if (a.dailyEarnings && a.dailyEarnings[today]) {
+                                    allAppsTodayEarnings += a.dailyEarnings[today];
+                                }
+                            });
+                        });
+                        
+                        // 检查是否达到日目标（基于总收益）
+                        // 使用与首页相同的目标计算逻辑：年度目标金额 ÷ 剩余天数
+                        const yearlyDailyTarget = this.calculateYearlyDailyTarget();
+                        const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
+                        
+                        console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTargetAmount });
+                        
+                        // 不设置标记，避免重复显示提示
+                        console.log('今日总收益:', allAppsTodayEarnings);
+                        if (dailyTargetAmount > 0) {
+                            console.log('日目标:', dailyTargetAmount);
+                            if (allAppsTodayEarnings >= dailyTargetAmount) {
+                                console.log('达到日目标！');
+                            } else {
+                                console.log('未达到日目标');
+                            }
+                        }
+                    } else {
+                        console.log('首次添加软件且有余额，不计入当日收益');
                     }
                 } else {
                     console.log('余额未增加，不记录:', { oldBalance, newBalance });
