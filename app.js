@@ -7239,6 +7239,161 @@ function deleteApp(phoneId, appId) {
     }
 }
 
+// 快速编辑功能 - 第一步：选择软件（去重显示）
+function openQuickEditModal() {
+    const data = DataManager.loadData();
+    
+    // 获取所有软件并去重（按软件名称）
+    const appNameMap = new Map();
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (!appNameMap.has(app.name)) {
+                appNameMap.set(app.name, []);
+            }
+            appNameMap.get(app.name).push({
+                phoneId: phone.id,
+                phoneName: phone.name,
+                appId: app.id,
+                app: app
+            });
+        });
+    });
+    
+    // 如果没有软件，提示用户
+    if (appNameMap.size === 0) {
+        showToast('暂无软件可编辑');
+        return;
+    }
+    
+    // 生成软件列表HTML - 使用data属性存储appName，避免引号问题
+    const appListHtml = Array.from(appNameMap.keys()).map((appName, index) => {
+        const appInstances = appNameMap.get(appName);
+        // 对appName进行HTML转义，避免显示问题
+        const htmlEscapedAppName = appName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `
+            <div class="app-select-item" data-app-name="${htmlEscapedAppName}" data-app-index="${index}" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;" 
+                 onmouseover="this.style.borderColor='var(--primary-color)'; this.style.background='var(--bg-cream)'" 
+                 onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='transparent'">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 600;">${htmlEscapedAppName}</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">${appInstances.length}台手机</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // 保存appNameMap到全局变量，供后续使用
+    window.quickEditAppMap = appNameMap;
+    window.quickEditAppNames = Array.from(appNameMap.keys());
+    
+    showModal('快速编辑 - 选择软件', `
+        <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
+            选择要编辑的软件（同名软件合并显示）
+        </div>
+        <div id="quick-edit-app-list" style="max-height: 50vh; overflow-y: auto;">
+            ${appListHtml}
+        </div>
+    `, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ], true);
+    
+    // 绑定点击事件（使用事件委托，避免内联onclick的引号问题）
+    setTimeout(() => {
+        const appList = document.getElementById('quick-edit-app-list');
+        if (appList) {
+            appList.querySelectorAll('.app-select-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-app-index'));
+                    const appName = window.quickEditAppNames[index];
+                    selectAppForEdit(appName);
+                });
+            });
+        }
+    }, 100);
+}
+
+// 快速编辑功能 - 第二步：选择手机
+function selectAppForEdit(appName) {
+    // 先关闭当前模态框
+    closeModal();
+    
+    // 延迟执行，确保closeModal完成
+    setTimeout(() => {
+        const appInstances = window.quickEditAppMap.get(appName);
+        
+        if (!appInstances) {
+            showToast('未找到该软件信息', 'error');
+            return;
+        }
+        
+        // 保存当前选择的软件实例列表
+        window.quickEditCurrentAppInstances = appInstances;
+        
+        // 生成手机列表HTML - 使用data属性存储ID，避免引号问题
+        const phoneListHtml = appInstances.map((instance, index) => {
+            const balance = instance.app.balance || 0;
+            const totalWithdrawn = (instance.app.withdrawn || 0) + (instance.app.historicalWithdrawn || 0);
+            // 对phoneName进行HTML转义
+            const htmlEscapedPhoneName = instance.phoneName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `
+                <div class="phone-select-item" data-phone-index="${index}" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;" 
+                     onmouseover="this.style.borderColor='var(--primary-color)'; this.style.background='var(--bg-cream)'" 
+                     onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='transparent'">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600;">${htmlEscapedPhoneName}</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                余额: ¥${balance.toFixed(2)} | 累计提现: ¥${totalWithdrawn.toFixed(2)}
+                            </div>
+                        </div>
+                        <span style="font-size: 20px;">→</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // 对appName进行HTML转义用于显示
+        const htmlEscapedAppName = appName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        showModal(`编辑 ${htmlEscapedAppName} - 选择手机`, `
+            <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
+                选择要编辑的手机
+            </div>
+            <div id="quick-edit-phone-list" style="max-height: 50vh; overflow-y: auto;">
+                ${phoneListHtml}
+            </div>
+        `, [
+            { text: '返回', class: 'btn-secondary', action: openQuickEditModal },
+            { text: '关闭', class: 'btn-secondary', action: closeModal }
+        ], true);
+        
+        // 绑定点击事件（使用事件委托，避免内联onclick的引号问题）
+        setTimeout(() => {
+            const phoneList = document.getElementById('quick-edit-phone-list');
+            if (phoneList) {
+                phoneList.querySelectorAll('.phone-select-item').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const index = parseInt(this.getAttribute('data-phone-index'));
+                        const instance = window.quickEditCurrentAppInstances[index];
+                        if (instance) {
+                            selectPhoneForEdit(instance.phoneId, instance.appId);
+                        }
+                    });
+                });
+            }
+        }, 100);
+    }, 100);
+}
+
+// 快速编辑功能 - 第三步：打开编辑框
+function selectPhoneForEdit(phoneId, appId) {
+    closeModal();
+    setTimeout(() => {
+        openEditAppModal(phoneId, appId);
+    }, 100);
+}
+
 // 渲染统计分析页面
 function renderStats() {
     const data = DataManager.loadData();
