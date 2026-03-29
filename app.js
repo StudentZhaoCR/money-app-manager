@@ -7172,6 +7172,9 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         closeModal();
                         renderPhones();
                         
+                        // 立即更新首页总赚取金额
+                        renderTotalEarnings();
+                        
                         // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
                         if (fromQuickEdit) {
                             setTimeout(() => {
