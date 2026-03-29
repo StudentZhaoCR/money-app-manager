@@ -7462,6 +7462,8 @@ function selectAppForEdit(appName) {
             const totalWithdrawn = (instance.app.withdrawn || 0) + (instance.app.historicalWithdrawn || 0);
             // 对phoneName进行HTML转义
             const htmlEscapedPhoneName = instance.phoneName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            // 检查是否可以提现（余额大于等于最小提现金额）
+            const canWithdraw = balance >= (instance.app.minWithdraw || 0.5);
             return `
                 <div class="phone-select-item" data-phone-index="${index}" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;" 
                      onmouseover="this.style.borderColor='var(--primary-color)'; this.style.background='var(--bg-cream)'" 
@@ -7473,7 +7475,10 @@ function selectAppForEdit(appName) {
                                 余额: ¥${balance.toFixed(2)} | 累计提现: ¥${totalWithdrawn.toFixed(2)}
                             </div>
                         </div>
-                        <span style="font-size: 20px;">→</span>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            ${canWithdraw ? `<button class="btn-withdraw-quick" data-phone-index="${index}" style="padding: 6px 12px; background: linear-gradient(135deg, #10b981, #34d399); color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;" onclick="event.stopPropagation(); openQuickWithdrawModal(${index})">提现</button>` : ''}
+                            <span style="font-size: 20px;">→</span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -7510,6 +7515,97 @@ function selectAppForEdit(appName) {
             }
         }, 100);
     }, 100);
+}
+
+// 快速提现功能
+function openQuickWithdrawModal(index) {
+    const instance = window.quickEditCurrentAppInstances[index];
+    if (!instance) return;
+    
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === instance.phoneId);
+    const app = phone ? phone.apps.find(a => a.id === instance.appId) : null;
+    
+    if (!app) return;
+    
+    const balance = app.balance || 0;
+    const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+    
+    showModal('快速提现', `
+        <div class="form-group">
+            <label class="form-label">软件名称</label>
+            <input type="text" class="form-input" value="${app.name}" disabled>
+        </div>
+        <div class="form-group">
+            <label class="form-label">手机</label>
+            <input type="text" class="form-input" value="${phone.name}" disabled>
+        </div>
+        <div class="form-group">
+            <label class="form-label">当前余额 (元)</label>
+            <input type="text" class="form-input" value="${balance.toFixed(2)}" disabled>
+        </div>
+        <div class="form-group">
+            <label class="form-label">累计已提现 (元)</label>
+            <input type="text" class="form-input" value="${totalWithdrawn.toFixed(2)}" disabled>
+        </div>
+        <div class="form-group">
+            <label class="form-label">本次提现金额 (元)</label>
+            <input type="number" id="quick-withdraw-amount" class="form-input" value="${balance.toFixed(2)}" step="0.01" max="${balance}">
+            <div class="form-hint">可提现金额: ¥${balance.toFixed(2)}</div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '确认提现',
+            class: 'btn-primary',
+            action: function() {
+                const amount = parseFloat(document.getElementById('quick-withdraw-amount').value) || 0;
+                
+                if (amount <= 0) {
+                    showToast('提现金额必须大于0', 'error');
+                    return;
+                }
+                
+                if (amount > balance) {
+                    showToast('提现金额不能超过当前余额', 'error');
+                    return;
+                }
+                
+                try {
+                    // 更新软件数据
+                    app.balance = (app.balance || 0) - amount;
+                    app.withdrawn = (app.withdrawn || 0) + amount;
+                    
+                    // 添加提现记录
+                    if (!app.withdrawals) {
+                        app.withdrawals = [];
+                    }
+                    app.withdrawals.push({
+                        date: new Date().toISOString().split('T')[0],
+                        amount: amount
+                    });
+                    
+                    // 保存数据
+                    DataManager.saveData(data);
+                    
+                    // 关闭模态框
+                    closeModal();
+                    
+                    // 更新首页总赚取金额
+                    renderTotalEarnings();
+                    
+                    // 返回到软件选择页面
+                    setTimeout(() => {
+                        openQuickEditModal();
+                    }, 100);
+                    
+                } catch (error) {
+                    console.error('提现失败:', error);
+                    showToast('提现失败，请重试', 'error');
+                }
+            }
+        }
+    ]);
 }
 
 // 快速编辑功能 - 第三步：打开编辑框
