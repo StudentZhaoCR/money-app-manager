@@ -7476,7 +7476,7 @@ function selectAppForEdit(appName) {
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            ${canWithdraw ? `<button class="btn-withdraw-quick" data-phone-index="${index}" style="padding: 6px 12px; background: linear-gradient(135deg, #10b981, #34d399); color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;" onclick="event.stopPropagation(); openQuickWithdrawModal(${index})">提现</button>` : ''}
+                            ${canWithdraw ? `<button class="btn-withdraw-quick" data-phone-index="${index}" style="padding: 6px 12px; background: linear-gradient(135deg, #10b981, #34d399); color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;">提现</button>` : ''}
                             <span style="font-size: 20px;">→</span>
                         </div>
                     </div>
@@ -7503,13 +7503,27 @@ function selectAppForEdit(appName) {
         setTimeout(() => {
             const phoneList = document.getElementById('quick-edit-phone-list');
             if (phoneList) {
+                // 绑定手机项点击事件（编辑）
                 phoneList.querySelectorAll('.phone-select-item').forEach(item => {
-                    item.addEventListener('click', function() {
+                    item.addEventListener('click', function(e) {
+                        // 如果点击的是提现按钮，不触发编辑
+                        if (e.target.classList.contains('btn-withdraw-quick')) {
+                            return;
+                        }
                         const index = parseInt(this.getAttribute('data-phone-index'));
                         const instance = window.quickEditCurrentAppInstances[index];
                         if (instance) {
                             selectPhoneForEdit(instance.phoneId, instance.appId);
                         }
+                    });
+                });
+                
+                // 绑定提现按钮点击事件
+                phoneList.querySelectorAll('.btn-withdraw-quick').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const index = parseInt(this.getAttribute('data-phone-index'));
+                        openQuickWithdrawModal(index);
                     });
                 });
             }
@@ -7519,6 +7533,9 @@ function selectAppForEdit(appName) {
 
 // 快速提现功能
 function openQuickWithdrawModal(index) {
+    // 先关闭当前模态框
+    closeModal();
+    
     const instance = window.quickEditCurrentAppInstances[index];
     if (!instance) return;
     
@@ -7531,7 +7548,9 @@ function openQuickWithdrawModal(index) {
     const balance = app.balance || 0;
     const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     
-    showModal('快速提现', `
+    // 延迟显示提现模态框，确保closeModal完成
+    setTimeout(() => {
+        showModal('快速提现', `
         <div class="form-group">
             <label class="form-label">软件名称</label>
             <input type="text" class="form-input" value="${app.name}" disabled>
@@ -7606,6 +7625,7 @@ function openQuickWithdrawModal(index) {
             }
         }
     ]);
+    }, 100);
 }
 
 // 快速编辑功能 - 第三步：打开编辑框
