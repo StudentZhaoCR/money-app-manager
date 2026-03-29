@@ -7569,7 +7569,7 @@ function openQuickWithdrawModal(index) {
         </div>
         <div class="form-group">
             <label class="form-label">本次提现金额 (元)</label>
-            <input type="number" id="quick-withdraw-amount" class="form-input" value="${balance.toFixed(2)}" step="0.01" max="${balance}">
+            <input type="number" id="quick-withdraw-amount" class="form-input" value="" step="0.01" max="${balance}" placeholder="请输入提现金额">
             <div class="form-hint">可提现金额: ¥${balance.toFixed(2)}</div>
         </div>
     `, [
