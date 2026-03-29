@@ -2105,7 +2105,7 @@ class DataManager {
         };
     }
 
-    // 计算全年目标预测完成日期（结合平均收益和收益率）
+    // 计算全年目标预测完成日期（基于平均收益）
     static calculatePredictedCompletionDate() {
         const goal = this.getYearlyGoal();
         if (goal.amount <= 0) {
@@ -2138,43 +2138,11 @@ class DataManager {
         // 筛选出有收益的日期（金额大于0）
         const profitableDays = allDailyEarnings.filter(day => day.amount > 0);
         
-        // 计算预测每日收益
+        // 计算预测每日收益（使用平均收益）
         let predictedDailyEarnings = 0;
         
-        if (profitableDays.length >= 7) {
-            // 有足够的历史数据，使用收益率预测
-            // 计算每日收益的增长率
-            let growthRates = [];
-            for (let i = 1; i < profitableDays.length; i++) {
-                const prevAmount = profitableDays[i-1].amount;
-                const currentAmount = profitableDays[i].amount;
-                if (prevAmount > 0) {
-                    const growthRate = (currentAmount - prevAmount) / prevAmount;
-                    growthRates.push(growthRate);
-                }
-            }
-            
-            // 计算平均增长率
-            let averageGrowthRate = 0;
-            if (growthRates.length > 0) {
-                const totalGrowth = growthRates.reduce((sum, rate) => sum + rate, 0);
-                averageGrowthRate = totalGrowth / growthRates.length;
-            }
-            
-            // 计算最近的平均收益
-            const recentDays = profitableDays.slice(-7); // 最近7天
-            const recentAverage = recentDays.reduce((sum, day) => sum + day.amount, 0) / recentDays.length;
-            
-            // 基于增长率预测未来每日收益
-            if (averageGrowthRate > -0.5) { // 确保增长率不是过于负
-                // 保守估计：使用最近平均收益的1.1倍（考虑增长）
-                predictedDailyEarnings = recentAverage * (1 + Math.max(0, averageGrowthRate) * 0.5);
-            } else {
-                // 如果增长率为负，使用最近的平均收益
-                predictedDailyEarnings = recentAverage;
-            }
-        } else if (profitableDays.length > 0) {
-            // 数据较少，使用平均收益预测
+        if (profitableDays.length > 0) {
+            // 使用平均收益预测
             const totalProfit = profitableDays.reduce((sum, day) => sum + day.amount, 0);
             predictedDailyEarnings = totalProfit / profitableDays.length;
         } else {
@@ -10994,6 +10962,7 @@ function renderYearlyGoal() {
                                 return `
                                 <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预计还需 ${prediction.daysNeeded} 天完成</span>
                                 <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预测完成日期: ${formattedDate}</span>
+                                <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">平均收益: ¥${prediction.predictedDailyEarnings.toFixed(2)}/天</span>
                                 `;
                             }
                             return '';
