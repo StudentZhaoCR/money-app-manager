@@ -5307,6 +5307,12 @@ function showPage(pageName) {
     if (pageName === 'assets') renderAssetsPage();
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     
+    // 控制快速编辑浮动按钮的显示/隐藏
+    const quickEditFab = document.getElementById('quick-edit-fab');
+    if (quickEditFab) {
+        quickEditFab.style.display = pageName === 'dashboard' ? 'block' : 'none';
+    }
+    
     // 再次恢复表单值（确保不被 render 函数覆盖）
     const state = pageStates[pageName];
     if (state && state.formValues) {
@@ -7100,12 +7106,21 @@ function openAddAppModal(phoneId) {
 }
 
 // 打开编辑软件模态框
-function openEditAppModal(phoneId, appId) {
-    console.log('openEditAppModal called with:', phoneId, appId);
+function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
+    console.log('openEditAppModal called with:', phoneId, appId, 'fromQuickEdit:', fromQuickEdit);
     // 先关闭当前模态框
     closeModal();
     currentPhoneId = phoneId;
     currentAppId = appId;
+    
+    // 保存当前软件名称，用于快速编辑后返回
+    let currentAppName = '';
+    if (fromQuickEdit) {
+        const data = DataManager.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        const app = phone ? phone.apps.find(a => a.id === appId) : null;
+        currentAppName = app ? app.name : '';
+    }
     
     const data = DataManager.loadData();
     console.log('Loaded data:', data);
@@ -7188,7 +7203,13 @@ function openEditAppModal(phoneId, appId) {
                         // 先关闭模态框
                         closeModal();
                         renderPhones();
-                        // 显示提示
+                        
+                        // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
+                        if (fromQuickEdit) {
+                            setTimeout(() => {
+                                openQuickEditModal();
+                            }, 100);
+                        }
     
                     } catch (error) {
                         console.error('编辑软件失败:', error);
@@ -7498,7 +7519,7 @@ function selectAppForEdit(appName) {
                 ${phoneListHtml}
             </div>
         `, [
-            { text: '返回', class: 'btn-secondary', action: openQuickEditModal },
+            { text: '返回', class: 'btn-secondary', action: function() { closeModal(); setTimeout(openQuickEditModal, 100); } },
             { text: '关闭', class: 'btn-secondary', action: closeModal }
         ], true);
         
@@ -7524,7 +7545,90 @@ function selectAppForEdit(appName) {
 function selectPhoneForEdit(phoneId, appId) {
     closeModal();
     setTimeout(() => {
-        openEditAppModal(phoneId, appId);
+        openEditAppModal(phoneId, appId, true);
+    }, 100);
+}
+
+// 保存后返回到快速编辑的手机选择页面
+function returnToQuickEditPhoneSelection(appName) {
+    // 延迟执行，确保closeModal完成
+    setTimeout(() => {
+        const appInstances = window.quickEditAppMap.get(appName);
+        
+        if (!appInstances) {
+            // 如果找不到软件信息，返回到软件选择页面
+            openQuickEditModal();
+            return;
+        }
+        
+        // 重新获取最新的数据
+        const data = DataManager.loadData();
+        const updatedAppInstances = appInstances.map(instance => {
+            const phone = data.phones.find(p => p.id === instance.phoneId);
+            const app = phone ? phone.apps.find(a => a.id === instance.appId) : null;
+            return {
+                ...instance,
+                phoneName: phone ? phone.name : instance.phoneName,
+                app: app || instance.app
+            };
+        });
+        
+        // 保存当前选择的软件实例列表
+        window.quickEditCurrentAppInstances = updatedAppInstances;
+        
+        // 生成手机列表HTML - 使用data属性存储ID，避免引号问题
+        const phoneListHtml = updatedAppInstances.map((instance, index) => {
+            const balance = instance.app.balance || 0;
+            const totalWithdrawn = (instance.app.withdrawn || 0) + (instance.app.historicalWithdrawn || 0);
+            // 对phoneName进行HTML转义
+            const htmlEscapedPhoneName = instance.phoneName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `
+                <div class="phone-select-item" data-phone-index="${index}" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;" 
+                     onmouseover="this.style.borderColor='var(--primary-color)'; this.style.background='var(--bg-cream)'" 
+                     onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='transparent'">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600;">${htmlEscapedPhoneName}</div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                余额: ¥${balance.toFixed(2)} | 累计提现: ¥${totalWithdrawn.toFixed(2)}
+                            </div>
+                        </div>
+                        <span style="font-size: 20px;">→</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // 对appName进行HTML转义用于显示
+        const htmlEscapedAppName = appName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        showModal(`编辑 ${htmlEscapedAppName} - 选择手机`, `
+            <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
+                选择要编辑的手机
+            </div>
+            <div id="quick-edit-phone-list" style="max-height: 50vh; overflow-y: auto;">
+                ${phoneListHtml}
+            </div>
+        `, [
+            { text: '返回', class: 'btn-secondary', action: openQuickEditModal },
+            { text: '关闭', class: 'btn-secondary', action: closeModal }
+        ], true);
+        
+        // 绑定点击事件（使用事件委托，避免内联onclick的引号问题）
+        setTimeout(() => {
+            const phoneList = document.getElementById('quick-edit-phone-list');
+            if (phoneList) {
+                phoneList.querySelectorAll('.phone-select-item').forEach(item => {
+                    item.addEventListener('click', function() {
+                        const index = parseInt(this.getAttribute('data-phone-index'));
+                        const instance = window.quickEditCurrentAppInstances[index];
+                        if (instance) {
+                            selectPhoneForEdit(instance.phoneId, instance.appId);
+                        }
+                    });
+                });
+            }
+        }, 100);
     }, 100);
 }
 
@@ -11976,6 +12080,16 @@ document.addEventListener('DOMContentLoaded', function() {
     initCalendars();
     restoreGameTimer(); // 恢复计时器状态
     loadYearlyGoalSettings(); // 加载年度目标设置
+    
+    // 显示快速编辑浮动按钮（如果在首页）
+    const quickEditFab = document.getElementById('quick-edit-fab');
+    if (quickEditFab) {
+        // 检查当前是否在首页
+        const dashboardPage = document.getElementById('page-dashboard');
+        if (dashboardPage && dashboardPage.classList.contains('active')) {
+            quickEditFab.style.display = 'block';
+        }
+    }
     
     // 添加导航栏点击事件监听器
     const tabItems = document.querySelectorAll('.tab-item');

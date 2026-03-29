@@ -145,6 +145,27 @@
 
         </div>
 
+        <!-- 快速编辑浮动按钮 - 固定在首页右下角 -->
+        <div id="quick-edit-fab" style="position: fixed; bottom: 100px; right: 20px; z-index: 100; display: none;">
+            <button onclick="openQuickEditModal()" style="
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #f59e0b, #fbbf24);
+                border: none;
+                box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                color: white;
+                transition: all 0.3s ease;
+            " onmouseover="this.style.transform='scale(1.1)'; this.style.boxShadow='0 6px 20px rgba(245, 158, 11, 0.5)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 15px rgba(245, 158, 11, 0.4)'">
+                ⚡
+            </button>
+        </div>
+
         <!-- 手机管理页面 -->
         <div class="page" id="page-phones">
             <div class="date-container">
@@ -155,7 +176,6 @@
                 <button class="btn btn-primary flex-1" onclick="openAddPhoneModal()">添加手机</button>
                 <button class="btn btn-accent flex-1" onclick="openBatchAddAppsModal()">批量添加软件</button>
                 <button class="btn btn-secondary flex-1" onclick="showPage('withdraw-records')">提现记录</button>
-                <button class="btn btn-accent flex-1" onclick="openQuickEditModal()">快速编辑</button>
             </div>
 
             <div class="card mt-4">
