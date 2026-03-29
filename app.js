@@ -65,11 +65,51 @@ function showModal(title, body, buttons, enableScroll = false) {
         buttonsContainer.style.display = 'none';
     } else {
         buttonsContainer.style.display = 'flex';
-        buttons.forEach(btn => {
+        buttons.forEach((btn, index) => {
             const button = document.createElement('button');
             button.className = `btn ${btn.class}`;
             button.textContent = btn.text;
-            button.addEventListener('click', btn.action);
+            // 为每个按钮添加唯一标识，用于防重复
+            button.dataset.btnIndex = index;
+            button.dataset.btnText = btn.text;
+            
+            // 包装action函数，添加防重复点击机制
+            let isProcessing = false;
+            const wrappedAction = function(e) {
+                // 防重复策略6: 按钮级别的防重复点击
+                if (isProcessing) {
+                    console.log(`按钮 "${btn.text}" 正在处理中，跳过重复点击`);
+                    return;
+                }
+                
+                // 对于保存/确认类按钮，添加额外防护
+                if (btn.text.includes('保存') || btn.text.includes('确认') || btn.text.includes('添加')) {
+                    isProcessing = true;
+                    button.disabled = true;
+                    button.style.opacity = '0.7';
+                    
+                    // 执行原始action
+                    try {
+                        btn.action.call(this, e);
+                    } catch (error) {
+                        console.error('按钮操作执行失败:', error);
+                    }
+                    
+                    // 3秒后恢复按钮状态（如果模态框还开着）
+                    setTimeout(() => {
+                        isProcessing = false;
+                        if (document.getElementById('modal').style.display !== 'none') {
+                            button.disabled = false;
+                            button.style.opacity = '1';
+                        }
+                    }, 3000);
+                } else {
+                    // 普通按钮直接执行
+                    btn.action.call(this, e);
+                }
+            };
+            
+            button.addEventListener('click', wrappedAction);
             buttonsContainer.appendChild(button);
         });
     }
@@ -140,22 +180,89 @@ const TOAST_DELAY = 3000; // 3秒内不显示任何提示
 let toastTimeout = null;
 let isToastVisible = false;
 let currentToastMessage = '';
+let currentToastType = '';
+
+// 全局操作锁 - 防止同一操作重复执行
+const operationLocks = new Map();
+const LOCK_DURATION = 3000; // 3秒锁定时间
+
+// 获取操作锁
+function acquireLock(operationKey) {
+    const now = Date.now();
+    const lastOperation = operationLocks.get(operationKey);
+    
+    if (lastOperation && (now - lastOperation) < LOCK_DURATION) {
+        console.log(`操作被锁定: ${operationKey}`);
+        return false;
+    }
+    
+    operationLocks.set(operationKey, now);
+    return true;
+}
+
+// 释放操作锁
+function releaseLock(operationKey) {
+    operationLocks.delete(operationKey);
+}
+
+// 带锁的操作包装器
+function withLock(operationKey, fn) {
+    if (!acquireLock(operationKey)) {
+        console.log(`操作 ${operationKey} 正在执行中，跳过`);
+        return;
+    }
+    
+    try {
+        return fn();
+    } finally {
+        // 延迟释放锁，确保操作完全完成
+        setTimeout(() => releaseLock(operationKey), LOCK_DURATION);
+    }
+}
 
 function showToast(message, type = 'info') {
     // 打印调用信息
     console.log('showToast 被调用:', { message, type, timestamp: new Date().toISOString() });
     
-    // 防重复：3秒内不显示相同的提示
     const now = Date.now();
-    if ((now - lastToastTime) < TOAST_DELAY && message === currentToastMessage) {
+    
+    // 防重复策略1: 3秒内不显示完全相同的提示（消息+类型都相同）
+    if ((now - lastToastTime) < TOAST_DELAY && message === currentToastMessage && type === currentToastType) {
         console.log('短时间内重复相同提示被阻止:', message);
         return;
     }
     
-    // 如果已有提示正在显示，不重复显示
-    if (isToastVisible) {
-        console.log('提示已在显示中，阻止重复显示:', message);
+    // 防重复策略2: 1秒内不显示任何提示（无论消息是否相同）
+    if ((now - lastToastTime) < 1000) {
+        console.log('短时间内不显示新提示:', message);
         return;
+    }
+    
+    // 防重复策略3: 如果已有提示正在显示，替换内容但不重复动画
+    if (isToastVisible) {
+        console.log('提示已在显示中，更新内容:', message);
+        // 更新现有提示的内容而不是创建新的
+        const toast = document.getElementById('toast');
+        if (toast) {
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            // 重置自动隐藏计时器
+            if (toastTimeout) {
+                clearTimeout(toastTimeout);
+            }
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-50%) translateY(-20px)';
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    isToastVisible = false;
+                    currentToastMessage = '';
+                    currentToastType = '';
+                    toastTimeout = null;
+                }, 300);
+            }, 3000);
+            return;
+        }
     }
     
     // 清除之前的超时
@@ -167,6 +274,7 @@ function showToast(message, type = 'info') {
     lastToastTime = now;
     isToastVisible = true;
     currentToastMessage = message;
+    currentToastType = type;
     
     // 确保 toast 元素存在
     let toast = document.getElementById('toast');
@@ -354,7 +462,7 @@ function openAddInstallmentModal() {
 
                 DataManager.addInstallment({ platform, dueDate, amount });
                 renderInstallments();
-                showToast('分期添加成功！');
+
                 closeModal();
             }
         }
@@ -393,7 +501,7 @@ function openEditInstallmentModal(installmentId) {
                 if (platform && dueDate && amount) {
                     DataManager.editInstallment(installmentId, { platform, dueDate, amount });
                     renderInstallments();
-                    showToast('分期已更新！');
+
                 }
                 closeModal();
             }
@@ -405,7 +513,7 @@ function deleteInstallment(installmentId) {
     if (confirm('确定要删除这个分期吗？')) {
         DataManager.deleteInstallment(installmentId);
         renderInstallments();
-        showToast('分期已删除！');
+
     }
 }
 
@@ -1997,7 +2105,7 @@ class DataManager {
         };
     }
 
-    // 计算全年目标预测完成日期（动态加权趋势预测）
+    // 计算全年目标预测完成日期（结合平均收益和收益率）
     static calculatePredictedCompletionDate() {
         const goal = this.getYearlyGoal();
         if (goal.amount <= 0) {
@@ -2024,65 +2132,54 @@ class DataManager {
         // 计算剩余金额
         const remainingAmount = goal.amount - totalEarned;
         
-        // 获取最近30天的每日收益数据
+        // 获取所有有收益的每日数据
         const allDailyEarnings = this.getAllDailyEarnings();
-        const recentEarnings = allDailyEarnings.slice(-30); // 最近30天
         
-        // 计算加权平均每日收益
-        let weightedSum = 0;
-        let weightSum = 0;
+        // 筛选出有收益的日期（金额大于0）
+        const profitableDays = allDailyEarnings.filter(day => day.amount > 0);
         
-        recentEarnings.forEach((day, index) => {
-            const daysAgo = recentEarnings.length - index - 1;
-            let weight = 1;
-            
-            // 加权规则：最近7天权重3，8-14天权重2，15-30天权重1
-            if (daysAgo <= 6) {
-                weight = 3;
-            } else if (daysAgo <= 13) {
-                weight = 2;
-            } else {
-                weight = 1;
-            }
-            
-            weightedSum += day.amount * weight;
-            weightSum += weight;
-        });
-        
-        // 计算加权平均
+        // 计算预测每日收益
         let predictedDailyEarnings = 0;
-        if (weightSum > 0) {
-            predictedDailyEarnings = weightedSum / weightSum;
-        }
         
-        // 趋势分析：使用线性回归计算趋势
-        if (recentEarnings.length >= 7) {
-            // 准备数据
-            const xValues = recentEarnings.map((_, index) => index);
-            const yValues = recentEarnings.map(day => day.amount);
-            
-            // 计算线性回归
-            const n = xValues.length;
-            const sumX = xValues.reduce((a, b) => a + b, 0);
-            const sumY = yValues.reduce((a, b) => a + b, 0);
-            const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
-            const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
-            
-            // 计算斜率
-            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-            
-            // 基于趋势调整预测
-            if (!isNaN(slope)) {
-                // 趋势调整因子：斜率的10%，但不超过50%
-                const trendFactor = Math.max(-0.5, Math.min(0.5, slope * 0.1));
-                predictedDailyEarnings *= (1 + trendFactor);
+        if (profitableDays.length >= 7) {
+            // 有足够的历史数据，使用收益率预测
+            // 计算每日收益的增长率
+            let growthRates = [];
+            for (let i = 1; i < profitableDays.length; i++) {
+                const prevAmount = profitableDays[i-1].amount;
+                const currentAmount = profitableDays[i].amount;
+                if (prevAmount > 0) {
+                    const growthRate = (currentAmount - prevAmount) / prevAmount;
+                    growthRates.push(growthRate);
+                }
             }
-        }
-        
-        // 如果没有数据，使用每日目标作为估计
-        if (predictedDailyEarnings <= 0) {
-            const dailyTarget = this.calculateYearlyDailyTarget();
-            predictedDailyEarnings = dailyTarget.dailyTarget || 10; // 默认每天10元
+            
+            // 计算平均增长率
+            let averageGrowthRate = 0;
+            if (growthRates.length > 0) {
+                const totalGrowth = growthRates.reduce((sum, rate) => sum + rate, 0);
+                averageGrowthRate = totalGrowth / growthRates.length;
+            }
+            
+            // 计算最近的平均收益
+            const recentDays = profitableDays.slice(-7); // 最近7天
+            const recentAverage = recentDays.reduce((sum, day) => sum + day.amount, 0) / recentDays.length;
+            
+            // 基于增长率预测未来每日收益
+            if (averageGrowthRate > -0.5) { // 确保增长率不是过于负
+                // 保守估计：使用最近平均收益的1.1倍（考虑增长）
+                predictedDailyEarnings = recentAverage * (1 + Math.max(0, averageGrowthRate) * 0.5);
+            } else {
+                // 如果增长率为负，使用最近的平均收益
+                predictedDailyEarnings = recentAverage;
+            }
+        } else if (profitableDays.length > 0) {
+            // 数据较少，使用平均收益预测
+            const totalProfit = profitableDays.reduce((sum, day) => sum + day.amount, 0);
+            predictedDailyEarnings = totalProfit / profitableDays.length;
+        } else {
+            // 没有数据，使用默认值
+            predictedDailyEarnings = 10; // 默认每天10元
         }
         
         // 确保预测收益为正数
@@ -2097,7 +2194,8 @@ class DataManager {
         
         return {
             date: predictedDate,
-            daysNeeded: daysNeeded
+            daysNeeded: daysNeeded,
+            predictedDailyEarnings: predictedDailyEarnings
         };
     }
     
@@ -6991,7 +7089,7 @@ function openAddAppModal(phoneId) {
                     }
                 });
                 renderPhones();
-                showToast(`成功添加 ${addedCount} 个软件！`);
+
                 closeModal();
             }
         }
@@ -7043,7 +7141,21 @@ function openEditAppModal(phoneId, appId) {
         {
             text: '保存',
             class: 'btn-primary',
-            action: () => {
+            action: function() {
+                // 防重复策略4: 使用操作锁
+                const lockKey = `editApp_${phoneId}_${appId}`;
+                if (!acquireLock(lockKey)) {
+                    console.log('保存操作正在执行中，跳过重复点击');
+                    return;
+                }
+                
+                // 防重复策略5: 禁用按钮防止重复点击
+                const saveBtn = document.querySelector('#modal-buttons .btn-primary');
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = '保存中...';
+                }
+                
                 const name = document.getElementById('edit-app-name').value.trim();
                 const balance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
@@ -7054,6 +7166,12 @@ function openEditAppModal(phoneId, appId) {
                         // 确保最小提现金额大于0
                         if (minWithdraw <= 0) {
                             showToast('最小提现金额必须大于0', 'error');
+                            // 恢复按钮状态
+                            if (saveBtn) {
+                                saveBtn.disabled = false;
+                                saveBtn.textContent = '保存';
+                            }
+                            releaseLock(lockKey);
                             return;
                         }
                         
@@ -7064,17 +7182,30 @@ function openEditAppModal(phoneId, appId) {
                             historicalWithdrawn
                         });
                         
-                        // 先关闭模态框，然后显示提示
+                        // 先关闭模态框
                         closeModal();
                         renderPhones();
-                        // 延迟显示提示，确保防重复机制生效
-                        setTimeout(() => {
-                            showToast('软件编辑成功！', 'success');
-                        }, 100);
+                        // 显示提示
+    
                     } catch (error) {
                         console.error('编辑软件失败:', error);
-                        showToast('编辑失败，请重试', 'error');
+
+                        // 恢复按钮状态
+                        if (saveBtn) {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = '保存';
+                        }
+                    } finally {
+                        // 延迟释放锁
+                        setTimeout(() => releaseLock(lockKey), LOCK_DURATION);
                     }
+                } else {
+                    // 恢复按钮状态
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = '保存';
+                    }
+                    releaseLock(lockKey);
                 }
             }
         }
@@ -7122,7 +7253,7 @@ function openWithdrawModal(phoneId, appId) {
                 if (amount > 0) {
                     DataManager.withdraw(phoneId, appId, amount, date);
                     renderPhones();
-                    showToast('提现记录成功！');
+
                 } else {
                     showToast('请输入有效的提现金额！');
                 }
@@ -7223,7 +7354,7 @@ function openBatchAddAppsModal() {
                 });
 
                 renderPhones();
-                showToast(`成功为 ${currentPhoneCount} 部手机各添加 ${names.length} 个软件，共 ${totalAddedCount} 个！`);
+
                 closeModal();
             }
         }
@@ -7235,7 +7366,7 @@ function deleteApp(phoneId, appId) {
     if (confirm('确定要删除这个软件吗？')) {
         DataManager.deleteApp(phoneId, appId);
         renderPhones();
-        showToast('软件已删除！');
+        
     }
 }
 
@@ -7526,7 +7657,7 @@ function addExpense() {
     document.getElementById('expense-purpose').value = '';
     
     renderSettings();
-    showToast('支出添加成功！');
+
 }
 
 // 渲染提现记录
@@ -7869,7 +8000,7 @@ function openAddInstallmentModal() {
                 if (platform && dueDate && amount) {
                     DataManager.addInstallment({ platform, dueDate, amount });
                     renderInstallments();
-                    showToast('分期添加成功！');
+    
                 }
                 closeModal();
             }
@@ -8094,7 +8225,7 @@ function openEditInstallmentModal(installmentId) {
                 if (platform && dueDate && amount) {
                     DataManager.editInstallment(installmentId, { platform, dueDate, amount });
                     renderInstallments();
-                    showToast('分期已更新！');
+
                 }
                 closeModal();
             }
@@ -8107,7 +8238,7 @@ function deleteInstallment(installmentId) {
     if (confirm('确定要删除这个分期吗？')) {
         DataManager.deleteInstallment(installmentId);
         renderInstallments();
-        showToast('分期已删除！');
+
     }
 }
 
@@ -11054,7 +11185,7 @@ function saveYearlyGoal() {
 
     // 保存年度目标
     DataManager.saveYearlyGoal(amount, year, autoDistribute);
-    showToast('年度目标已保存', 'success');
+
     
     // 刷新仪表盘显示
     renderYearlyGoal();
