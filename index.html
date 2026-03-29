@@ -453,6 +453,32 @@
             </div>
         </div>
 
+        <!-- 每日赚取记录页面 -->
+        <div class="page" id="page-daily-earnings">
+            <div class="page-header">
+                <button class="btn btn-secondary" onclick="showPage('dashboard')">返回</button>
+                <div class="section-title">每日赚取记录</div>
+            </div>
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📊 收益统计</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="daily-earnings-stats" style="padding: 16px;">
+                    <!-- 统计内容将由JS生成 -->
+                </div>
+            </div>
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📅 每日明细</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="daily-earnings-list" style="max-height: 60vh; overflow-y: auto;">
+                    <div class="empty-state">暂无赚取记录</div>
+                </div>
+            </div>
+        </div>
+
 
     </main>
 

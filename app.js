@@ -5305,6 +5305,7 @@ function showPage(pageName) {
     if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
     if (pageName === 'assets') renderAssetsPage();
+    if (pageName === 'daily-earnings') renderDailyEarningsPage();
     
     // 再次恢复表单值（确保不被 render 函数覆盖）
     const state = pageStates[pageName];
@@ -5571,6 +5572,8 @@ function renderDashboard() {
     // 渲染年度目标
     renderYearlyGoal();
     
+    // 更新今日收益显示
+    updateTodayEarnings();
 }
 
 // 打开记收入弹窗
@@ -10898,6 +10901,7 @@ function renderYearlyGoal() {
 
 
 
+
             <!-- 每日赚取记录 -->
             ${allDailyEarnings.length > 0 ? `
             <div style="margin-bottom: 20px;">
@@ -10911,7 +10915,7 @@ function renderYearlyGoal() {
                         return `
                         <div onclick="showDailyEarningDetail('${day.date}')" style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'}; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                             <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">${day.date.slice(5)}</div>
-                            <div style="font-size: 13px; font-weight: 600; color: ${isDayAchieved ? 'var(--success-color)' : 'var(--text-primary)'};">¥${day.amount.toFixed(0)}</div>
+                            <div style="font-size: 13px; font-weight: 600; color: ${isDayAchieved ? 'var(--success-color)' : 'var(--text-primary)'}">¥${day.amount.toFixed(0)}</div>
                             ${isDayAchieved ? '<div style="font-size: 9px; color: var(--success-color);">✓</div>' : ''}
                         </div>
                         `;
@@ -10927,8 +10931,6 @@ function renderYearlyGoal() {
                 </script>
             </div>
             ` : ''}
-
-
 
             <!-- 软件目标分配 -->
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
@@ -12014,5 +12016,115 @@ function initScrollOptimization() {
 }
 
 // 滑动切换页面功能已禁用
+
+// ==================== 每日赚取记录页面功能 ====================
+
+// 渲染每日赚取记录页面
+function renderDailyEarningsPage() {
+    const allDailyEarnings = DataManager.getAllDailyEarnings();
+    const profitableDays = allDailyEarnings.filter(day => day.amount > 0);
+    
+    // 获取每日目标
+    const dailyTarget = DataManager.calculateYearlyDailyTarget();
+    const targetAmount = dailyTarget.isValid ? dailyTarget.dailyTarget : 0;
+    
+    // 更新统计信息
+    const statsContainer = document.getElementById('daily-earnings-stats');
+    if (statsContainer) {
+        const totalEarnings = profitableDays.reduce((sum, day) => sum + day.amount, 0);
+        const averageEarnings = profitableDays.length > 0 ? totalEarnings / profitableDays.length : 0;
+        const maxEarnings = profitableDays.length > 0 ? Math.max(...profitableDays.map(d => d.amount)) : 0;
+        const today = new Date().toISOString().split('T')[0];
+        const todayEarnings = allDailyEarnings.find(d => d.date === today)?.amount || 0;
+        
+        // 计算达标天数
+        const achievedDays = profitableDays.filter(day => day.amount >= targetAmount).length;
+        const missedDays = profitableDays.filter(day => day.amount < targetAmount).length;
+        
+        statsContainer.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <div style="background: linear-gradient(135deg, #10b981, #34d399); border-radius: 12px; padding: 16px; text-align: center; color: white;">
+                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">今日收益</div>
+                    <div style="font-size: 24px; font-weight: 700;">¥${todayEarnings.toFixed(2)}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #8b5cf6, #a78bfa); border-radius: 12px; padding: 16px; text-align: center; color: white;">
+                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">累计收益</div>
+                    <div style="font-size: 24px; font-weight: 700;">¥${totalEarnings.toFixed(2)}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #3b82f6, #60a5fa); border-radius: 12px; padding: 16px; text-align: center; color: white;">
+                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">平均每日</div>
+                    <div style="font-size: 24px; font-weight: 700;">¥${averageEarnings.toFixed(2)}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #f59e0b, #fbbf24); border-radius: 12px; padding: 16px; text-align: center; color: white;">
+                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">最高单日</div>
+                    <div style="font-size: 24px; font-weight: 700;">¥${maxEarnings.toFixed(2)}</div>
+                </div>
+            </div>
+            <div style="margin-top: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; font-size: 13px;">
+                <div style="background: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 8px;">
+                    <span style="color: #10b981; font-weight: 600;">✓ 达标</span>
+                    <span style="color: var(--text-secondary);"> ${achievedDays}天</span>
+                </div>
+                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 8px;">
+                    <span style="color: #ef4444; font-weight: 600;">✗ 未达标</span>
+                    <span style="color: var(--text-secondary);"> ${missedDays}天</span>
+                </div>
+                <div style="background: rgba(107, 114, 128, 0.1); border-radius: 8px; padding: 8px;">
+                    <span style="color: #6b7280; font-weight: 600;">目标</span>
+                    <span style="color: var(--text-secondary);"> ¥${targetAmount.toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 渲染每日明细列表
+    const listContainer = document.getElementById('daily-earnings-list');
+    if (listContainer) {
+        if (profitableDays.length === 0) {
+            listContainer.innerHTML = '<div class="empty-state">暂无赚取记录</div>';
+            return;
+        }
+        
+        // 按日期倒序排列（最新的在前面）
+        const sortedDays = [...profitableDays].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        listContainer.innerHTML = sortedDays.map(day => {
+            const date = new Date(day.date);
+            const dateStr = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+            const weekDay = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
+            const isToday = day.date === new Date().toISOString().split('T')[0];
+            
+            // 判断是否达标
+            const isAchieved = targetAmount > 0 && day.amount >= targetAmount;
+            const statusBadge = isAchieved 
+                ? '<span style="font-size: 11px; background: #10b981; color: white; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">✓ 达标</span>'
+                : (targetAmount > 0 ? '<span style="font-size: 11px; background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">✗ 未达标</span>' : '');
+            
+            // 根据达标状态设置颜色
+            const amountColor = isAchieved ? '#10b981' : (targetAmount > 0 ? '#ef4444' : '#10b981');
+            const bgColor = isToday ? 'background: rgba(16, 185, 129, 0.1);' : '';
+            
+            return `
+                <div style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; ${bgColor}">
+                    <div>
+                        <div style="font-weight: 600; font-size: 15px;">${dateStr} <span style="font-size: 12px; color: var(--text-secondary);">${weekDay}</span> ${isToday ? '<span style="font-size: 11px; background: #3b82f6; color: white; padding: 2px 8px; border-radius: 10px; margin-left: 8px;">今天</span>' : ''}${statusBadge}</div>
+                    </div>
+                    <div style="font-size: 20px; font-weight: 700; color: ${amountColor};">+¥${day.amount.toFixed(2)}</div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// 更新首页今日收益显示
+function updateTodayEarnings() {
+    const todayEarningsEl = document.getElementById('today-earnings');
+    if (todayEarningsEl) {
+        const allDailyEarnings = DataManager.getAllDailyEarnings();
+        const today = new Date().toISOString().split('T')[0];
+        const todayEarnings = allDailyEarnings.find(d => d.date === today)?.amount || 0;
+        todayEarningsEl.textContent = `¥${todayEarnings.toFixed(2)}`;
+    }
+}
 
 
