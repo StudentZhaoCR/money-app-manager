@@ -7175,6 +7175,10 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         // 立即更新首页总赚取金额
                         renderTotalEarnings();
                         
+                        // 立即更新年度目标和软件收益排行
+                        renderYearlyGoal();
+                        renderAppEarningsRanking();
+                        
                         // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
                         if (fromQuickEdit) {
                             setTimeout(() => {
@@ -7612,6 +7616,10 @@ function openQuickWithdrawModal(index) {
                     
                     // 更新首页总赚取金额
                     renderTotalEarnings();
+                    
+                    // 立即更新年度目标和软件收益排行
+                    renderYearlyGoal();
+                    renderAppEarningsRanking();
                     
                     // 返回到软件选择页面
                     setTimeout(() => {
