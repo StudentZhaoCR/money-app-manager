@@ -6975,7 +6975,9 @@ function renderPhoneDailyEarnings() {
     const hasRecords = phones.some(phone => Object.keys(phone.dailyEarnings).length > 0);
     
     if (!hasRecords) {
-        card.style.display = 'none';
+        // 显示空状态提示
+        card.style.display = 'block';
+        content.innerHTML = '<div class="empty-state" style="padding: 20px;">暂无每日赚取记录<br><span style="font-size: 12px; color: var(--text-secondary);">编辑软件余额后会自动记录</span></div>';
         return;
     }
     
@@ -7253,8 +7255,8 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             return;
                         }
                         
-                        // 验证：如果赚取金额小于最小提现金额，直接跳转到提现模态框
-                        if (balance < minWithdraw && balance > 0) {
+                        // 验证：如果赚取金额大于等于最小提现金额，直接跳转到提现模态框
+                        if (balance >= minWithdraw && balance > 0) {
                             // 关闭当前模态框
                             closeModal();
                             
