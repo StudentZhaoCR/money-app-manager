@@ -1775,6 +1775,35 @@ class DataManager {
         return result;
     }
 
+    // 获取每台手机每天的赚取记录
+    static getPhoneDailyEarnings() {
+        const data = this.loadData();
+        const today = new Date().toISOString().split('T')[0];
+        const phoneDailyEarnings = {};
+        
+        data.phones.forEach(phone => {
+            phoneDailyEarnings[phone.id] = {
+                phoneName: phone.name,
+                dailyEarnings: {}
+            };
+            
+            phone.apps.forEach(app => {
+                if (app.dailyEarnings) {
+                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
+                        if (date <= today) {
+                            if (!phoneDailyEarnings[phone.id].dailyEarnings[date]) {
+                                phoneDailyEarnings[phone.id].dailyEarnings[date] = 0;
+                            }
+                            phoneDailyEarnings[phone.id].dailyEarnings[date] += parseFloat(amount) || 0;
+                        }
+                    });
+                }
+            });
+        });
+        
+        return phoneDailyEarnings;
+    }
+
     // 计算历史平均日收益（只基于今天及以前的记录）
     static calculateAverageDailyEarnings() {
         const data = this.loadData();
@@ -5275,10 +5304,10 @@ function showPage(pageName) {
     if (pageName === 'assets') renderAssetsPage();
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     
-    // 控制快速编辑浮动按钮的显示/隐藏
+    // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
     const quickEditFab = document.getElementById('quick-edit-fab');
     if (quickEditFab) {
-        quickEditFab.style.display = pageName === 'dashboard' ? 'block' : 'none';
+        quickEditFab.style.display = 'block';
     }
     
     // 再次恢复表单值（确保不被 render 函数覆盖）
@@ -6928,6 +6957,69 @@ function togglePhoneExpand(phoneId) {
     expandedPhones[phoneId] = !expandedPhones[phoneId];
     localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
     renderPhones();
+    
+    // 渲染手机每日赚取记录
+    renderPhoneDailyEarnings();
+}
+
+// 渲染手机每日赚取记录
+function renderPhoneDailyEarnings() {
+    const card = document.getElementById('phone-daily-earnings-card');
+    const content = document.getElementById('phone-daily-earnings-content');
+    if (!card || !content) return;
+    
+    const phoneDailyEarnings = DataManager.getPhoneDailyEarnings();
+    const phones = Object.values(phoneDailyEarnings);
+    
+    // 检查是否有任何记录
+    const hasRecords = phones.some(phone => Object.keys(phone.dailyEarnings).length > 0);
+    
+    if (!hasRecords) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    
+    // 获取所有日期并排序
+    const allDates = new Set();
+    phones.forEach(phone => {
+        Object.keys(phone.dailyEarnings).forEach(date => allDates.add(date));
+    });
+    const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a)).slice(0, 7); // 最近7天
+    
+    let html = '<div style="overflow-x: auto;">';
+    html += '<table style="width: 100%; border-collapse: collapse;">';
+    
+    // 表头
+    html += '<thead><tr>';
+    html += '<th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 12px;">手机</th>';
+    sortedDates.forEach(date => {
+        const dateObj = new Date(date);
+        const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+        html += `<th style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 12px;">${dateStr}</th>`;
+    });
+    html += '</tr></thead>';
+    
+    // 表体
+    html += '<tbody>';
+    phones.forEach(phone => {
+        html += '<tr>';
+        html += `<td style="padding: 8px; border-bottom: 1px solid var(--border-color); font-weight: 600;">${phone.phoneName}</td>`;
+        sortedDates.forEach(date => {
+            const amount = phone.dailyEarnings[date] || 0;
+            const displayAmount = amount > 0 ? `¥${amount.toFixed(1)}` : '-';
+            const color = amount > 0 ? 'color: #10b981;' : 'color: var(--text-secondary);';
+            html += `<td style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 13px; ${color}">${displayAmount}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody>';
+    
+    html += '</table>';
+    html += '</div>';
+    
+    content.innerHTML = html;
 }
 
 // 编辑手机名称
@@ -7152,6 +7244,25 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         // 确保最小提现金额大于0
                         if (minWithdraw <= 0) {
                             showToast('最小提现金额必须大于0', 'error');
+                            // 恢复按钮状态
+                            if (saveBtn) {
+                                saveBtn.disabled = false;
+                                saveBtn.textContent = '保存';
+                            }
+                            releaseLock(lockKey);
+                            return;
+                        }
+                        
+                        // 验证：如果赚取金额小于最小提现金额，直接跳转到提现模态框
+                        if (balance < minWithdraw && balance > 0) {
+                            // 关闭当前模态框
+                            closeModal();
+                            
+                            // 直接跳转到提现模态框
+                            setTimeout(() => {
+                                openWithdrawModal(phoneId, appId);
+                            }, 100);
+                            
                             // 恢复按钮状态
                             if (saveBtn) {
                                 saveBtn.disabled = false;
@@ -12177,14 +12288,10 @@ document.addEventListener('DOMContentLoaded', function() {
     restoreGameTimer(); // 恢复计时器状态
     loadYearlyGoalSettings(); // 加载年度目标设置
     
-    // 显示快速编辑浮动按钮（如果在首页）
+    // 显示快速编辑浮动按钮（在所有页面都显示）
     const quickEditFab = document.getElementById('quick-edit-fab');
     if (quickEditFab) {
-        // 检查当前是否在首页
-        const dashboardPage = document.getElementById('page-dashboard');
-        if (dashboardPage && dashboardPage.classList.contains('active')) {
-            quickEditFab.style.display = 'block';
-        }
+        quickEditFab.style.display = 'block';
     }
     
     // 添加导航栏点击事件监听器
