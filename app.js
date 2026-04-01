@@ -5303,6 +5303,7 @@ function showPage(pageName) {
     if (pageName === 'installments') renderInstallments();
     if (pageName === 'assets') renderAssetsPage();
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
+    if (pageName === 'app-details') renderAppDetailsPage();
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
     const quickEditFab = document.getElementById('quick-edit-fab');
@@ -6988,7 +6989,7 @@ function renderPhoneDailyEarnings() {
     phones.forEach(phone => {
         Object.keys(phone.dailyEarnings).forEach(date => allDates.add(date));
     });
-    const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a)).slice(0, 7); // 最近7天
+    const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a)); // 所有天数
     
     let html = '<div style="overflow-x: auto;">';
     html += '<table style="width: 100%; border-collapse: collapse;">';
@@ -7061,6 +7062,80 @@ function deletePhone(phoneId) {
         renderPhones();
         showToast('手机已删除！');
     }
+}
+
+// 渲染软件明细页面
+function renderAppDetailsPage() {
+    const container = document.getElementById('app-details-content');
+    if (!container) return;
+    
+    const data = DataManager.loadData();
+    
+    if (data.phones.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无手机数据</div>';
+        return;
+    }
+    
+    let html = '';
+    
+    data.phones.forEach(phone => {
+        html += `<div class="card mt-4">`;
+        html += `<div class="section-header">`;
+        html += `<div class="section-title">📱 ${phone.name}</div>`;
+        html += `<div class="section-divider"></div>`;
+        html += `</div>`;
+        
+        if (phone.apps.length === 0) {
+            html += `<div class="empty-state" style="padding: 16px;">暂无软件</div>`;
+        } else {
+            phone.apps.forEach(app => {
+                const balance = app.balance || 0;
+                const withdrawn = app.withdrawn || 0;
+                const historicalWithdrawn = app.historicalWithdrawn || 0;
+                const totalEarned = balance + withdrawn + historicalWithdrawn;
+                
+                html += `<div style="padding: 16px; border-bottom: 1px solid var(--border-color);">`;
+                html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">`;
+                html += `<div style="font-weight: 600; font-size: 16px;">${app.name}</div>`;
+                html += `<div style="font-size: 14px; color: var(--text-secondary);">总收益: ¥${totalEarned.toFixed(2)}</div>`;
+                html += `</div>`;
+                
+                // 收入明细
+                if (app.dailyEarnings && Object.keys(app.dailyEarnings).length > 0) {
+                    html += `<div style="margin-bottom: 12px;">`;
+                    html += `<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">📈 收入明细:</div>`;
+                    html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+                    Object.entries(app.dailyEarnings)
+                        .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+                        .forEach(([date, amount]) => {
+                            html += `<span style="font-size: 12px; background: rgba(16, 185, 129, 0.1); color: #10b981; padding: 4px 8px; border-radius: 4px;">${date}: ¥${parseFloat(amount).toFixed(2)}</span>`;
+                        });
+                    html += `</div>`;
+                    html += `</div>`;
+                }
+                
+                // 提现明细
+                if (app.withdrawals && app.withdrawals.length > 0) {
+                    html += `<div>`;
+                    html += `<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">💰 提现明细:</div>`;
+                    html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+                    app.withdrawals
+                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                        .forEach(wd => {
+                            html += `<span style="font-size: 12px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; padding: 4px 8px; border-radius: 4px;">${wd.date}: ¥${parseFloat(wd.amount).toFixed(2)}</span>`;
+                        });
+                    html += `</div>`;
+                    html += `</div>`;
+                }
+                
+                html += `</div>`;
+            });
+        }
+        
+        html += `</div>`;
+    });
+    
+    container.innerHTML = html;
 }
 
 // 打开添加手机模态框
@@ -7255,12 +7330,12 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             return;
                         }
                         
-                        // 验证：如果赚取金额小于最小提现金额，直接跳转到提现模态框
+                        // 验证：如果余额小于最小提现金额，跳转到提现模态框
                         if (balance < minWithdraw && balance > 0) {
                             // 关闭当前模态框
                             closeModal();
                             
-                            // 直接跳转到提现模态框
+                            // 跳转到提现模态框
                             setTimeout(() => {
                                 openWithdrawModal(phoneId, appId);
                             }, 100);
@@ -7579,8 +7654,8 @@ function selectAppForEdit(appName) {
             const totalWithdrawn = (instance.app.withdrawn || 0) + (instance.app.historicalWithdrawn || 0);
             // 对phoneName进行HTML转义
             const htmlEscapedPhoneName = instance.phoneName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            // 检查是否可以提现（余额大于等于最小提现金额）
-            const canWithdraw = balance >= (instance.app.minWithdraw || 0.5);
+            // 检查是否可以提现（余额大于0即可提现，不限制最小金额）
+            const canWithdraw = balance > 0;
             return `
                 <div class="phone-select-item" data-phone-index="${index}" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;" 
                      onmouseover="this.style.borderColor='var(--primary-color)'; this.style.background='var(--bg-cream)'" 

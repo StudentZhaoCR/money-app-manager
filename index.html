@@ -176,6 +176,7 @@
                 <button class="btn btn-primary flex-1" onclick="openAddPhoneModal()">添加手机</button>
                 <button class="btn btn-accent flex-1" onclick="openBatchAddAppsModal()">批量添加软件</button>
                 <button class="btn btn-secondary flex-1" onclick="showPage('withdraw-records')">提现记录</button>
+                <button class="btn btn-accent flex-1" onclick="showPage('app-details')">软件明细</button>
             </div>
 
             <!-- 手机每日赚取记录 -->
@@ -495,6 +496,17 @@
                 <div id="daily-earnings-list" style="max-height: 60vh; overflow-y: auto;">
                     <div class="empty-state">暂无赚取记录</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 软件明细页面 -->
+        <div class="page" id="page-app-details">
+            <div class="page-header">
+                <button class="btn btn-secondary" onclick="showPage('phones')">返回</button>
+                <div class="section-title">软件明细</div>
+            </div>
+            <div id="app-details-content" style="padding: 16px;">
+                <!-- 内容将由JS生成 -->
             </div>
         </div>
 
