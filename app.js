@@ -7255,8 +7255,8 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             return;
                         }
                         
-                        // 验证：如果赚取金额大于等于最小提现金额，直接跳转到提现模态框
-                        if (balance >= minWithdraw && balance > 0) {
+                        // 验证：如果赚取金额小于最小提现金额，直接跳转到提现模态框
+                        if (balance < minWithdraw && balance > 0) {
                             // 关闭当前模态框
                             closeModal();
                             
