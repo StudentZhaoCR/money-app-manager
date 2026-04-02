@@ -4546,6 +4546,20 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* 软件明细展开动画 */
+@keyframes slideDown {
+    from { 
+        opacity: 0; 
+        transform: translateY(-10px);
+        max-height: 0;
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0);
+        max-height: 500px;
+    }
+}
+
 .draw-result-title {
     text-align: center;
     font-size: 20px;

@@ -6991,35 +6991,56 @@ function renderPhoneDailyEarnings() {
     });
     const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a)); // 所有天数
     
-    let html = '<div style="overflow-x: auto;">';
+    // 计算表格总宽度（手机列80px + 每列60px）
+    const totalWidth = 80 + (sortedDates.length * 70);
+    const scrollWidth = Math.max(totalWidth, content.clientWidth);
+    
+    let html = '<div style="display: flex; position: relative;">';
+    
+    // 左侧固定列 - 手机名称
+    html += '<div style="flex-shrink: 0; width: 80px; background: var(--card-bg); z-index: 2; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">';
+    html += '<table style="width: 100%; border-collapse: collapse;">';
+    html += '<thead><tr><th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 12px; height: 40px;">手机</th></tr></thead>';
+    html += '<tbody>';
+    phones.forEach(phone => {
+        html += `<tr><td style="padding: 8px; border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 13px; height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${phone.phoneName}</td></tr>`;
+    });
+    html += '</tbody>';
+    html += '</table>';
+    html += '</div>';
+    
+    // 右侧可滚动区域 - 日期和收益
+    html += `<div style="flex: 1; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-left: 0;">`;
+    html += `<div style="min-width: ${sortedDates.length * 70}px;">`;
     html += '<table style="width: 100%; border-collapse: collapse;">';
     
     // 表头
-    html += '<thead><tr>';
-    html += '<th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 12px;">手机</th>';
+    html += '<thead><tr style="height: 40px;">';
     sortedDates.forEach(date => {
         const dateObj = new Date(date);
         const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-        html += `<th style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 12px;">${dateStr}</th>`;
+        html += `<th style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 12px; min-width: 70px; white-space: nowrap;">${dateStr}</th>`;
     });
     html += '</tr></thead>';
     
     // 表体
     html += '<tbody>';
     phones.forEach(phone => {
-        html += '<tr>';
-        html += `<td style="padding: 8px; border-bottom: 1px solid var(--border-color); font-weight: 600;">${phone.phoneName}</td>`;
+        html += '<tr style="height: 40px;">';
         sortedDates.forEach(date => {
             const amount = phone.dailyEarnings[date] || 0;
             const displayAmount = amount > 0 ? `¥${amount.toFixed(1)}` : '-';
             const color = amount > 0 ? 'color: #10b981;' : 'color: var(--text-secondary);';
-            html += `<td style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 13px; ${color}">${displayAmount}</td>`;
+            html += `<td style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 13px; ${color} min-width: 70px; white-space: nowrap;">${displayAmount}</td>`;
         });
         html += '</tr>';
     });
     html += '</tbody>';
     
     html += '</table>';
+    html += '</div>';
+    html += '</div>';
+    
     html += '</div>';
     
     content.innerHTML = html;
@@ -7093,6 +7114,7 @@ function renderAppDetailsPage() {
                 const withdrawn = app.withdrawn || 0;
                 const historicalWithdrawn = app.historicalWithdrawn || 0;
                 const totalEarned = balance + withdrawn + historicalWithdrawn;
+                const totalWithdrawn = withdrawn + historicalWithdrawn;
                 
                 html += `<div style="padding: 16px; border-bottom: 1px solid var(--border-color);">`;
                 html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">`;
@@ -7100,33 +7122,72 @@ function renderAppDetailsPage() {
                 html += `<div style="font-size: 14px; color: var(--text-secondary);">总收益: ¥${totalEarned.toFixed(2)}</div>`;
                 html += `</div>`;
                 
-                // 收入明细
-                if (app.dailyEarnings && Object.keys(app.dailyEarnings).length > 0) {
-                    html += `<div style="margin-bottom: 12px;">`;
-                    html += `<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">📈 收入明细:</div>`;
-                    html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+                // 左右布局的明细切换
+                const hasEarnings = app.dailyEarnings && Object.keys(app.dailyEarnings).length > 0;
+                const hasWithdrawals = app.withdrawals && app.withdrawals.length > 0;
+                const appIdSafe = `${phone.id}_${app.id}`.replace(/[^a-zA-Z0-9]/g, '_');
+                
+                html += `<div style="display: flex; gap: 12px; margin-top: 12px;">`;
+                
+                // 收入明细卡片（左侧）
+                html += `<div style="flex: 1; cursor: pointer; border: 2px solid ${hasEarnings ? '#10b981' : 'rgba(16, 185, 129, 0.3)'}; border-radius: 12px; padding: 12px; background: ${hasEarnings ? 'rgba(16, 185, 129, 0.05)' : 'rgba(0,0,0,0.02)'}; transition: all 0.2s ease;" onclick="toggleAppDetail('${appIdSafe}', 'earnings')">`;
+                html += `<div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 600; color: #10b981;">`;
+                html += `<span>📈</span>`;
+                html += `<span>收入明细</span>`;
+                html += `</div>`;
+                html += `<div style="text-align: center; margin-top: 6px; font-size: 13px; color: ${hasEarnings ? '#10b981' : 'var(--text-secondary)'}; font-weight: 500;">¥${totalEarned.toFixed(2)}</div>`;
+                html += `<div style="text-align: center; font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${hasEarnings ? Object.keys(app.dailyEarnings).length + '条记录' : '暂无记录'}</div>`;
+                html += `</div>`;
+                
+                // 提现明细卡片（右侧）
+                html += `<div style="flex: 1; cursor: pointer; border: 2px solid ${hasWithdrawals ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)'}; border-radius: 12px; padding: 12px; background: ${hasWithdrawals ? 'rgba(59, 130, 246, 0.05)' : 'rgba(0,0,0,0.02)'}; transition: all 0.2s ease;" onclick="toggleAppDetail('${appIdSafe}', 'withdrawals')">`;
+                html += `<div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 600; color: #3b82f6;">`;
+                html += `<span>💰</span>`;
+                html += `<span>提现明细</span>`;
+                html += `</div>`;
+                html += `<div style="text-align: center; margin-top: 6px; font-size: 13px; color: ${hasWithdrawals ? '#3b82f6' : 'var(--text-secondary)'}; font-weight: 500;">¥${totalWithdrawn.toFixed(2)}</div>`;
+                html += `<div style="text-align: center; font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${hasWithdrawals ? app.withdrawals.length + '条记录' : '暂无记录'}</div>`;
+                html += `</div>`;
+                
+                html += `</div>`;
+                
+                // 收入明细详情（默认隐藏）
+                html += `<div id="earnings_${appIdSafe}" style="display: none; margin-top: 12px; animation: slideDown 0.3s ease;">`;
+                html += `<div style="font-size: 13px; font-weight: 600; color: #10b981; margin-bottom: 8px;">📈 收入明细</div>`;
+                if (hasEarnings) {
+                    html += `<div style="display: flex; flex-direction: column; gap: 6px;">`;
                     Object.entries(app.dailyEarnings)
                         .sort((a, b) => new Date(b[0]) - new Date(a[0]))
                         .forEach(([date, amount]) => {
-                            html += `<span style="font-size: 12px; background: rgba(16, 185, 129, 0.1); color: #10b981; padding: 4px 8px; border-radius: 4px;">${date}: ¥${parseFloat(amount).toFixed(2)}</span>`;
+                            html += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(16, 185, 129, 0.05); border-radius: 8px; border-left: 3px solid #10b981;">`;
+                            html += `<span style="font-size: 13px; color: var(--text-primary);">${date}</span>`;
+                            html += `<span style="font-size: 14px; font-weight: 600; color: #10b981;">+¥${parseFloat(amount).toFixed(2)}</span>`;
+                            html += `</div>`;
                         });
                     html += `</div>`;
-                    html += `</div>`;
+                } else {
+                    html += `<div style="font-size: 13px; color: var(--text-secondary); padding: 16px; text-align: center; background: rgba(0,0,0,0.02); border-radius: 8px;">暂无收入记录</div>`;
                 }
+                html += `</div>`;
                 
-                // 提现明细
-                if (app.withdrawals && app.withdrawals.length > 0) {
-                    html += `<div>`;
-                    html += `<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">💰 提现明细:</div>`;
-                    html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+                // 提现明细详情（默认隐藏）
+                html += `<div id="withdrawals_${appIdSafe}" style="display: none; margin-top: 12px; animation: slideDown 0.3s ease;">`;
+                html += `<div style="font-size: 13px; font-weight: 600; color: #3b82f6; margin-bottom: 8px;">💰 提现明细</div>`;
+                if (hasWithdrawals) {
+                    html += `<div style="display: flex; flex-direction: column; gap: 6px;">`;
                     app.withdrawals
                         .sort((a, b) => new Date(b.date) - new Date(a.date))
                         .forEach(wd => {
-                            html += `<span style="font-size: 12px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; padding: 4px 8px; border-radius: 4px;">${wd.date}: ¥${parseFloat(wd.amount).toFixed(2)}</span>`;
+                            html += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(59, 130, 246, 0.05); border-radius: 8px; border-left: 3px solid #3b82f6;">`;
+                            html += `<span style="font-size: 13px; color: var(--text-primary);">${wd.date}</span>`;
+                            html += `<span style="font-size: 14px; font-weight: 600; color: #3b82f6;">-¥${parseFloat(wd.amount).toFixed(2)}</span>`;
+                            html += `</div>`;
                         });
                     html += `</div>`;
-                    html += `</div>`;
+                } else {
+                    html += `<div style="font-size: 13px; color: var(--text-secondary); padding: 16px; text-align: center; background: rgba(0,0,0,0.02); border-radius: 8px;">暂无提现记录</div>`;
                 }
+                html += `</div>`;
                 
                 html += `</div>`;
             });
@@ -7136,6 +7197,32 @@ function renderAppDetailsPage() {
     });
     
     container.innerHTML = html;
+}
+
+// 切换软件明细显示
+function toggleAppDetail(appIdSafe, type) {
+    const earningsDiv = document.getElementById(`earnings_${appIdSafe}`);
+    const withdrawalsDiv = document.getElementById(`withdrawals_${appIdSafe}`);
+    
+    if (!earningsDiv || !withdrawalsDiv) return;
+    
+    if (type === 'earnings') {
+        // 切换收入明细
+        if (earningsDiv.style.display === 'none') {
+            earningsDiv.style.display = 'block';
+            withdrawalsDiv.style.display = 'none';
+        } else {
+            earningsDiv.style.display = 'none';
+        }
+    } else {
+        // 切换提现明细
+        if (withdrawalsDiv.style.display === 'none') {
+            withdrawalsDiv.style.display = 'block';
+            earningsDiv.style.display = 'none';
+        } else {
+            withdrawalsDiv.style.display = 'none';
+        }
+    }
 }
 
 // 打开添加手机模态框
