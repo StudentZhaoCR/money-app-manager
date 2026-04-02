@@ -12251,6 +12251,16 @@ function quickEditBalanceFromGoal() {
                 class: 'btn-primary',
                 action: () => {
                     const newBalance = parseFloat(document.getElementById('quick-edit-balance-input').value) || 0;
+                    const minWithdraw = app.minWithdraw || 0;
+                    
+                    // 验证：如果余额小于最小提现金额，跳转到提现模态框
+                    if (newBalance < minWithdraw && newBalance > 0) {
+                        closeModal();
+                        setTimeout(() => {
+                            openWithdrawModal(currentDailyGoalPhoneId, currentDailyGoalAppId);
+                        }, 100);
+                        return;
+                    }
                     
                     if (newBalance !== currentBalance) {
                         const result = DataManager.editApp(currentDailyGoalPhoneId, currentDailyGoalAppId, {
