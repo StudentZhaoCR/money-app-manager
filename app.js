@@ -7399,7 +7399,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 }
                 
                 const name = document.getElementById('edit-app-name').value.trim();
-                const balance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
+                const newBalance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
@@ -7417,28 +7417,36 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             return;
                         }
                         
-                        // 验证：如果余额小于最小提现金额，跳转到提现模态框
-                        if (balance < minWithdraw && balance > 0) {
-                            // 关闭当前模态框
-                            closeModal();
-                            
-                            // 跳转到提现模态框
-                            setTimeout(() => {
-                                openWithdrawModal(phoneId, appId);
-                            }, 100);
-                            
+                        // 获取原余额
+                        const oldBalance = app.balance || 0;
+                        // 计算本次赚取金额（余额增量）
+                        const earnedAmount = newBalance - oldBalance;
+                        
+                        // 验证：如果本次赚取金额大于0且小于最小提现金额，跳转到提现模态框
+                        if (earnedAmount > 0 && earnedAmount < minWithdraw) {
+                            console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw);
                             // 恢复按钮状态
                             if (saveBtn) {
                                 saveBtn.disabled = false;
                                 saveBtn.textContent = '保存';
                             }
                             releaseLock(lockKey);
+                            
+                            // 关闭当前模态框
+                            closeModal();
+                            
+                            // 跳转到提现模态框（增加延迟确保模态框完全关闭）
+                            setTimeout(() => {
+                                console.log('验证通过，打开提现模态框', phoneId, appId);
+                                openWithdrawModal(phoneId, appId);
+                            }, 200);
+                            
                             return;
                         }
                         
                         const result = DataManager.editApp(phoneId, appId, {
                             name,
-                            balance,
+                            balance: newBalance,
                             minWithdraw,
                             historicalWithdrawn
                         });
@@ -7488,6 +7496,11 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
 
 // 打开提现模态框
 function openWithdrawModal(phoneId, appId) {
+    console.log('openWithdrawModal called:', phoneId, appId);
+    
+    // 确保模态框状态重置
+    modalIsShowing = false;
+    
     currentPhoneId = phoneId;
     currentAppId = appId;
     
@@ -7495,7 +7508,10 @@ function openWithdrawModal(phoneId, appId) {
     const phone = data.phones.find(p => p.id === phoneId);
     const app = phone ? phone.apps.find(a => a.id === appId) : null;
     
-    if (!app) return;
+    if (!app) {
+        console.log('App not found');
+        return;
+    }
     
     const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     
@@ -12253,12 +12269,21 @@ function quickEditBalanceFromGoal() {
                     const newBalance = parseFloat(document.getElementById('quick-edit-balance-input').value) || 0;
                     const minWithdraw = app.minWithdraw || 0;
                     
-                    // 验证：如果余额小于最小提现金额，跳转到提现模态框
-                    if (newBalance < minWithdraw && newBalance > 0) {
+                    // 计算本次赚取金额（余额增量）
+                    const earnedAmount = newBalance - currentBalance;
+                    
+                    // 验证：如果本次赚取金额大于0且小于最小提现金额，跳转到提现模态框
+                    if (earnedAmount > 0 && earnedAmount < minWithdraw) {
+                        console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw);
+                        // 关闭快速编辑余额的模态框
                         closeModal();
+                        // 同时关闭每日目标弹窗
+                        closeDailyGoalModal();
+                        // 增加延迟确保模态框完全关闭
                         setTimeout(() => {
+                            console.log('打开提现模态框', currentDailyGoalPhoneId, currentDailyGoalAppId);
                             openWithdrawModal(currentDailyGoalPhoneId, currentDailyGoalAppId);
-                        }, 100);
+                        }, 250);
                         return;
                     }
                     
