@@ -7514,6 +7514,8 @@ function openWithdrawModal(phoneId, appId) {
     }
     
     const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+    const minWithdrawAmount = app.minWithdraw || 0;
+    const currentBalance = app.balance || 0;
     
     showModal('记录提现', `
         <div class="form-group">
@@ -7521,12 +7523,16 @@ function openWithdrawModal(phoneId, appId) {
             <input type="text" class="form-input" value="${app.name}" disabled>
         </div>
         <div class="form-group">
+            <label class="form-label">当前余额 (元)</label>
+            <input type="text" class="form-input" value="${currentBalance.toFixed(2)}" disabled>
+        </div>
+        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <input type="text" class="form-input" value="${totalWithdrawn.toFixed(2)}" disabled>
         </div>
         <div class="form-group">
             <label class="form-label">本次提现金额 (元)</label>
-            <input type="number" id="withdraw-amount" class="form-input" placeholder="输入提现金额" step="0.01">
+            <input type="number" id="withdraw-amount" class="form-input" value="${minWithdrawAmount.toFixed(2)}" placeholder="输入提现金额" step="0.01">
         </div>
         <div class="form-group">
             <label class="form-label">提现日期</label>
