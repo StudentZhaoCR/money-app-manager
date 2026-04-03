@@ -7422,9 +7422,18 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         // 计算本次赚取金额（余额增量）
                         const earnedAmount = newBalance - oldBalance;
                         
-                        // 验证：如果本次赚取金额大于0且小于最小提现金额，跳转到提现模态框
+                        // 验证：如果本次赚取金额大于0且小于最小提现金额，先保存余额再跳转到提现模态框
                         if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                            console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw);
+                            console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw, '先保存余额再跳转');
+                            
+                            // 先保存余额
+                            const result = DataManager.editApp(phoneId, appId, {
+                                name,
+                                balance: newBalance,
+                                minWithdraw,
+                                historicalWithdrawn
+                            });
+                            
                             // 恢复按钮状态
                             if (saveBtn) {
                                 saveBtn.disabled = false;
@@ -7434,6 +7443,12 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             
                             // 关闭当前模态框
                             closeModal();
+                            
+                            // 刷新页面数据
+                            renderPhones();
+                            renderTotalEarnings();
+                            renderYearlyGoal();
+                            renderAppEarningsRanking();
                             
                             // 跳转到提现模态框（增加延迟确保模态框完全关闭）
                             setTimeout(() => {
@@ -12278,13 +12293,27 @@ function quickEditBalanceFromGoal() {
                     // 计算本次赚取金额（余额增量）
                     const earnedAmount = newBalance - currentBalance;
                     
-                    // 验证：如果本次赚取金额大于0且小于最小提现金额，跳转到提现模态框
+                    // 验证：如果本次赚取金额大于0且小于最小提现金额，先保存余额再跳转到提现模态框
                     if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                        console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw);
+                        console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw, '先保存余额再跳转');
+                        
+                        // 先保存余额
+                        DataManager.editApp(currentDailyGoalPhoneId, currentDailyGoalAppId, {
+                            name: app.name,
+                            balance: newBalance,
+                            minWithdraw: app.minWithdraw || 0,
+                            historicalWithdrawn: app.historicalWithdrawn || 0
+                        });
+                        
                         // 关闭快速编辑余额的模态框
                         closeModal();
                         // 同时关闭每日目标弹窗
                         closeDailyGoalModal();
+                        
+                        // 刷新页面数据
+                        renderPhones();
+                        renderDailyGoalContent();
+                        
                         // 增加延迟确保模态框完全关闭
                         setTimeout(() => {
                             console.log('打开提现模态框', currentDailyGoalPhoneId, currentDailyGoalAppId);
