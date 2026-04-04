@@ -2302,6 +2302,79 @@ class DataManager {
             progress: progress
         };
     }
+    
+    // 计算软件的预测每日收益（用于编辑余额时自动填入）
+    static calculatePredictedDailyEarnings(app) {
+        if (!app) return 0;
+        
+        // 获取该软件的每日收益数据
+        const appDailyEarnings = app.dailyEarnings || {};
+        const allDailyEarnings = Object.entries(appDailyEarnings)
+            .map(([date, amount]) => ({ date, amount: parseFloat(amount) || 0 }))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // 如果没有历史数据，返回最小提现金额作为默认值
+        if (allDailyEarnings.length === 0) {
+            return app.minWithdraw || 0.3;
+        }
+        
+        // 获取最近30天的数据
+        const recentEarnings = allDailyEarnings.slice(-30);
+        
+        // 计算加权平均每日收益
+        let weightedSum = 0;
+        let weightSum = 0;
+        
+        recentEarnings.forEach((day, index) => {
+            const daysAgo = recentEarnings.length - index - 1;
+            let weight = 1;
+            
+            // 加权规则：最近7天权重3，8-14天权重2，15-30天权重1
+            if (daysAgo <= 6) {
+                weight = 3;
+            } else if (daysAgo <= 13) {
+                weight = 2;
+            } else {
+                weight = 1;
+            }
+            
+            weightedSum += day.amount * weight;
+            weightSum += weight;
+        });
+        
+        // 计算加权平均
+        let predictedDailyEarnings = 0;
+        if (weightSum > 0) {
+            predictedDailyEarnings = weightedSum / weightSum;
+        }
+        
+        // 趋势分析：使用线性回归计算趋势
+        if (recentEarnings.length >= 7) {
+            const xValues = recentEarnings.map((_, index) => index);
+            const yValues = recentEarnings.map(day => day.amount);
+            
+            const n = xValues.length;
+            const sumX = xValues.reduce((a, b) => a + b, 0);
+            const sumY = yValues.reduce((a, b) => a + b, 0);
+            const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+            const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
+            
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            
+            if (!isNaN(slope)) {
+                const trendFactor = Math.max(-0.5, Math.min(0.5, slope * 0.1));
+                predictedDailyEarnings *= (1 + trendFactor);
+            }
+        }
+        
+        // 如果没有数据或计算结果为0，使用最小提现金额
+        if (predictedDailyEarnings <= 0) {
+            predictedDailyEarnings = app.minWithdraw || 0.3;
+        }
+        
+        // 确保预测收益为正数，保留2位小数
+        return Math.max(0.01, Math.round(predictedDailyEarnings * 100) / 100);
+    }
 
     // 获取收益趋势数据（用于可视化）
     static getEarningsTrendData() {
@@ -7358,15 +7431,30 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         return;
     }
     
+    // 计算预测每日收益
+    const predictedDailyEarnings = DataManager.calculatePredictedDailyEarnings(app);
+    const currentBalance = app.balance || 0;
+    const predictedBalance = currentBalance + predictedDailyEarnings;
+    
+    // 获取历史收益数据用于显示
+    const dailyEarnings = app.dailyEarnings || {};
+    const earningsCount = Object.keys(dailyEarnings).length;
+    const avgEarnings = earningsCount > 0 
+        ? (Object.values(dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0) / earningsCount).toFixed(2)
+        : '0.00';
+    
     showModal('编辑软件', `
         <div class="form-group">
             <label class="form-label">软件名称</label>
             <input type="text" id="edit-app-name" class="form-input" value="${app.name}">
         </div>
         <div class="form-group">
-            <label class="form-label">当前余额 (元)</label>
-            <input type="number" id="edit-app-balance" class="form-input" value="${(app.balance || 0).toFixed(2)}" step="0.01">
-            <div class="form-hint">软件账户中当前可提现的金额</div>
+            <label class="form-label">当前余额 (元) <span style="color: var(--text-secondary); font-size: 12px;">(预测今日: ¥${predictedBalance.toFixed(2)})</span></label>
+            <input type="number" id="edit-app-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01">
+            <div class="form-hint">
+                软件账户中当前可提现的金额
+                ${earningsCount > 0 ? `<br><span style="color: #10b981;">📊 基于${earningsCount}天历史数据，平均日收益¥${avgEarnings}，预测今日¥${predictedDailyEarnings.toFixed(2)}</span>` : '<br><span style="color: var(--text-secondary);">暂无历史数据，使用最小提现金额作为预测</span>'}
+            </div>
         </div>
         <div class="form-group">
             <label class="form-label">提现门槛 (元)</label>
@@ -12267,14 +12355,28 @@ function quickEditBalanceFromGoal() {
     
     const currentBalance = app.balance || 0;
     
+    // 计算预测每日收益
+    const predictedDailyEarnings = DataManager.calculatePredictedDailyEarnings(app);
+    const predictedBalance = currentBalance + predictedDailyEarnings;
+    
+    // 获取历史收益数据用于显示
+    const dailyEarnings = app.dailyEarnings || {};
+    const earningsCount = Object.keys(dailyEarnings).length;
+    const avgEarnings = earningsCount > 0 
+        ? (Object.values(dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0) / earningsCount).toFixed(2)
+        : '0.00';
+    
     // 显示编辑余额弹窗
     showModal(
         '💰 快速编辑余额',
         `
             <div class="form-group">
-                <label class="form-label">当前余额: ¥${currentBalance.toFixed(2)}</label>
+                <label class="form-label">当前余额: ¥${currentBalance.toFixed(2)} <span style="color: var(--text-secondary); font-size: 12px;">(预测今日: ¥${predictedBalance.toFixed(2)})</span></label>
                 <input type="number" id="quick-edit-balance-input" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" placeholder="输入新余额">
-                <div class="form-hint">修改余额后会自动计算今日收益</div>
+                <div class="form-hint">
+                    修改余额后会自动计算今日收益
+                    ${earningsCount > 0 ? `<br><span style="color: #10b981;">📊 基于${earningsCount}天历史数据，平均日收益¥${avgEarnings}，预测今日¥${predictedDailyEarnings.toFixed(2)}</span>` : '<br><span style="color: var(--text-secondary);">暂无历史数据，使用最小提现金额作为预测</span>'}
+                </div>
             </div>
         `,
         [
