@@ -177,17 +177,7 @@
                 <button class="btn btn-accent flex-1" onclick="openBatchAddAppsModal()">批量添加软件</button>
                 <button class="btn btn-secondary flex-1" onclick="showPage('withdraw-records')">提现记录</button>
                 <button class="btn btn-accent flex-1" onclick="showPage('app-details')">软件明细</button>
-            </div>
-
-            <!-- 手机每日赚取记录 -->
-            <div class="card mt-4" id="phone-daily-earnings-card" style="display: none;">
-                <div class="section-header">
-                    <div class="section-title">📱 手机每日赚取</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="phone-daily-earnings-content">
-                    <!-- 内容将由JS生成 -->
-                </div>
+                <button class="btn btn-secondary flex-1" onclick="showPage('phone-earnings')">每日赚取</button>
             </div>
 
             <div class="phone-grid" id="phone-grid">
@@ -507,6 +497,22 @@
             </div>
             <div id="app-details-content" style="padding: 16px;">
                 <!-- 内容将由JS生成 -->
+            </div>
+        </div>
+
+        <!-- 手机每日赚取页面 -->
+        <div class="page" id="page-phone-earnings">
+            <div class="page-header">
+                <button class="btn btn-secondary" onclick="showPage('phones')">返回</button>
+                <div class="section-title">📱 手机每日赚取</div>
+            </div>
+            <div style="padding: 16px;">
+                <!-- 手机每日赚取记录 -->
+                <div class="card" id="phone-daily-earnings-card-page" style="display: none;">
+                    <div id="phone-daily-earnings-content-page">
+                        <!-- 内容将由JS生成 -->
+                    </div>
+                </div>
             </div>
         </div>
 

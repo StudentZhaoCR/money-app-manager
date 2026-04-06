@@ -5377,6 +5377,7 @@ function showPage(pageName) {
     if (pageName === 'assets') renderAssetsPage();
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     if (pageName === 'app-details') renderAppDetailsPage();
+    if (pageName === 'phone-earnings') renderPhoneEarningsPage();
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
     const quickEditFab = document.getElementById('quick-edit-fab');
@@ -6927,6 +6928,9 @@ function renderPhones() {
         // 计算该手机的总提现金额
         const totalWithdrawn = calculatePhoneTotalEarned(phone);
         
+        // 计算该手机的当前总余额
+        const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+        
         // 计算该手机的提现次数
         const totalWithdrawals = phone.apps.reduce((sum, app) => {
             return sum + (app.withdrawals ? app.withdrawals.length : 0);
@@ -6953,6 +6957,13 @@ function renderPhones() {
                         </div>
                     </div>
                     <div class="phone-header-stats">
+                        <div class="phone-stat-item">
+                            <span class="stat-icon">💳</span>
+                            <div class="stat-content">
+                                <span class="stat-label">当前余额</span>
+                                <span class="stat-value" style="color: #3b82f6;">¥${totalBalance.toFixed(2)}</span>
+                            </div>
+                        </div>
                         <div class="phone-stat-item">
                             <span class="stat-icon">💰</span>
                             <div class="stat-content">
@@ -7031,91 +7042,141 @@ function togglePhoneExpand(phoneId) {
     expandedPhones[phoneId] = !expandedPhones[phoneId];
     localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
     renderPhones();
-    
-    // 渲染手机每日赚取记录
-    renderPhoneDailyEarnings();
 }
 
-// 渲染手机每日赚取记录
-function renderPhoneDailyEarnings() {
-    const card = document.getElementById('phone-daily-earnings-card');
-    const content = document.getElementById('phone-daily-earnings-content');
+// 渲染手机每日赚取页面（独立页面）- 卡片式布局
+function renderPhoneEarningsPage() {
+    const card = document.getElementById('phone-daily-earnings-card-page');
+    const content = document.getElementById('phone-daily-earnings-content-page');
     if (!card || !content) return;
-    
+
     const phoneDailyEarnings = DataManager.getPhoneDailyEarnings();
     const phones = Object.values(phoneDailyEarnings);
-    
+
     // 检查是否有任何记录
     const hasRecords = phones.some(phone => Object.keys(phone.dailyEarnings).length > 0);
-    
+
     if (!hasRecords) {
-        // 显示空状态提示
         card.style.display = 'block';
         content.innerHTML = '<div class="empty-state" style="padding: 20px;">暂无每日赚取记录<br><span style="font-size: 12px; color: var(--text-secondary);">编辑软件余额后会自动记录</span></div>';
         return;
     }
-    
+
     card.style.display = 'block';
-    
-    // 获取所有日期并排序
-    const allDates = new Set();
-    phones.forEach(phone => {
-        Object.keys(phone.dailyEarnings).forEach(date => allDates.add(date));
+
+    // 获取原始手机数据
+    const data = DataManager.loadData();
+    const phoneBalanceMap = {};
+    data.phones.forEach(phone => {
+        const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+        phoneBalanceMap[phone.id] = totalBalance;
     });
-    const sortedDates = Array.from(allDates).sort((a, b) => new Date(b) - new Date(a)); // 所有天数
-    
-    // 计算表格总宽度（手机列80px + 每列60px）
-    const totalWidth = 80 + (sortedDates.length * 70);
-    const scrollWidth = Math.max(totalWidth, content.clientWidth);
-    
-    let html = '<div style="display: flex; position: relative;">';
-    
-    // 左侧固定列 - 手机名称
-    html += '<div style="flex-shrink: 0; width: 80px; background: var(--card-bg); z-index: 2; box-shadow: 2px 0 4px rgba(0,0,0,0.1);">';
-    html += '<table style="width: 100%; border-collapse: collapse;">';
-    html += '<thead><tr><th style="padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 12px; height: 40px;">手机</th></tr></thead>';
-    html += '<tbody>';
+
+    // 计算总体统计
+    let totalEarnings = 0;
+    let totalDays = 0;
     phones.forEach(phone => {
-        html += `<tr><td style="padding: 8px; border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 13px; height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${phone.phoneName}</td></tr>`;
-    });
-    html += '</tbody>';
-    html += '</table>';
-    html += '</div>';
-    
-    // 右侧可滚动区域 - 日期和收益
-    html += `<div style="flex: 1; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-left: 0;">`;
-    html += `<div style="min-width: ${sortedDates.length * 70}px;">`;
-    html += '<table style="width: 100%; border-collapse: collapse;">';
-    
-    // 表头
-    html += '<thead><tr style="height: 40px;">';
-    sortedDates.forEach(date => {
-        const dateObj = new Date(date);
-        const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-        html += `<th style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 12px; min-width: 70px; white-space: nowrap;">${dateStr}</th>`;
-    });
-    html += '</tr></thead>';
-    
-    // 表体
-    html += '<tbody>';
-    phones.forEach(phone => {
-        html += '<tr style="height: 40px;">';
-        sortedDates.forEach(date => {
-            const amount = phone.dailyEarnings[date] || 0;
-            const displayAmount = amount > 0 ? `¥${amount.toFixed(1)}` : '-';
-            const color = amount > 0 ? 'color: #10b981;' : 'color: var(--text-secondary);';
-            html += `<td style="padding: 8px; text-align: center; border-bottom: 1px solid var(--border-color); font-size: 13px; ${color} min-width: 70px; white-space: nowrap;">${displayAmount}</td>`;
+        const dailyEarnings = phone.dailyEarnings || {};
+        Object.values(dailyEarnings).forEach(amount => {
+            totalEarnings += parseFloat(amount) || 0;
         });
-        html += '</tr>';
+        totalDays += Object.keys(dailyEarnings).length;
     });
-    html += '</tbody>';
-    
-    html += '</table>';
+
+    let html = '';
+
+    // 顶部统计栏
+    html += `
+        <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 120px; background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); border-radius: 12px; padding: 16px; color: white;">
+                <div style="font-size: 12px; opacity: 0.9;">总手机数</div>
+                <div style="font-size: 24px; font-weight: 700;">${phones.length}</div>
+            </div>
+            <div style="flex: 1; min-width: 120px; background: linear-gradient(135deg, #10b981 0%, #34d399 100%); border-radius: 12px; padding: 16px; color: white;">
+                <div style="font-size: 12px; opacity: 0.9;">总收益天数</div>
+                <div style="font-size: 24px; font-weight: 700;">${totalDays}</div>
+            </div>
+            <div style="flex: 1; min-width: 120px; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); border-radius: 12px; padding: 16px; color: white;">
+                <div style="font-size: 12px; opacity: 0.9;">总收益金额</div>
+                <div style="font-size: 24px; font-weight: 700;">¥${totalEarnings.toFixed(2)}</div>
+            </div>
+        </div>
+    `;
+
+    // 手机卡片列表
+    html += '<div style="display: flex; flex-direction: column; gap: 16px;">';
+
+    phones.forEach((phone, index) => {
+        const dailyEarnings = phone.dailyEarnings || {};
+        const totalBalance = phoneBalanceMap[phone.phoneId] || 0;
+
+        // 获取最近7天的日期
+        const sortedDates = Object.keys(dailyEarnings).sort((a, b) => new Date(b) - new Date(a));
+        const recentDates = sortedDates.slice(0, 7);
+
+        // 计算7天总收益
+        const weekTotal = recentDates.reduce((sum, date) => sum + (parseFloat(dailyEarnings[date]) || 0), 0);
+
+        // 计算月均收益（最近30天）
+        const monthDates = sortedDates.slice(0, 30);
+        const monthTotal = monthDates.reduce((sum, date) => sum + (parseFloat(dailyEarnings[date]) || 0), 0);
+        const monthAvg = monthDates.length > 0 ? monthTotal / monthDates.length : 0;
+
+        // 胶囊颜色
+        const capsuleColors = ['purple', 'green', 'blue', 'orange', 'pink', 'cyan'];
+        const capsuleColor = capsuleColors[index % capsuleColors.length];
+
+        html += `
+            <div style="background: var(--card-bg); border-radius: 16px; padding: 16px; border: 1px solid var(--border-color); box-shadow: var(--shadow-soft);">
+                <!-- 手机头部 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%); color: white; padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600;">
+                            📱 ${phone.phoneName}
+                        </span>
+                    </div>
+                    <span style="color: #3b82f6; font-weight: 600; font-size: 16px;">💳 ¥${totalBalance.toFixed(2)}</span>
+                </div>
+
+                <!-- 最近7天收益 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">最近7天收益：</div>
+                    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">
+                        ${recentDates.length > 0 ? recentDates.map(date => {
+                            const amount = parseFloat(dailyEarnings[date]) || 0;
+                            const dateObj = new Date(date);
+                            const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                            return `
+                                <div style="flex-shrink: 0; background: ${amount > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0,0,0,0.02)'}; border-radius: 8px; padding: 8px 12px; text-align: center; min-width: 60px;">
+                                    <div style="font-size: 11px; color: var(--text-secondary);">${dateStr}</div>
+                                    <div style="font-size: 14px; font-weight: 600; color: ${amount > 0 ? '#10b981' : 'var(--text-secondary)'};">${amount > 0 ? '¥' + amount.toFixed(1) : '-'}</div>
+                                </div>
+                            `;
+                        }).join('') : '<div style="color: var(--text-secondary); font-size: 12px;">暂无近期记录</div>'}
+                    </div>
+                </div>
+
+                <!-- 统计信息 -->
+                <div style="display: flex; gap: 16px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                    <div style="flex: 1;">
+                        <div style="font-size: 11px; color: var(--text-secondary);">7天总计</div>
+                        <div style="font-size: 16px; font-weight: 600; color: #10b981;">¥${weekTotal.toFixed(2)}</div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 11px; color: var(--text-secondary);">月均收益</div>
+                        <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${monthAvg.toFixed(2)}</div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 11px; color: var(--text-secondary);">记录天数</div>
+                        <div style="font-size: 16px; font-weight: 600; color: var(--text-primary);">${sortedDates.length}天</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
     html += '</div>';
-    html += '</div>';
-    
-    html += '</div>';
-    
+
     content.innerHTML = html;
 }
 
