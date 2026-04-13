@@ -924,6 +924,12 @@ class DataManager {
         if (dailyGapRecords) {
             result.dailyGapRecords = JSON.parse(dailyGapRecords);
         }
+        
+        // 加载返现/礼品数据
+        const cashbackGift = localStorage.getItem('moneyApp_cashbackGift');
+        if (cashbackGift) {
+            result.cashbackGift = JSON.parse(cashbackGift);
+        }
 
         // 数据迁移：为旧数据添加 dailyEarnedHistory 字段
         const now = new Date();
@@ -981,6 +987,11 @@ class DataManager {
         // 保存每日缺口记录
         if (data.dailyGapRecords) {
             localStorage.setItem('moneyApp_dailyGapRecords', JSON.stringify(data.dailyGapRecords));
+        }
+        
+        // 保存返现/礼品数据
+        if (data.cashbackGift) {
+            localStorage.setItem('moneyApp_cashbackGift', JSON.stringify(data.cashbackGift));
         }
     }
     
@@ -5378,6 +5389,7 @@ function showPage(pageName) {
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     if (pageName === 'app-details') renderAppDetailsPage();
     if (pageName === 'phone-earnings') renderPhoneEarningsPage();
+    if (pageName === 'cashback-gift') renderCashbackGiftPage();
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
     const quickEditFab = document.getElementById('quick-edit-fab');
@@ -12676,6 +12688,967 @@ function toggleDateAchievement(date) {
     renderDailyGoalCalendar();
     renderDailyGoalContent();
     showToast(newAchieved ? '✅ 已标记为达标' : '✗ 已标记为未达标', newAchieved ? 'success' : 'info');
+}
+
+// ==================== 返现/礼品功能 ====================
+
+// 默认平台兑换率配置
+const DEFAULT_PLATFORM_RATES = {
+    'taobao': { name: '淘宝', rate: 100, icon: '🛒' },      // 100金币 = 1元
+    'jd': { name: '京东', rate: 100, icon: '📦' },          // 100金币 = 1元
+    'pdd': { name: '拼多多', rate: 150, icon: '🎁' },       // 150金币 = 1元
+    'tmall': { name: '天猫', rate: 100, icon: '🐱' },       // 100金币 = 1元
+    'douyin': { name: '抖音', rate: 120, icon: '🎵' },      // 120金币 = 1元
+    'xiaohongshu': { name: '小红书', rate: 130, icon: '📕' } // 130金币 = 1元
+};
+
+// 初始化返现/礼品数据
+function initCashbackGiftData() {
+    try {
+        let data = DataManager.loadData();
+        
+        // 确保data对象存在
+        if (!data || typeof data !== 'object') {
+            data = {};
+        }
+        
+        // 初始化cashbackGift对象
+        if (!data.cashbackGift || typeof data.cashbackGift !== 'object') {
+            data.cashbackGift = {};
+        }
+        
+        // 初始化各个字段
+        if (typeof data.cashbackGift.goldCoins !== 'number') {
+            data.cashbackGift.goldCoins = 0;
+        }
+        
+        if (!Array.isArray(data.cashbackGift.transactions)) {
+            data.cashbackGift.transactions = [];
+        }
+        
+        if (!Array.isArray(data.cashbackGift.pendingReviews)) {
+            data.cashbackGift.pendingReviews = [];
+        }
+        
+        if (typeof data.cashbackGift.giftCashbackAmount !== 'number') {
+            data.cashbackGift.giftCashbackAmount = 0.70;
+        }
+        
+        // 确保platformRates存在且是对象
+        if (!data.cashbackGift.platformRates || typeof data.cashbackGift.platformRates !== 'object' || Array.isArray(data.cashbackGift.platformRates)) {
+            data.cashbackGift.platformRates = JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
+        }
+        
+        DataManager.saveData(data);
+        return data.cashbackGift;
+    } catch (e) {
+        console.error('initCashbackGiftData error:', e);
+        // 返回默认对象
+        return {
+            goldCoins: 0,
+            transactions: [],
+            pendingReviews: [],
+            platformRates: JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES)),
+            giftCashbackAmount: 0.70
+        };
+    }
+}
+
+// 渲染返现/礼品页面
+function renderCashbackGiftPage() {
+    try {
+        const cashbackData = initCashbackGiftData();
+        
+        // 确保cashbackData有效
+        if (!cashbackData || typeof cashbackData !== 'object') {
+            console.error('renderCashbackGiftPage: Invalid cashbackData');
+            return;
+        }
+        
+        // 更新金币显示
+        const goldCoinsEl = document.getElementById('user-gold-coins');
+        const goldCoinValueEl = document.getElementById('gold-coin-value');
+        if (goldCoinsEl) {
+            const goldCoins = typeof cashbackData.goldCoins === 'number' ? cashbackData.goldCoins : 0;
+            goldCoinsEl.textContent = goldCoins.toLocaleString();
+        }
+        if (goldCoinValueEl) {
+            const goldCoins = typeof cashbackData.goldCoins === 'number' ? cashbackData.goldCoins : 0;
+            const value = (goldCoins / 100).toFixed(2);
+            goldCoinValueEl.textContent = value;
+        }
+        
+        // 渲染平台兑换率
+        renderPlatformRates();
+        
+        // 渲染待审核交易
+        renderPendingTransactions();
+        
+        // 渲染统计报表
+        renderCashbackStats();
+    } catch (e) {
+        console.error('renderCashbackGiftPage error:', e);
+    }
+}
+
+// 获取当前平台配置
+function getPlatformRates() {
+    try {
+        const cashbackData = initCashbackGiftData();
+        if (cashbackData && cashbackData.platformRates && typeof cashbackData.platformRates === 'object') {
+            return cashbackData.platformRates;
+        }
+    } catch (e) {
+        console.error('getPlatformRates error:', e);
+    }
+    // 返回默认配置
+    return JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
+}
+
+// 渲染平台兑换率 - 只显示用户自己添加的平台
+function renderPlatformRates() {
+    const container = document.getElementById('platform-rates-content');
+    const emptyState = document.getElementById('platform-empty-state');
+    if (!container) {
+        console.log('renderPlatformRates: container not found');
+        return;
+    }
+    
+    // 获取用户自定义的平台（不包括默认平台）
+    const data = DataManager.loadData();
+    let userPlatforms = {};
+    
+    console.log('renderPlatformRates - data:', data);
+    console.log('renderPlatformRates - cashbackGift:', data.cashbackGift);
+    
+    if (data.cashbackGift && data.cashbackGift.platformRates) {
+        // 过滤掉默认平台，只保留用户添加的
+        const defaultKeys = Object.keys(DEFAULT_PLATFORM_RATES);
+        Object.entries(data.cashbackGift.platformRates).forEach(([key, platform]) => {
+            if (!defaultKeys.includes(key)) {
+                userPlatforms[key] = platform;
+            }
+        });
+    }
+    
+    const platformCount = Object.keys(userPlatforms).length;
+    console.log('renderPlatformRates - userPlatforms count:', platformCount, userPlatforms);
+    
+    // 显示或隐藏空状态
+    if (emptyState) {
+        emptyState.style.display = platformCount === 0 ? 'block' : 'none';
+    }
+    
+    // 如果没有用户平台，显示空状态
+    if (platformCount === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    // 渲染用户添加的平台
+    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+    Object.entries(userPlatforms).forEach(([key, platform]) => {
+        html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">${platform.icon || '🛒'}</span>
+                    <span style="font-weight: 500;">${platform.name}</span>
+                </div>
+                <div style="color: var(--text-secondary); font-size: 14px;">
+                    ${platform.rate}金币 = ¥1.00
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// 打开平台管理器
+function openPlatformManager() {
+    // 获取所有平台（包括默认和用户添加的）
+    const data = DataManager.loadData();
+    let allRates = {};
+    
+    if (data.cashbackGift && data.cashbackGift.platformRates) {
+        allRates = data.cashbackGift.platformRates;
+    }
+    
+    const platformCount = Object.keys(allRates).length;
+    
+    let html = `
+        <div style="max-height: 450px; overflow-y: auto; padding: 4px;">
+            <!-- 平台列表 -->
+            <div id="platform-list" style="display: flex; flex-direction: column; gap: 12px;">
+    `;
+    
+    if (platformCount === 0) {
+        html += `
+            <div style="text-align: center; padding: 32px 20px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%); border-radius: 12px; border: 2px dashed var(--border-color);">
+                <div style="font-size: 48px; margin-bottom: 12px;">🛒</div>
+                <div style="font-size: 15px; color: var(--text-primary); font-weight: 500;">暂无平台配置</div>
+                <div style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">请在下方添加您的第一个平台</div>
+            </div>
+        `;
+    } else {
+        Object.entries(allRates).forEach(([key, platform]) => {
+            html += `
+                <div class="platform-item" data-key="${key}" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-soft);">
+                    <!-- 平台信息行 -->
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+                            ${platform.icon || '🛒'}
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 2px;">平台名称</div>
+                            <input type="text" class="platform-name-input form-input" value="${platform.name}" style="width: 100%; font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 8px;">
+                        </div>
+                    </div>
+                    
+                    <!-- 兑换率行 -->
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 2px;">兑换率</div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="number" class="platform-rate-input form-input" value="${platform.rate}" style="flex: 1; font-size: 15px; font-weight: 600; color: #8b5cf6; padding: 8px 12px; border-radius: 8px; text-align: center;">
+                                <span style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">金币 = ¥1.00</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-sm btn-primary" onclick="savePlatform('${key}', this)" style="flex: 1; padding: 8px; font-size: 13px;">
+                            💾 保存
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deletePlatform('${key}')" style="padding: 8px 16px; font-size: 13px;">
+                            🗑️ 删除
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    html += `
+            </div>
+            
+            <!-- 添加新平台区域 -->
+            <div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%); border-radius: 12px; border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                    <span style="font-size: 20px;">➕</span>
+                    <span style="font-size: 15px; font-weight: 600; color: var(--text-primary);">添加新平台</span>
+                </div>
+                
+                <!-- 图标和名称 -->
+                <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                    <div style="width: 80px;">
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">图标</div>
+                        <input type="text" id="new-platform-icon" class="form-input" placeholder="🛒" style="width: 100%; font-size: 18px; text-align: center; padding: 10px;">
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">平台名称</div>
+                        <input type="text" id="new-platform-name" class="form-input" placeholder="如：淘宝、京东" style="width: 100%; font-size: 14px; padding: 10px 12px;">
+                    </div>
+                </div>
+                
+                <!-- 兑换率 -->
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">兑换率（多少金币 = 1元）</div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="number" id="new-platform-rate" class="form-input" placeholder="100" style="flex: 1; font-size: 15px; font-weight: 600; color: #10b981; padding: 10px 12px; text-align: center;">
+                        <span style="font-size: 14px; color: var(--text-secondary);">金币 = ¥1.00</span>
+                    </div>
+                </div>
+                
+                <!-- 添加按钮 -->
+                <button class="btn btn-primary" onclick="addNewPlatform()" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 500;">
+                    ✨ 添加平台
+                </button>
+            </div>
+        </div>
+    `;
+    
+    showModal('💱 管理平台', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 保存平台设置
+function savePlatform(key, btn) {
+    const row = btn.closest('.platform-item');
+    const name = row.querySelector('.platform-name-input').value.trim();
+    const rate = parseInt(row.querySelector('.platform-rate-input').value) || 100;
+    
+    if (!name) {
+        showToast('请输入平台名称', 'error');
+        return;
+    }
+    
+    const data = DataManager.loadData();
+    
+    // 确保cashbackGift和platformRates存在
+    if (!data.cashbackGift) {
+        data.cashbackGift = {};
+    }
+    if (!data.cashbackGift.platformRates) {
+        data.cashbackGift.platformRates = JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
+    }
+    
+    const platform = data.cashbackGift.platformRates[key];
+    if (platform) {
+        platform.name = name;
+        platform.rate = rate;
+        DataManager.saveData(data);
+        showToast('保存成功', 'success');
+        renderPlatformRates();
+    } else {
+        showToast('平台不存在', 'error');
+    }
+}
+
+// 删除平台
+function deletePlatform(key) {
+    if (!confirm('确定要删除这个平台吗？')) return;
+    
+    const data = DataManager.loadData();
+    
+    // 确保cashbackGift和platformRates存在
+    if (!data.cashbackGift) {
+        data.cashbackGift = {};
+    }
+    if (!data.cashbackGift.platformRates) {
+        data.cashbackGift.platformRates = JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
+    }
+    
+    delete data.cashbackGift.platformRates[key];
+    DataManager.saveData(data);
+    
+    showToast('删除成功', 'success');
+    renderPlatformRates();
+    closeModal();
+    setTimeout(() => openPlatformManager(), 100);
+}
+
+// 添加新平台
+function addNewPlatform() {
+    const icon = document.getElementById('new-platform-icon').value.trim() || '🛒';
+    const name = document.getElementById('new-platform-name').value.trim();
+    const rate = parseInt(document.getElementById('new-platform-rate').value) || 100;
+    
+    if (!name) {
+        showToast('请输入平台名称', 'error');
+        return;
+    }
+    
+    const data = DataManager.loadData();
+    
+    // 确保cashbackGift和platformRates存在
+    if (!data.cashbackGift) {
+        data.cashbackGift = {};
+    }
+    if (!data.cashbackGift.platformRates) {
+        data.cashbackGift.platformRates = {};
+    }
+    
+    const key = 'platform_' + Date.now();
+    data.cashbackGift.platformRates[key] = {
+        name: name,
+        rate: rate,
+        icon: icon
+    };
+    DataManager.saveData(data);
+    
+    console.log('平台添加成功:', key, data.cashbackGift.platformRates);
+    
+    showToast('添加成功', 'success');
+    
+    // 先刷新平台列表显示（在关闭模态框前）
+    renderPlatformRates();
+    
+    // 强制刷新主页面显示
+    const container = document.getElementById('platform-rates-content');
+    if (container) {
+        console.log('刷新平台列表显示');
+    }
+    
+    // 清空输入框
+    document.getElementById('new-platform-icon').value = '';
+    document.getElementById('new-platform-name').value = '';
+    document.getElementById('new-platform-rate').value = '';
+    
+    // 关闭模态框后延迟重新打开管理器
+    closeModal();
+    setTimeout(() => {
+        openPlatformManager();
+    }, 200);
+}
+
+// 打开赠送礼品模态框
+function openGiftModal() {
+    const cashbackData = initCashbackGiftData();
+    const data = DataManager.loadData();
+    const phones = data.phones || [];
+    
+    // 生成手机选项
+    const phoneOptions = phones.length > 0 
+        ? phones.map(p => `<option value="${p.id}">📱 ${p.name}</option>`).join('')
+        : '<option value="">暂无手机</option>';
+    
+    // 获取用户自定义的平台（不包括默认平台）
+    let userPlatforms = {};
+    if (data.cashbackGift && data.cashbackGift.platformRates) {
+        const defaultKeys = Object.keys(DEFAULT_PLATFORM_RATES);
+        Object.entries(data.cashbackGift.platformRates).forEach(([key, platform]) => {
+            if (!defaultKeys.includes(key)) {
+                userPlatforms[key] = platform;
+            }
+        });
+    }
+    
+    // 生成平台选项
+    const platformEntries = Object.entries(userPlatforms);
+    const platformOptions = platformEntries.length > 0
+        ? platformEntries.map(([key, platform]) => 
+            `<option value="${key}">${platform.icon || '🛒'} ${platform.name}</option>`
+        ).join('')
+        : '<option value="">请先添加平台</option>';
+    
+    showModal('🎁 赠送礼品', `
+        <div style="max-height: 400px; overflow-y: auto;">
+            <div class="form-group">
+                <label class="form-label">选择手机 <span style="color: var(--text-secondary); font-size: 12px;">(用于购买的手机)</span></label>
+                <select id="gift-phone-id" class="form-input">
+                    <option value="">请选择手机</option>
+                    ${phoneOptions}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">商品名称</label>
+                <input type="text" id="gift-product-name" class="form-input" placeholder="输入商品名称">
+            </div>
+            <div class="form-group">
+                <label class="form-label">购买金额 (元)</label>
+                <input type="number" id="gift-amount" class="form-input" placeholder="输入购买金额" step="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">购买平台</label>
+                <select id="gift-platform" class="form-input">
+                    ${platformOptions}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">返还金币</label>
+                <input type="number" id="gift-coins" class="form-input" placeholder="输入实际返还的金币数量" min="0" step="1">
+            </div>
+            <div style="background: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                <div style="font-size: 13px; color: #10b981; font-weight: 500;">💰 返现说明</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                    • 您将获得对应平台的金币奖励<br>
+                    • 审核通过后可获得 ¥${cashbackData.giftCashbackAmount.toFixed(2)} 返现<br>
+                    • 返现将在审核通过后发放
+                </div>
+            </div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '确认',
+            class: 'btn-primary',
+            action: () => {
+                const productName = document.getElementById('gift-product-name').value.trim();
+                const amount = parseFloat(document.getElementById('gift-amount').value) || 0;
+                const platform = document.getElementById('gift-platform').value;
+                const earnedCoins = parseInt(document.getElementById('gift-coins').value) || 0;
+                
+                // 验证
+                const phoneId = document.getElementById('gift-phone-id').value;
+                if (!phoneId) {
+                    showToast('请选择购买手机', 'error');
+                    return;
+                }
+                if (!platform) {
+                    showToast('请先添加平台', 'error');
+                    return;
+                }
+                if (!productName) {
+                    showToast('请输入商品名称', 'error');
+                    return;
+                }
+                if (amount <= 0) {
+                    showToast('请输入有效的购买金额', 'error');
+                    return;
+                }
+                if (earnedCoins < 0) {
+                    showToast('请输入有效的金币数量', 'error');
+                    return;
+                }
+                // 创建交易记录
+                processGiftTransaction({
+                    phoneId,
+                    productName,
+                    amount,
+                    platform,
+                    earnedCoins,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        }
+    ]);
+}
+
+// 处理礼品交易
+function processGiftTransaction(transaction) {
+    const data = DataManager.loadData();
+    const cashbackData = data.cashbackGift;
+    const rates = getPlatformRates();
+    const platform = rates[transaction.platform];
+    
+    if (!platform) {
+        showToast('平台配置错误', 'error');
+        return;
+    }
+    
+    // 获取手机信息
+    const phone = data.phones.find(p => p.id === transaction.phoneId);
+    const phoneName = phone ? phone.name : '未知手机';
+    
+    // 使用用户输入的金币数量
+    const earnedCoins = transaction.earnedCoins || 0;
+    
+    // 计算金币价值（元）
+    const coinValue = earnedCoins / platform.rate;
+    
+    // 更新用户金币
+    cashbackData.goldCoins += earnedCoins;
+    
+    // 计算实际支出（初始，未验证时返现不计入）
+    const actualExpense = transaction.amount - coinValue;
+    
+    // 创建完整交易记录
+    const fullTransaction = {
+        id: 'tx_' + Date.now(),
+        ...transaction,
+        phoneName: phoneName,
+        platformName: platform.name,
+        platformIcon: platform.icon,
+        earnedCoins: earnedCoins,
+        coinValue: coinValue,           // 金币价值
+        recipientCashback: cashbackData.giftCashbackAmount,
+        actualExpense: actualExpense,   // 实际支出（未验证时不含返现）
+        finalExpense: actualExpense,    // 最终支出（验证后更新）
+        status: 'pending', // pending, approved, rejected
+        // 快递信息（可后填）
+        trackingNumber: null,
+        courierName: null,
+        deliveryPerson: null,
+        deliveryVerified: false,
+        // 审核信息
+        reviewer: null,
+        reviewTime: null,
+        reviewNote: null
+    };
+    
+    // 添加到待审核列表
+    cashbackData.pendingReviews.push(fullTransaction);
+    
+    // 保存数据
+    DataManager.saveData(data);
+    
+    // 显示成功提示
+    showToast(`🎁 礼品赠送成功！获得 ${earnedCoins} 金币`, 'success');
+    closeModal();
+    
+    // 刷新页面
+    renderCashbackGiftPage();
+}
+
+// 渲染待审核交易
+function renderPendingTransactions() {
+    const card = document.getElementById('pending-transactions-card');
+    const container = document.getElementById('pending-transactions-content');
+    if (!card || !container) return;
+    
+    const cashbackData = initCashbackGiftData();
+    const pendingList = cashbackData.pendingReviews || [];
+    
+    if (pendingList.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    
+    let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
+    pendingList.slice(0, 5).forEach(tx => {
+        const date = new Date(tx.timestamp).toLocaleDateString('zh-CN');
+        
+        // 计算实际支出/收入
+        const expense = tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0;
+        let expenseBadge = '';
+        if (expense < 0) {
+            expenseBadge = `<span style="font-size: 10px; background: #10b981; color: white; padding: 1px 4px; border-radius: 6px;">收入¥${Math.abs(expense).toFixed(2)}</span>`;
+        } else if (expense > 0) {
+            expenseBadge = `<span style="font-size: 10px; background: #ef4444; color: white; padding: 1px 4px; border-radius: 6px;">支出¥${expense.toFixed(2)}</span>`;
+        } else {
+            expenseBadge = `<span style="font-size: 10px; background: #6b7280; color: white; padding: 1px 4px; border-radius: 6px;">平衡</span>`;
+        }
+        
+        html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 3px solid #f59e0b; cursor: pointer;" onclick="openTransactionDetail('${tx.id}')">
+                <div>
+                    <div style="font-weight: 500;">${tx.platformIcon} ${tx.productName}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">
+                        📱 ${tx.phoneName} · ¥${tx.amount.toFixed(2)} · ${date}
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 11px; color: #f59e0b; font-weight: 500;">⏳ 待审核</div>
+                    <div style="margin-top: 2px;">${expenseBadge}</div>
+                    <div style="font-size: 11px; color: #10b981; margin-top: 2px;">+${tx.earnedCoins}金币</div>
+                </div>
+            </div>
+        `;
+    });
+    if (pendingList.length > 5) {
+        html += `<div style="text-align: center; color: var(--text-secondary); font-size: 12px;">还有 ${pendingList.length - 5} 笔待审核...</div>`;
+    }
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// 打开交易历史
+function openTransactionHistory() {
+    const cashbackData = initCashbackGiftData();
+    const allTransactions = cashbackData.pendingReviews || [];
+    
+    if (allTransactions.length === 0) {
+        showModal('📋 交易记录', '<div class="empty-state">暂无交易记录</div>', [
+            { text: '关闭', class: 'btn-secondary', action: closeModal }
+        ]);
+        return;
+    }
+    
+    const sortedTx = [...allTransactions].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+    html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+    
+    sortedTx.forEach(tx => {
+        const date = new Date(tx.timestamp).toLocaleDateString('zh-CN');
+        const statusColors = {
+            'pending': { color: '#f59e0b', text: '⏳ 待审核' },
+            'approved': { color: '#10b981', text: '✅ 已通过' },
+            'rejected': { color: '#ef4444', text: '❌ 已拒绝' }
+        };
+        const status = statusColors[tx.status] || statusColors['pending'];
+        
+        const phoneInfo = tx.phoneName ? `📱 ${tx.phoneName}` : '未知手机';
+        
+        // 计算实际支出/收入
+        const expense = tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0;
+        let expenseBadge = '';
+        if (expense < 0) {
+            expenseBadge = `<span style="font-size: 11px; background: #10b981; color: white; padding: 2px 6px; border-radius: 8px;">收入¥${Math.abs(expense).toFixed(2)}</span>`;
+        } else if (expense > 0) {
+            expenseBadge = `<span style="font-size: 11px; background: #ef4444; color: white; padding: 2px 6px; border-radius: 8px;">支出¥${expense.toFixed(2)}</span>`;
+        } else {
+            expenseBadge = `<span style="font-size: 11px; background: #6b7280; color: white; padding: 2px 6px; border-radius: 8px;">平衡</span>`;
+        }
+        
+        html += `
+            <div style="padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div>
+                        <div style="font-weight: 500;">${tx.platformIcon} ${tx.productName}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            ${phoneInfo} · ¥${tx.amount.toFixed(2)} · ${date}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 12px; color: ${status.color}; font-weight: 500;">${status.text}</div>
+                        <div style="margin-top: 4px;">${expenseBadge}</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">+${tx.earnedCoins}金币</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div></div>';
+    
+    showModal('📋 交易记录', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 渲染统计报表
+function renderCashbackStats() {
+    const container = document.getElementById('cashback-stats-content');
+    if (!container) return;
+    
+    const cashbackData = initCashbackGiftData();
+    const transactions = cashbackData.pendingReviews || [];
+    
+    // 计算统计数据
+    const totalTransactions = transactions.length;
+    const approvedTransactions = transactions.filter(tx => tx.status === 'approved').length;
+    const pendingTransactions = transactions.filter(tx => tx.status === 'pending').length;
+    const totalEarnedCoins = transactions.reduce((sum, tx) => sum + (tx.earnedCoins || 0), 0);
+    const totalRecipientCashback = transactions.reduce((sum, tx) => sum + (tx.recipientCashback || 0), 0);
+    
+    // 计算支出统计
+    const totalPayment = transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    const totalCoinValue = transactions.reduce((sum, tx) => sum + (tx.coinValue || 0), 0);
+    const totalActualExpense = transactions.reduce((sum, tx) => sum + (tx.actualExpense || 0), 0);
+    const totalFinalExpense = transactions.reduce((sum, tx) => {
+        // 如果已审核通过且已验证，使用最终支出，否则使用实际支出
+        if (tx.status === 'approved') {
+            return sum + (tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0);
+        }
+        return sum + (tx.actualExpense || 0);
+    }, 0);
+    
+    // 按平台统计
+    const platformStats = {};
+    transactions.forEach(tx => {
+        if (!platformStats[tx.platform]) {
+            platformStats[tx.platform] = { count: 0, amount: 0, coins: 0 };
+        }
+        platformStats[tx.platform].count++;
+        platformStats[tx.platform].amount += tx.amount;
+        platformStats[tx.platform].coins += tx.earnedCoins;
+    });
+    
+    let html = `
+        <!-- 交易数量统计 -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
+                <div style="font-size: 20px; font-weight: 700; color: #8b5cf6;">${totalTransactions}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">总交易</div>
+            </div>
+            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">
+                <div style="font-size: 20px; font-weight: 700; color: #10b981;">${approvedTransactions}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">已完成</div>
+            </div>
+            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 8px;">
+                <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${pendingTransactions}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">待审核</div>
+            </div>
+        </div>
+        
+        <!-- 支出计算明细 -->
+        <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%); border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid rgba(139, 92, 246, 0.15);">
+            <div style="font-size: 13px; font-weight: 600; color: #8b5cf6; margin-bottom: 12px;">💰 支出计算明细</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">支付总额</span>
+                    <span style="font-size: 14px; font-weight: 500;">¥${totalPayment.toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">金币抵扣</span>
+                    <span style="font-size: 14px; font-weight: 500; color: #10b981;">-¥${totalCoinValue.toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">返现抵扣</span>
+                    <span style="font-size: 14px; font-weight: 500; color: #10b981;">-¥${totalRecipientCashback.toFixed(2)}</span>
+                </div>
+                <div style="margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(139, 92, 246, 0.2); display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">实际总支出</span>
+                    <span style="font-size: 18px; font-weight: 700; color: #8b5cf6;">¥${totalFinalExpense.toFixed(2)}</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 金币和返现统计 -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                <div style="font-size: 18px; font-weight: 700; color: #3b82f6;">${totalEarnedCoins.toLocaleString()}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">累计金币</div>
+            </div>
+            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(236, 72, 153, 0.1); border-radius: 8px;">
+                <div style="font-size: 18px; font-weight: 700; color: #ec4899;">¥${totalRecipientCashback.toFixed(2)}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">累计返现</div>
+            </div>
+        </div>
+    `;
+    
+    // 平台分布
+    if (Object.keys(platformStats).length > 0) {
+        html += '<div style="margin-top: 12px;"><div style="font-size: 13px; font-weight: 500; margin-bottom: 8px;">平台分布</div>';
+        const rates = getPlatformRates();
+        Object.entries(platformStats).forEach(([platform, stats]) => {
+            const platformInfo = rates[platform] || { icon: '🛒', name: '未知平台' };
+            html += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span>${platformInfo.icon || '🛒'}</span>
+                        <span style="font-size: 13px;">${platformInfo.name || '未知平台'}</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">
+                        ${stats.count}笔 · ¥${stats.amount.toFixed(2)} · ${stats.coins}金币
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+// 打开交易详情（用于填写快递信息）
+function openTransactionDetail(txId) {
+    const data = DataManager.loadData();
+    const cashbackData = data.cashbackGift;
+    const tx = cashbackData.pendingReviews.find(t => t.id === txId);
+    
+    if (!tx) {
+        showToast('交易不存在', 'error');
+        return;
+    }
+    
+    const hasDeliveryInfo = tx.trackingNumber && tx.deliveryPerson;
+    const deliveryStatus = tx.deliveryVerified 
+        ? '<span style="color: #10b981;">✅ 已验证</span>' 
+        : (hasDeliveryInfo ? '<span style="color: #f59e0b;">⏳ 待验证</span>' : '<span style="color: var(--text-secondary);">未填写</span>');
+    
+    showModal('📦 交易详情', `
+        <div style="max-height: 400px; overflow-y: auto;">
+            <!-- 商品信息 -->
+            <div style="padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; margin-bottom: 16px;">
+                <div style="font-weight: 500; margin-bottom: 8px;">${tx.platformIcon} ${tx.productName}</div>
+                <div style="font-size: 13px; color: var(--text-secondary);">
+                    📱 购买手机: ${tx.phoneName}<br>
+                    💰 购买金额: ¥${tx.amount.toFixed(2)}<br>
+                    🏪 购买平台: ${tx.platformName}<br>
+                    🕐 时间: ${new Date(tx.timestamp).toLocaleString('zh-CN')}
+                </div>
+            </div>
+            
+            <!-- 支出计算 -->
+            <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%); border-radius: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid rgba(139, 92, 246, 0.2);">
+                <div style="font-size: 13px; color: #8b5cf6;">
+                    <strong>💰 支出计算:</strong><br>
+                    支付金额: ¥${tx.amount.toFixed(2)}<br>
+                    金币价值: -¥${(tx.coinValue || 0).toFixed(2)} (${tx.earnedCoins}金币)<br>
+                    ${tx.status === 'approved' && tx.deliveryVerified ? `返现抵扣: -¥${(tx.recipientCashback || 0).toFixed(2)}<br>` : ''}
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(139, 92, 246, 0.3); display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">实际支出:</span>
+                        <span style="font-size: 18px; font-weight: 700;">¥${(tx.finalExpense || tx.actualExpense || 0).toFixed(2)}</span>
+                    </div>
+                    ${(() => {
+                        const expense = tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0;
+                        if (expense < 0) {
+                            return `<div style="margin-top: 4px; text-align: right;"><span style="font-size: 12px; background: #10b981; color: white; padding: 2px 8px; border-radius: 10px;">🎉 实际收入 ¥${Math.abs(expense).toFixed(2)}</span></div>`;
+                        } else if (expense > 0) {
+                            return `<div style="margin-top: 4px; text-align: right;"><span style="font-size: 12px; background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px;">💸 实际支出 ¥${expense.toFixed(2)}</span></div>`;
+                        } else {
+                            return `<div style="margin-top: 4px; text-align: right;"><span style="font-size: 12px; background: #6b7280; color: white; padding: 2px 8px; border-radius: 10px;">➖ 收支平衡</span></div>`;
+                        }
+                    })()}
+                    ${tx.status === 'pending' ? '<div style="margin-top: 4px; text-align: right;"><span style="font-size: 11px; color: var(--text-secondary);">(审核通过后可再减¥0.70)</span></div>' : ''}
+                </div>
+            </div>
+            
+            <!-- 奖励信息 -->
+            <div style="background: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                <div style="font-size: 13px; color: #10b981;">
+                    <strong>🎁 奖励信息:</strong><br>
+                    赠送者获得: ${tx.earnedCoins} 金币 (价值¥${(tx.coinValue || 0).toFixed(2)})<br>
+                    ${tx.status === 'pending' ? `审核通过后返现: ¥${tx.recipientCashback.toFixed(2)}` : `已返现: ¥${(tx.recipientCashback || 0).toFixed(2)}`}
+                </div>
+            </div>
+        </div>
+    `, [
+        { text: '不通过', class: 'btn-danger', action: () => {
+            if (!confirm('确定要标记为不通过吗？')) return;
+            reviewTransaction(tx.id, 'rejected', '审核不通过');
+        }},
+        { text: '通过', class: 'btn-primary', action: () => {
+            reviewTransaction(tx.id, 'approved', '审核通过');
+        }}
+    ]);
+}
+
+// 管理员审核功能
+function openAdminReviewModal() {
+    const cashbackData = initCashbackGiftData();
+    const pendingList = cashbackData.pendingReviews.filter(tx => tx.status === 'pending');
+    
+    if (pendingList.length === 0) {
+        showToast('暂无待审核交易', 'info');
+        return;
+    }
+    
+    // 显示待审核列表
+    let html = '<div style="max-height: 400px; overflow-y: auto;"><div style="display: flex; flex-direction: column; gap: 12px;">';
+    
+    pendingList.forEach(tx => {
+        html += `
+            <div style="padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; cursor: pointer; border-left: 3px solid #f59e0b;" onclick="openTransactionDetail('${tx.id}')">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div>
+                        <div style="font-weight: 500;">${tx.platformIcon} ${tx.productName}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            📱 ${tx.phoneName} · ¥${tx.amount.toFixed(2)}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 11px; color: #f59e0b; font-weight: 500;">⏳ 待审核</div>
+                        <div style="font-size: 12px; color: #10b981; margin-top: 4px;">+${tx.earnedCoins}金币</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div></div>';
+    
+    showModal('🔍 待审核交易', html, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 审核交易
+function reviewTransaction(txId, status, note) {
+    const data = DataManager.loadData();
+    const cashbackData = data.cashbackGift;
+    
+    const tx = cashbackData.pendingReviews.find(t => t.id === txId);
+    if (!tx) {
+        showToast('交易不存在', 'error');
+        return;
+    }
+    
+    tx.status = status;
+    tx.reviewer = 'admin';
+    tx.reviewTime = new Date().toISOString();
+    tx.reviewNote = note;
+    
+    // 计算最终支出（包含返现抵扣）
+    if (status === 'approved') {
+        tx.finalExpense = tx.actualExpense - tx.recipientCashback;
+    }
+    
+    // 如果拒绝，扣除相应的金币
+    if (status === 'rejected') {
+        cashbackData.goldCoins = Math.max(0, cashbackData.goldCoins - tx.earnedCoins);
+        // 拒绝时不给予返现
+        tx.recipientCashback = 0;
+    }
+    
+    DataManager.saveData(data);
+    
+    const statusText = status === 'approved' ? '已通过' : '已拒绝';
+    const message = status === 'approved' 
+        ? `交易${statusText}，获得¥${tx.recipientCashback.toFixed(2)}返现` 
+        : `交易${statusText}`;
+    showToast(message, status === 'approved' ? 'success' : 'info');
+    closeModal();
+    renderCashbackGiftPage();
 }
 
 // 页面加载完成后初始化

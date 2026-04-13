@@ -516,6 +516,72 @@
             </div>
         </div>
 
+        <!-- 返现/礼品页面 -->
+        <div class="page" id="page-cashback-gift">
+            <div class="page-header">
+                <div class="section-title">🎁 返现与礼品</div>
+            </div>
+            <div style="padding: 16px;">
+                <!-- 金币余额卡片 -->
+                <div class="card" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); color: white; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 14px; opacity: 0.9;">我的金币</div>
+                            <div style="font-size: 32px; font-weight: 700;" id="user-gold-coins">0</div>
+                        </div>
+                        <div style="font-size: 48px;">🪙</div>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px; opacity: 0.9;">
+                        价值约 ¥<span id="gold-coin-value">0.00</span>
+                    </div>
+                </div>
+
+                <!-- 功能按钮 -->
+                <div class="flex gap-4 w-full" style="margin-bottom: 16px;">
+                    <button class="btn btn-primary flex-1" onclick="openGiftModal()">🎁 赠送礼品</button>
+                    <button class="btn btn-accent flex-1" onclick="openTransactionHistory()">📋 交易记录</button>
+                </div>
+
+                <!-- 平台兑换率 -->
+                <div class="card" style="margin-bottom: 16px;">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="section-title">💱 我的平台兑换率</div>
+                        <button class="btn btn-sm btn-primary" onclick="openPlatformManager()">添加/管理</button>
+                    </div>
+                    <div class="section-divider"></div>
+                    <div id="platform-rates-content">
+                        <!-- 内容将由JS生成 -->
+                    </div>
+                    <div id="platform-empty-state" style="display: none; padding: 20px; text-align: center;">
+                        <div style="color: var(--text-secondary); font-size: 14px;">暂无平台配置</div>
+                        <div style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">点击右上角"添加/管理"按钮添加平台</div>
+                    </div>
+                </div>
+
+                <!-- 待审核交易 -->
+                <div class="card" id="pending-transactions-card" style="display: none;">
+                    <div class="section-header">
+                        <div class="section-title">⏳ 待审核交易</div>
+                        <div class="section-divider"></div>
+                    </div>
+                    <div id="pending-transactions-content">
+                        <!-- 内容将由JS生成 -->
+                    </div>
+                </div>
+
+                <!-- 统计报表 -->
+                <div class="card">
+                    <div class="section-header">
+                        <div class="section-title">📊 统计报表</div>
+                        <div class="section-divider"></div>
+                    </div>
+                    <div id="cashback-stats-content">
+                        <!-- 内容将由JS生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
 
     </main>
 
@@ -536,6 +602,10 @@
         <div class="tab-item" data-page="assets">
             <span class="tab-icon">💼</span>
             <span class="tab-text">资产</span>
+        </div>
+        <div class="tab-item" data-page="cashback-gift">
+            <span class="tab-icon">🎁</span>
+            <span class="tab-text">返现</span>
         </div>
         <div class="tab-item" data-page="settings">
             <span class="tab-icon">⚙️</span>
