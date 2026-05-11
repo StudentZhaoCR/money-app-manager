@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Home, Gamepad2, TrendingUp, Target, Settings } from 'lucide-react';
 import { useStore } from './store';
-import { formatCurrency, formatRelativeTime, getCurrentMonthPeriod, DEFAULT_GAME_ICONS, GAME_COLORS, DEFAULT_TAGS, CURRENCY_SYMBOLS } from './utils';
+import { formatCurrency, formatRelativeTime, getCurrentMonthPeriod, getCurrentYearPeriod, DEFAULT_GAME_ICONS, GAME_COLORS, DEFAULT_TAGS, CURRENCY_SYMBOLS } from './utils';
 
 function App() {
   return (
