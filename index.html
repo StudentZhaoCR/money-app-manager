@@ -9,6 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="赚钱助手">
     <title>赚钱软件管理系统</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Chart.js for data visualization - 异步加载 -->
     <script>
         // 异步加载 Chart.js，避免阻塞页面渲染
@@ -41,66 +43,9 @@
                 <span class="current-date" id="current-date"></span>
             </div>
 
-            <!-- 统计卡片 - 毛玻璃效果 -->
-            <div class="stats-container">
-                <div class="stats-row">
-                    <!-- 总手机数 - 紫色毛玻璃 -->
-                    <div style="position: relative; background: linear-gradient(135deg, #7c6bcf 0%, #9c89ff 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1;">
-                        <div style="position: absolute; top: -30px; right: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(20px);"></div>
-                        <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">总手机数</span>
-                            <span class="stat-value" id="total-phones" style="color: #ffffff; font-size: 24px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">0</span>
-                        </div>
-                    </div>
-                    
-                    <!-- 总软件数 - 粉色毛玻璃 -->
-                    <div style="position: relative; background: linear-gradient(135deg, #ff8fa3 0%, #ffb3c1 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1;">
-                        <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.4); border-radius: 50%; filter: blur(15px);"></div>
-                        <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">总软件数</span>
-                            <span class="stat-value" id="total-apps" style="color: #ffffff; font-size: 24px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">0</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="stats-row">
-                    <!-- 可用资金 - 淡紫色毛玻璃 -->
-                    <div style="position: relative; background: linear-gradient(135deg, #c084fc 0%, #d8b4fe 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1;">
-                        <div style="position: absolute; top: -25px; left: 50%; width: 70px; height: 70px; background: rgba(255,255,255,0.35); border-radius: 50%; filter: blur(18px);"></div>
-                        <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">可用资金</span>
-                            <span class="stat-value" id="total-balance" style="color: #ffffff; font-size: 24px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥0.00</span>
-                        </div>
-                    </div>
-                    
-                    <!-- 有提现软件 - 黄色毛玻璃 -->
-                    <div style="position: relative; background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1;">
-                        <div style="position: absolute; bottom: -25px; right: 10px; width: 65px; height: 65px; background: rgba(255,255,255,0.4); border-radius: 50%; filter: blur(18px);"></div>
-                        <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">有提现软件</span>
-                            <span class="stat-value" id="ready-apps" style="color: #ffffff; font-size: 24px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="stats-row">
-                    <div style="position: relative; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 16px; padding: 24px; overflow: hidden; flex: 1; cursor: pointer;" onclick="showTotalEarningsDetail()">
-                        <!-- 背景装饰圆形 -->
-                        <div style="position: absolute; top: -30px; right: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(20px);"></div>
-                        <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(15px);"></div>
-                        
-                        <!-- 毛玻璃卡片 -->
-                        <div class="stat-card" style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px; text-align: center;">
-                            <span class="stat-label" style="color: rgba(255,255,255,0.9); font-weight: 600; font-size: 13px; display: block; margin-bottom: 8px;">💰 总赚取金额</span>
-                            <div class="stat-value" style="color: #ffffff; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="total-earnings">
-                                ¥0.00
-                            </div>
-                            <div style="font-size: 11px; color: rgba(255,255,255,0.85); margin-top: 6px;">
-                                点击查看详情
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <!-- Dashboard v2: Hero + 4 KPI + 快捷操作 -->
+            <div class="dashboard-v2" id="dashboard-v2-root">
+                <!-- 渲染模板由 JS 注入 -->
             </div>
 
             <!-- 收益目标面板 -->
@@ -130,7 +75,7 @@
                 <!-- 背景装饰圆形 -->
                 <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(25px);"></div>
                 <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(20px);"></div>
-                
+
                 <!-- 毛玻璃卡片内容 -->
                 <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.25); padding: 20px;">
                     <div class="section-header" style="margin-bottom: 16px;">
@@ -172,12 +117,17 @@
                 <span class="current-date" id="phones-current-date"></span>
             </div>
 
-            <div class="flex gap-4 w-full">
-                <button class="btn btn-primary flex-1" onclick="openAddPhoneModal()">添加手机</button>
-                <button class="btn btn-accent flex-1" onclick="openBatchAddAppsModal()">批量添加软件</button>
-                <button class="btn btn-secondary flex-1" onclick="showPage('withdraw-records')">提现记录</button>
-                <button class="btn btn-accent flex-1" onclick="showPage('app-details')">软件明细</button>
-                <button class="btn btn-secondary flex-1" onclick="showPage('phone-earnings')">每日赚取</button>
+            <div class="page-actions page-actions--primary">
+                <button class="btn btn-primary" onclick="openAddPhoneModal()">➕ 添加手机</button>
+                <button class="btn btn-accent" onclick="openBatchAddAppsModal()">📦 批量添加软件</button>
+                <div class="page-actions__more">
+                    <button class="btn btn-secondary" onclick="togglePhonesMoreMenu(event)">⋯ 更多</button>
+                    <div class="page-actions__menu" id="phones-more-menu">
+                        <button onclick="showPage('withdraw-records'); closePhonesMoreMenu()">💸 提现记录</button>
+                        <button onclick="showPage('app-details'); closePhonesMoreMenu()">📱 软件明细</button>
+                        <button onclick="showPage('phone-earnings'); closePhonesMoreMenu()">📅 每日赚取</button>
+                    </div>
+                </div>
             </div>
 
             <div class="phone-grid" id="phone-grid">
@@ -246,48 +196,7 @@
             </div>
         </div>
 
-        <!-- 资产管理页面 -->
-        <div class="page" id="page-assets">
-            <div class="date-container">
-                <span class="current-date" id="assets-current-date"></span>
-            </div>
 
-            <!-- 资产统计卡片 -->
-            <div class="card mt-6">
-                <div class="section-header">
-                    <div class="section-title">💼 资产概览</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="assets-stats-content">
-                    <!-- 资产统计内容将由JS生成 -->
-                </div>
-            </div>
-
-            <!-- 资产列表 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📋 资产清单</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="assets-list-content">
-                    <!-- 资产列表内容将由JS生成 -->
-                </div>
-                <div class="mt-4">
-                    <button class="btn btn-primary w-full" onclick="openAddAssetModal()">➕ 添加资产</button>
-                </div>
-            </div>
-
-            <!-- 分类统计 -->
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">📊 分类统计</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="assets-category-content">
-                    <!-- 分类统计内容将由JS生成 -->
-                </div>
-            </div>
-        </div>
 
         <!-- 设置页面 -->
         <div class="page" id="page-settings">
@@ -302,51 +211,23 @@
                     <div class="section-title">主题风格</div>
                     <div class="section-divider"></div>
                 </div>
-                <div class="form-hint mb-4">选择你喜欢的主题风格，一键切换界面配色</div>
-                <div class="theme-selector" id="theme-selector">
-                    <div class="theme-item" data-theme="default" onclick="setTheme('default')">
-                        <div class="theme-preview theme-preview-default"></div>
-                        <span class="theme-name">梦幻紫</span>
+                <div class="form-hint mb-4">切换浅色或深色主题</div>
+                <div class="theme-selector" id="theme-selector" style="display: flex; gap: 12px;">
+                    <div class="theme-item" data-theme="default" onclick="setTheme('default')" style="flex: 1; padding: 16px; background: var(--bg-secondary); border-radius: 12px; border: 2px solid var(--border-color); cursor: pointer; text-align: center; transition: all 0.2s ease;" onmouseover="this.style.borderColor='var(--primary-color)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-color)';this.style.transform='translateY(0)'">
+                        <div style="width: 48px; height: 48px; margin: 0 auto 10px; background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 8px; height: 8px; background: #3b82f6; border-radius: 50%;"></div>
+                            <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-left: 4px;"></div>
+                            <div style="width: 8px; height: 8px; background: #f59e0b; border-radius: 50%; margin-left: 4px;"></div>
+                        </div>
+                        <span class="theme-name" style="font-size: 14px; font-weight: 500; color: var(--text-primary);">简约</span>
                     </div>
-                    <div class="theme-item" data-theme="youth-green" onclick="setTheme('youth-green')">
-                        <div class="theme-preview theme-preview-youth-green"></div>
-                        <span class="theme-name">青春绿</span>
-                    </div>
-                    <div class="theme-item" data-theme="vitality-orange" onclick="setTheme('vitality-orange')">
-                        <div class="theme-preview theme-preview-vitality-orange"></div>
-                        <span class="theme-name">活力橙</span>
-                    </div>
-                    <div class="theme-item" data-theme="ocean-blue" onclick="setTheme('ocean-blue')">
-                        <div class="theme-preview theme-preview-ocean-blue"></div>
-                        <span class="theme-name">海洋蓝</span>
-                    </div>
-                    <div class="theme-item" data-theme="sweet-pink" onclick="setTheme('sweet-pink')">
-                        <div class="theme-preview theme-preview-sweet-pink"></div>
-                        <span class="theme-name">甜美粉</span>
-                    </div>
-                    <div class="theme-item" data-theme="warm-sunset" onclick="setTheme('warm-sunset')">
-                        <div class="theme-preview theme-preview-warm-sunset"></div>
-                        <span class="theme-name">温暖夕阳</span>
-                    </div>
-                    <div class="theme-item" data-theme="minimal-dark" onclick="setTheme('minimal-dark')">
-                        <div class="theme-preview theme-preview-minimal-dark"></div>
-                        <span class="theme-name">极简黑白</span>
-                    </div>
-                    <div class="theme-item" data-theme="morandi" onclick="setTheme('morandi')">
-                        <div class="theme-preview theme-preview-morandi"></div>
-                        <span class="theme-name">莫兰迪色</span>
-                    </div>
-                    <div class="theme-item" data-theme="forest" onclick="setTheme('forest')">
-                        <div class="theme-preview theme-preview-forest"></div>
-                        <span class="theme-name">森林自然</span>
-                    </div>
-                    <div class="theme-item" data-theme="business" onclick="setTheme('business')">
-                        <div class="theme-preview theme-preview-business"></div>
-                        <span class="theme-name">极简商务风</span>
-                    </div>
-                    <div class="theme-item" data-theme="dark" onclick="setTheme('dark')">
-                        <div class="theme-preview theme-preview-dark"></div>
-                        <span class="theme-name">暗黑模式</span>
+                    <div class="theme-item" data-theme="dark" onclick="setTheme('dark')" style="flex: 1; padding: 16px; background: var(--bg-secondary); border-radius: 12px; border: 2px solid var(--border-color); cursor: pointer; text-align: center; transition: all 0.2s ease;" onmouseover="this.style.borderColor='var(--primary-color)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-color)';this.style.transform='translateY(0)'">
+                        <div style="width: 48px; height: 48px; margin: 0 auto 10px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-radius: 12px; border: 1px solid #334155; display: flex; align-items: center; justify-content: center;">
+                            <div style="width: 8px; height: 8px; background: #6366f1; border-radius: 50%;"></div>
+                            <div style="width: 8px; height: 8px; background: #34d399; border-radius: 50%; margin-left: 4px;"></div>
+                            <div style="width: 8px; height: 8px; background: #fbbf24; border-radius: 50%; margin-left: 4px;"></div>
+                        </div>
+                        <span class="theme-name" style="font-size: 14px; font-weight: 500; color: var(--text-primary);">暗黑模式</span>
                     </div>
                 </div>
             </div>
@@ -365,8 +246,33 @@
                         </select>
                     </div>
                     <div class="form-group mb-2">
+                        <label class="form-label" style="font-size: 12px;">目标方式</label>
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                            <label style="flex: 1; cursor: pointer; padding: 10px; border: 2px solid var(--border-color); border-radius: 8px; text-align: center; font-size: 12px; transition: all 0.2s;" id="goal-mode-custom-label" onclick="setGoalMode('custom')">
+                                <input type="radio" name="goal-mode" id="goal-mode-custom" value="custom" style="display: none;" onchange="onGoalModeChange()">
+                                <div style="font-size: 20px; margin-bottom: 4px;">✏️</div>
+                                <div style="font-weight: 600;">自定义</div>
+                            </label>
+                            <label style="flex: 1; cursor: pointer; padding: 10px; border: 2px solid var(--border-color); border-radius: 8px; text-align: center; font-size: 12px; transition: all 0.2s;" id="goal-mode-min-label" onclick="setGoalMode('minWithdraw')">
+                                <input type="radio" name="goal-mode" id="goal-mode-minWithdraw" value="minWithdraw" style="display: none;" onchange="onGoalModeChange()">
+                                <div style="font-size: 20px; margin-bottom: 4px;">📱</div>
+                                <div style="font-weight: 600;">最小提现</div>
+                            </label>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;" id="goal-mode-hint">
+                            手动输入年度目标金额
+                        </div>
+                    </div>
+                    <div class="form-group mb-2" id="yearly-goal-amount-group">
                         <label class="form-label" style="font-size: 12px;">目标金额 (元)</label>
                         <input type="number" id="yearly-goal-amount" class="form-input" placeholder="输入年度目标金额" step="0.01" style="font-size: 13px;">
+                    </div>
+                    <div class="form-group mb-2" id="yearly-goal-min-info" style="display: none;">
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">基于所有软件的最小提现金额 × 365天计算</div>
+                        <div style="padding: 10px; background: var(--bg-cream); border-radius: 8px; text-align: center;">
+                            <span style="font-size: 11px; color: var(--text-secondary);">计算结果</span>
+                            <div style="font-size: 20px; font-weight: 700; color: var(--primary-color); margin-top: 2px;" id="min-withdraw-goal-display">¥0.00</div>
+                        </div>
                     </div>
                     
                     <div class="form-group mb-3">
@@ -427,6 +333,20 @@
                         <button class="btn btn-primary flex-1" onclick="addExpense()">💾 保存支出</button>
                         <button class="btn btn-secondary flex-1" onclick="showPage('expense-records')">📋 记录</button>
                     </div>
+                </div>
+
+                <!-- 数据导出 -->
+                <div class="settings-card card mb-4">
+                    <div class="settings-card-header">
+                        <span class="settings-icon">📥</span>
+                        <span class="settings-title">数据导出</span>
+                    </div>
+                    <div class="form-group mb-3">
+                        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                            将所有手机和软件数据导出为Excel文件
+                        </div>
+                    </div>
+                    <button class="btn btn-accent w-full" onclick="exportToExcel()">📊 导出Excel</button>
                 </div>
 
                 <!-- 危险操作 -->
@@ -516,71 +436,7 @@
             </div>
         </div>
 
-        <!-- 返现/礼品页面 -->
-        <div class="page" id="page-cashback-gift">
-            <div class="page-header">
-                <div class="section-title">🎁 返现与礼品</div>
-            </div>
-            <div style="padding: 16px;">
-                <!-- 金币余额卡片 -->
-                <div class="card" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); color: white; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div style="font-size: 14px; opacity: 0.9;">我的金币</div>
-                            <div style="font-size: 32px; font-weight: 700;" id="user-gold-coins">0</div>
-                        </div>
-                        <div style="font-size: 48px;">🪙</div>
-                    </div>
-                    <div style="margin-top: 12px; font-size: 12px; opacity: 0.9;">
-                        价值约 ¥<span id="gold-coin-value">0.00</span>
-                    </div>
-                </div>
 
-                <!-- 功能按钮 -->
-                <div class="flex gap-4 w-full" style="margin-bottom: 16px;">
-                    <button class="btn btn-primary flex-1" onclick="openGiftModal()">🎁 赠送礼品</button>
-                    <button class="btn btn-accent flex-1" onclick="openTransactionHistory()">📋 交易记录</button>
-                </div>
-
-                <!-- 平台兑换率 -->
-                <div class="card" style="margin-bottom: 16px;">
-                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div class="section-title">💱 我的平台兑换率</div>
-                        <button class="btn btn-sm btn-primary" onclick="openPlatformManager()">添加/管理</button>
-                    </div>
-                    <div class="section-divider"></div>
-                    <div id="platform-rates-content">
-                        <!-- 内容将由JS生成 -->
-                    </div>
-                    <div id="platform-empty-state" style="display: none; padding: 20px; text-align: center;">
-                        <div style="color: var(--text-secondary); font-size: 14px;">暂无平台配置</div>
-                        <div style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">点击右上角"添加/管理"按钮添加平台</div>
-                    </div>
-                </div>
-
-                <!-- 待审核交易 -->
-                <div class="card" id="pending-transactions-card" style="display: none;">
-                    <div class="section-header">
-                        <div class="section-title">⏳ 待审核交易</div>
-                        <div class="section-divider"></div>
-                    </div>
-                    <div id="pending-transactions-content">
-                        <!-- 内容将由JS生成 -->
-                    </div>
-                </div>
-
-                <!-- 统计报表 -->
-                <div class="card">
-                    <div class="section-header">
-                        <div class="section-title">📊 统计报表</div>
-                        <div class="section-divider"></div>
-                    </div>
-                    <div id="cashback-stats-content">
-                        <!-- 内容将由JS生成 -->
-                    </div>
-                </div>
-            </div>
-        </div>
 
 
     </main>
@@ -599,14 +455,7 @@
             <span class="tab-icon">📈</span>
             <span class="tab-text">统计</span>
         </div>
-        <div class="tab-item" data-page="assets">
-            <span class="tab-icon">💼</span>
-            <span class="tab-text">资产</span>
-        </div>
-        <div class="tab-item" data-page="cashback-gift">
-            <span class="tab-icon">🎁</span>
-            <span class="tab-text">返现</span>
-        </div>
+
         <div class="tab-item" data-page="settings">
             <span class="tab-icon">⚙️</span>
             <span class="tab-text">设置</span>
@@ -621,93 +470,6 @@
             <div class="modal-title" id="modal-title" style="padding-right: 40px;">标题</div>
             <div class="modal-body" id="modal-body"></div>
             <div class="modal-buttons" id="modal-buttons"></div>
-        </div>
-    </div>
-
-    <!-- 游戏抽签弹窗 -->
-    <div class="game-draw-modal" id="game-draw-modal" style="display: none;">
-        <div class="game-draw-modal-content" onclick="event.stopPropagation()">
-            <div class="modal-title">🎮 游戏抽签</div>
-            <div class="game-draw-body" id="game-draw-body">
-                <!-- 游戏管理区域 -->
-                <div class="game-manage-section" id="game-manage-section">
-                    <div class="section-subtitle">管理游戏列表</div>
-                    <div class="game-list" id="game-list"></div>
-                    <div class="game-add-form">
-                        <input type="text" id="draw-game-name" class="form-input" placeholder="输入游戏名称">
-                        <button class="btn btn-primary" onclick="addGame()">添加游戏</button>
-                    </div>
-                </div>
-                
-                <!-- 抽签结果区域 -->
-                <div class="game-draw-result-section hidden" id="game-draw-result-section">
-                    <div class="draw-result-title">🎯 今日游戏任务</div>
-                    <div class="draw-date" id="draw-date"></div>
-                    <div class="game-draw-list" id="game-draw-list"></div>
-                </div>
-                
-                <!-- 历史记录区域 -->
-                <div class="game-history-section" id="game-history-section">
-                    <div class="section-subtitle">📜 历史记录</div>
-                    <div class="game-history-list" id="game-history-list"></div>
-                </div>
-            </div>
-            <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="closeGameDrawModal()">关闭</button>
-                <button class="btn btn-primary" id="game-draw-btn" onclick="startGameDraw()">开始抽签</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 抽签结果弹窗 -->
-    <div class="game-result-popup" id="game-result-popup" style="display: none;">
-        <div class="game-result-popup-content" onclick="event.stopPropagation()">
-            <div class="game-result-header">
-                <div class="game-result-title">🎮 今日游戏任务</div>
-                <div class="game-result-date" id="popup-draw-date"></div>
-            </div>
-            <div class="game-result-body" id="popup-game-result-list"></div>
-            <div class="game-result-footer">
-                <button class="btn btn-secondary" onclick="closeGameResultPopup()">关闭</button>
-                <button class="btn btn-primary" onclick="startGameDraw()">重新抽签</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 手机抽签弹窗 -->
-    <div class="game-draw-modal" id="phone-draw-modal" style="display: none;">
-        <div class="game-draw-modal-content" onclick="event.stopPropagation()">
-            <div class="modal-title">📱 手机抽签</div>
-            <div class="game-draw-body" id="phone-draw-body">
-                <!-- 手机抽签结果区域 -->
-                <div class="game-draw-result-section" id="phone-draw-result-section">
-                    <div class="draw-result-title">🎯 今日玩机顺序</div>
-                    <div class="draw-date" id="phone-draw-date"></div>
-                    <div class="game-draw-list" id="phone-draw-list"></div>
-                </div>
-                
-                <!-- 历史记录区域 -->
-                <div class="game-history-section" id="phone-draw-history-section">
-                    <div class="section-subtitle">📜 抽签历史</div>
-                    <div class="game-history-list" id="phone-draw-history-list"></div>
-                </div>
-            </div>
-            <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="closePhoneDrawModal()">关闭</button>
-                <button class="btn btn-primary" id="phone-draw-btn" onclick="startPhoneDraw()">开始抽签</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 跨手机抽签弹窗 -->
-    <div class="modal" id="cross-phone-draw-modal" style="display: none; align-items: flex-end;">
-        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px; width: 100%; max-height: 90vh; margin: 0; border-radius: 20px 20px 0 0; position: relative;">
-            <!-- 关闭按钮 -->
-            <button onclick="closeCrossPhoneDrawModal()" style="position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border: none; background: rgba(0,0,0,0.08); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-secondary); z-index: 10; transition: all 0.2s ease; -webkit-tap-highlight-color: transparent;" onmouseover="this.style.background='rgba(0,0,0,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(0,0,0,0.08)'; this.style.transform='scale(1)'" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1.1)'">✕</button>
-            <div class="modal-title" style="font-size: 18px; padding-bottom: 12px; padding-right: 40px;">🎲 跨手机游戏抽签</div>
-            <div class="modal-body" id="cross-phone-draw-body" style="overflow-y: auto; -webkit-overflow-scrolling: touch;">
-                <!-- 内容将由JS生成 -->
-            </div>
         </div>
     </div>
 
@@ -728,7 +490,6 @@
 
 
     <script src="app.js"></script>
-    <script src="cross_phone_draw.js"></script>
     <script src="app_functions.js"></script>
 </body>
 </html>

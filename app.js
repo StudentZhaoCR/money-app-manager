@@ -181,6 +181,7 @@ let toastTimeout = null;
 let isToastVisible = false;
 let currentToastMessage = '';
 let currentToastType = '';
+let currentGamePhoneId = null;
 
 // 全局操作锁 - 防止同一操作重复执行
 const operationLocks = new Map();
@@ -232,11 +233,16 @@ function showToast(message, type = 'info') {
         return;
     }
     
-    // 防重复策略2: 1秒内不显示任何提示（无论消息是否相同）
-    if ((now - lastToastTime) < 1000) {
+    // 防重复策略2: 800毫秒内不显示任何提示（无论消息是否相同）
+    if ((now - lastToastTime) < 800) {
         console.log('短时间内不显示新提示:', message);
         return;
     }
+    
+    // 立即更新时间和状态，防止并发调用
+    lastToastTime = now;
+    currentToastMessage = message;
+    currentToastType = type;
     
     // 防重复策略3: 如果已有提示正在显示，替换内容但不重复动画
     if (isToastVisible) {
@@ -271,10 +277,7 @@ function showToast(message, type = 'info') {
         toastTimeout = null;
     }
     
-    lastToastTime = now;
     isToastVisible = true;
-    currentToastMessage = message;
-    currentToastType = type;
     
     // 确保 toast 元素存在
     let toast = document.getElementById('toast');
@@ -925,11 +928,7 @@ class DataManager {
             result.dailyGapRecords = JSON.parse(dailyGapRecords);
         }
         
-        // 加载返现/礼品数据
-        const cashbackGift = localStorage.getItem('moneyApp_cashbackGift');
-        if (cashbackGift) {
-            result.cashbackGift = JSON.parse(cashbackGift);
-        }
+        
 
         // 数据迁移：为旧数据添加 dailyEarnedHistory 字段
         const now = new Date();
@@ -989,10 +988,7 @@ class DataManager {
             localStorage.setItem('moneyApp_dailyGapRecords', JSON.stringify(data.dailyGapRecords));
         }
         
-        // 保存返现/礼品数据
-        if (data.cashbackGift) {
-            localStorage.setItem('moneyApp_cashbackGift', JSON.stringify(data.cashbackGift));
-        }
+        
     }
     
     // 保存特定类型的数据（优化性能）
@@ -1020,20 +1016,32 @@ class DataManager {
         const parsed = settings ? JSON.parse(settings) : {};
         const currentYear = new Date().getFullYear();
         
+        const mode = parsed.yearlyGoalMode || 'custom';
+        let amount = parsed.yearlyGoalAmount || 0;
+        
+        // 如果是最小提现模式，动态计算目标金额
+        if (mode === 'minWithdraw') {
+            const minWithdrawGoal = this.calculateYearlyGoalFromMinWithdraw(false); // false 表示不保存
+            amount = minWithdrawGoal.totalYearlyGoal;
+        }
+        
         return {
-            amount: parsed.yearlyGoalAmount || 0,
+            amount: amount,
             year: parsed.yearlyGoalYear || currentYear,
-            autoDistribute: parsed.yearlyGoalAutoDistribute !== false
+            autoDistribute: parsed.yearlyGoalAutoDistribute !== false,
+            mode: mode,
+            customAmount: parsed.yearlyGoalAmount || 0
         };
     }
     
     // 保存年度目标
-    static saveYearlyGoal(amount, year, autoDistribute = true) {
+    static saveYearlyGoal(amount, year, autoDistribute = true, mode = 'custom') {
         const settings = localStorage.getItem(SETTINGS_KEY);
         const parsed = settings ? JSON.parse(settings) : {};
         parsed.yearlyGoalAmount = parseFloat(amount) || 0;
         parsed.yearlyGoalYear = parseInt(year) || new Date().getFullYear();
         parsed.yearlyGoalAutoDistribute = autoDistribute;
+        parsed.yearlyGoalMode = mode;
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
     }
     
@@ -1113,7 +1121,7 @@ class DataManager {
     }
     
     // 基于软件最小提现金额计算年度目标
-    static calculateYearlyGoalFromMinWithdraw() {
+    static calculateYearlyGoalFromMinWithdraw(save = true) {
         const data = this.loadData();
         const allApps = data.phones.flatMap(phone => phone.apps);
         
@@ -1135,8 +1143,10 @@ class DataManager {
         // 计算总年度目标
         const totalYearlyGoal = appYearlyGoals.reduce((sum, app) => sum + app.yearlyGoal, 0);
         
-        // 保存总年度目标
-        this.saveYearlyGoal(totalYearlyGoal, new Date().getFullYear());
+        // 保存总年度目标（如果需要）
+        if (save) {
+            this.saveYearlyGoal(totalYearlyGoal, new Date().getFullYear(), undefined, 'minWithdraw');
+        }
         
         return {
             totalYearlyGoal: totalYearlyGoal,
@@ -1243,15 +1253,18 @@ class DataManager {
         // 计算总目标（基于所有软件的最小提现金额）
         const totalYearlyGoal = apps.reduce((sum, app) => sum + app.baseTarget, 0);
 
+        // 根据模式确定最终目标金额
+        const finalGoalAmount = goal.mode === 'minWithdraw' ? totalYearlyGoal : goal.amount;
+
         return {
             goal: {
                 ...goal,
-                amount: totalYearlyGoal // 更新为基于最小提现金额的总目标
+                amount: finalGoalAmount
             },
             apps: apps,
             totalEarned: totalEarned,
-            remaining: Math.max(0, totalYearlyGoal - totalEarned),
-            progress: Math.min(100, (totalEarned / totalYearlyGoal * 100)).toFixed(1),
+            remaining: Math.max(0, finalGoalAmount - totalEarned),
+            progress: Math.min(100, (totalEarned / finalGoalAmount * 100)).toFixed(1),
             estimatedDays: 365,
             avgDailyEarnings: totalEarned / 365
         };
@@ -2459,201 +2472,7 @@ class DataManager {
         return this.recordDailyGap(today, dailyTarget.dailyTarget, todayEarned);
     }
 
-    // ==================== 资产管理功能 ====================
 
-    // 预定义资产分类
-    static getAssetCategories() {
-        return [
-            { 
-                id: 'electronics', 
-                name: '电子产品', 
-                icon: '💻', 
-                keywords: [
-                    // 手机品牌
-                    '手机', 'iPhone', '华为', '小米', 'OPPO', 'vivo', '三星', '荣耀', '一加', '魅族', '红米', 'realme', 'IQOO', '努比亚', '黑鲨', 'ROG',
-                    // 电脑相关
-                    '电脑', '笔记本', 'MacBook', 'ThinkPad', '戴尔', '惠普', '联想', '华硕', '宏碁', '机械革命',
-                    // 平板
-                    '平板', 'iPad', 'MatePad', '小米平板', 'Galaxy Tab',
-                    // 配件
-                    '耳机', 'AirPods', '索尼', 'BOSE', 'Beats', '森海塞尔', '键盘', '鼠标', '显示器', '显示器', '投影仪', '打印机', '扫描仪',
-                    // 数码
-                    '相机', '佳能', '尼康', '索尼', '富士', 'GoPro', '大疆', '无人机', '云台', '稳定器',
-                    // 充电
-                    '充电器', '数据线', '充电宝', '移动电源', '充电头', '快充', '无线充',
-                    // 存储
-                    'U盘', '硬盘', '固态', 'SSD', '移动硬盘', '内存卡', 'TF卡', 'SD卡',
-                    // 游戏
-                    '游戏机', 'Switch', 'PS5', 'PS4', 'Xbox', '游戏手柄', '掌机', 'Steam Deck',
-                    // 智能设备
-                    '智能手表', 'Apple Watch', '华为手表', '小米手环', '智能手环', '智能音箱', '小爱', '天猫精灵', '小度',
-                    // 网络
-                    '路由器', 'WiFi', '网线', '交换机', '光猫'
-                ] 
-            },
-            { 
-                id: 'furniture', 
-                name: '家具家电', 
-                icon: '🛋️', 
-                keywords: [
-                    // 家具
-                    '沙发', '床', '床垫', '桌子', '餐桌', '书桌', '办公桌', '椅子', '办公椅', '电竞椅', '衣柜', '橱柜', '鞋柜', '书架', '置物架', '茶几', '电视柜', '床头柜', '梳妆台', '镜子',
-                    // 家电
-                    '冰箱', '洗衣机', '空调', '电视', '电视机', '热水器', '油烟机', '燃气灶', '微波炉', '烤箱', '电饭煲', '电磁炉', '电水壶', '净水器', '扫地机器人', '吸尘器', '加湿器', '除湿机', '空气净化器', '风扇', '电暖器', '取暖器', '灯具', '台灯', '落地灯', '吊灯', '吸顶灯'
-                ] 
-            },
-            { 
-                id: 'clothing', 
-                name: '服装鞋包', 
-                icon: '👔', 
-                keywords: [
-                    '衣服', 'T恤', '衬衫', '外套', '夹克', '风衣', '大衣', '羽绒服', '毛衣', '卫衣', '裤子', '牛仔裤', '休闲裤', '西裤', '短裤', '裙子', '连衣裙', '半身裙',
-                    '鞋子', '运动鞋', '跑鞋', '篮球鞋', '足球鞋', '休闲鞋', '皮鞋', '靴子', '凉鞋', '拖鞋', '高跟鞋', '帆布鞋',
-                    '包包', '背包', '双肩包', '单肩包', '手提包', '斜挎包', '钱包', '旅行箱', '行李箱', '拉杆箱',
-                    '帽子', '围巾', '手套', '袜子', '内裤', '内衣', '皮带', '领带', '眼镜', '太阳镜', '墨镜', '手表', '首饰', '项链', '戒指', '耳环'
-                ] 
-            },
-            { 
-                id: 'food', 
-                name: '食品酒水', 
-                icon: '🍔', 
-                keywords: [
-                    '食品', '零食', '坚果', '巧克力', '糖果', '饼干', '薯片', '肉干', '果干', '蜜饯',
-                    '饮料', '果汁', '汽水', '可乐', '雪碧', '奶茶', '咖啡', '咖啡豆', '茶叶', '绿茶', '红茶', '乌龙茶', '普洱',
-                    '酒水', '白酒', '红酒', '葡萄酒', '啤酒', '洋酒', '威士忌', '伏特加',
-                    '粮油', '大米', '面粉', '油', '调料', '酱油', '醋', '盐', '糖',
-                    '生鲜', '水果', '蔬菜', '肉类', '海鲜', '鸡蛋', '牛奶', '酸奶'
-                ] 
-            },
-            { 
-                id: 'beauty', 
-                name: '美妆护肤', 
-                icon: '💄', 
-                keywords: [
-                    '化妆品', '护肤品', '洗面奶', '洁面乳', '爽肤水', '乳液', '面霜', '精华', '眼霜', '面膜', '防晒霜', '隔离霜', '粉底', '气垫', 'BB霜', 'CC霜', '遮瑕', '散粉', '粉饼', '腮红', '眼影', '眼线', '睫毛膏', '口红', '唇釉', '唇膏', '卸妆', '化妆棉',
-                    '香水', '古龙水', '香氛',
-                    '洗发', '护发', '洗发水', '护发素', '发膜', '沐浴露', '香皂', '肥皂', '牙膏', '牙刷', '漱口水', '牙线', '剃须刀', '脱毛器',
-                    '美甲', '指甲油', '护甲油'
-                ] 
-            },
-            { 
-                id: 'sports', 
-                name: '运动户外', 
-                icon: '⚽', 
-                keywords: [
-                    '运动', '健身', '瑜伽', '瑜伽垫', '哑铃', '杠铃', '跑步机', '椭圆机', '动感单车', '健身车', '划船机', '综合训练器', '仰卧板', '健腹轮', '弹力带', '阻力带', '跳绳',
-                    '球拍', '羽毛球拍', '网球拍', '乒乓球拍', '篮球', '足球', '排球', '羽毛球', '网球', '乒乓球', '高尔夫球杆',
-                    '球鞋', '跑鞋', '足球鞋', '篮球鞋', '登山鞋', '徒步鞋',
-                    '户外', '帐篷', '睡袋', '背包', '登山包', '户外包', '自行车', '山地车', '公路车', '折叠车', '滑板', '轮滑', '溜冰鞋', '滑雪', '雪板', '冲浪板', '游泳', '泳镜', '泳帽', '救生衣'
-                ] 
-            },
-            { 
-                id: 'books', 
-                name: '图书文具', 
-                icon: '📚', 
-                keywords: [
-                    '书', '图书', '小说', '文学', '历史', '哲学', '经济', '管理', '金融', '投资', '理财', '编程', '计算机', '技术', '教材', '教辅', '考试', '考研', '雅思', '托福', 'GRE', '四六级',
-                    '笔记本', '记事本', '日记本', '手账本',
-                    '笔', '钢笔', '圆珠笔', '中性笔', '铅笔', '彩笔', '马克笔', '荧光笔', '毛笔',
-                    '文具', '橡皮', '尺子', '圆规', '剪刀', '胶水', '胶带', '订书机', '文件夹', '资料册', '便签', '便利贴', '计算器'
-                ] 
-            },
-            { 
-                id: 'pets', 
-                name: '宠物用品', 
-                icon: '🐱', 
-                keywords: [
-                    '宠物', '猫粮', '狗粮', '猫砂', '猫砂盆', '猫爬架', '猫窝', '狗窝', '宠物床', '宠物笼', '笼子', '宠物玩具', '逗猫棒', '磨牙棒', '宠物衣服', '宠物牵引绳', '项圈', '宠物碗', '喂食器', '饮水机', '宠物背包', '宠物航空箱', '宠物梳子', '宠物指甲剪', '宠物沐浴露', '宠物香波'
-                ] 
-            },
-            { 
-                id: 'tools', 
-                name: '工具器材', 
-                icon: '🔧', 
-                keywords: [
-                    '工具', '工具箱', '螺丝刀', '螺丝刀套装', '锤子', '扳手', '钳子', '电钻', '冲击钻', '电锤', '角磨机', '切割机', '电锯', '梯子', '人字梯', '伸缩梯', '五金', '钉子', '螺丝', '螺母', '垫片', '胶带', '电工胶带', '绝缘胶带', '万用表', '测电笔', '水平仪', '卷尺', '钢尺'
-                ] 
-            },
-            { id: 'other', name: '其他', icon: '📦', keywords: [] }
-        ];
-    }
-
-    // 自动识别分类
-    static autoDetectCategory(itemName) {
-        const categories = this.getAssetCategories();
-        const lowerName = itemName.toLowerCase();
-        
-        for (const category of categories) {
-            if (category.id === 'other') continue;
-            for (const keyword of category.keywords) {
-                if (lowerName.includes(keyword.toLowerCase())) {
-                    return category.id;
-                }
-            }
-        }
-        return 'other';
-    }
-
-    // 获取资产列表
-    static getAssets() {
-        const assets = localStorage.getItem('moneyApp_assets');
-        return assets ? JSON.parse(assets) : [];
-    }
-
-    // 保存资产列表
-    static saveAssets(assets) {
-        localStorage.setItem('moneyApp_assets', JSON.stringify(assets));
-    }
-
-    // 添加资产
-    static addAsset(assetData) {
-        const assets = this.getAssets();
-        const category = assetData.category || this.autoDetectCategory(assetData.name);
-        
-        const newAsset = {
-            id: Date.now().toString(),
-            name: assetData.name,
-            price: parseFloat(assetData.price) || 0,
-            purchaseDate: assetData.purchaseDate,
-            category: category,
-            note: assetData.note || '',
-            createdAt: new Date().toISOString()
-        };
-        
-        assets.push(newAsset);
-        this.saveAssets(assets);
-        return newAsset;
-    }
-
-    // 编辑资产
-    static editAsset(assetId, assetData) {
-        const assets = this.getAssets();
-        const index = assets.findIndex(a => a.id === assetId);
-        
-        if (index >= 0) {
-            const category = assetData.category || this.autoDetectCategory(assetData.name);
-            assets[index] = {
-                ...assets[index],
-                name: assetData.name,
-                price: parseFloat(assetData.price) || 0,
-                purchaseDate: assetData.purchaseDate,
-                category: category,
-                note: assetData.note || '',
-                updatedAt: new Date().toISOString()
-            };
-            this.saveAssets(assets);
-            return assets[index];
-        }
-        return null;
-    }
-
-    // 删除资产
-    static deleteAsset(assetId) {
-        const assets = this.getAssets();
-        const filtered = assets.filter(a => a.id !== assetId);
-        this.saveAssets(filtered);
-        return filtered;
-    }
 
     // ==================== 个人财产管理功能 ====================
 
@@ -2827,7 +2646,6 @@ class DataManager {
     static calculateCompleteFinancialStats() {
         const finance = this.getPersonalFinance();
         const appEarnings = this.calculateTotalEarnings();
-        const assets = this.calculateAssetStats();
         
         // 计算本月收入
         const now = new Date();
@@ -2853,14 +2671,7 @@ class DataManager {
             personalTotalEarned: finance.totalEarned,
             personalTotalSpent: finance.totalSpent,
             
-            // 资产
-            assetsValue: assets.totalValue,
-            assetsCount: assets.totalAssets,
-            
-            // 汇总
-            totalWealth: finance.wallet + appEarnings.totalBalance + assets.totalValue,
-            liquidAssets: finance.wallet + appEarnings.totalBalance,
-            fixedAssets: assets.totalValue,
+            totalWealth: finance.wallet + appEarnings.totalBalance,
             
             // 本月统计
             monthlyIncome: monthlyIncome,
@@ -2875,62 +2686,7 @@ class DataManager {
         };
     }
 
-    // 计算资产统计
-    static calculateAssetStats() {
-        const assets = this.getAssets();
-        const categories = this.getAssetCategories();
-        const now = new Date();
-        
-        let totalValue = 0;
-        let totalDays = 0;
-        const categoryStats = {};
-        
-        // 初始化分类统计
-        categories.forEach(cat => {
-            categoryStats[cat.id] = {
-                ...cat,
-                count: 0,
-                totalValue: 0,
-                totalDays: 0,
-                dailyCost: 0
-            };
-        });
-        
-        assets.forEach(asset => {
-            const purchaseDate = new Date(asset.purchaseDate);
-            const daysOwned = Math.max(1, Math.floor((now - purchaseDate) / (1000 * 60 * 60 * 24)));
-            const dailyCost = asset.price / daysOwned;
-            
-            totalValue += asset.price;
-            totalDays += daysOwned;
-            
-            const catId = asset.category || 'other';
-            if (categoryStats[catId]) {
-                categoryStats[catId].count++;
-                categoryStats[catId].totalValue += asset.price;
-                categoryStats[catId].totalDays += daysOwned;
-                categoryStats[catId].dailyCost += dailyCost;
-            }
-        });
-        
-        const totalDailyCost = totalValue > 0 && totalDays > 0 ? totalValue / (totalDays / assets.length || 1) : 0;
-        
-        return {
-            totalAssets: assets.length,
-            totalValue: totalValue,
-            totalDailyCost: totalDailyCost,
-            categoryStats: Object.values(categoryStats).filter(c => c.count > 0),
-            assets: assets.map(asset => {
-                const purchaseDate = new Date(asset.purchaseDate);
-                const daysOwned = Math.max(1, Math.floor((now - purchaseDate) / (1000 * 60 * 60 * 24)));
-                return {
-                    ...asset,
-                    daysOwned: daysOwned,
-                    dailyCost: asset.price / daysOwned
-                };
-            }).sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate))
-        };
-    }
+
 
     // 清空所有数据
     static clearAllData() {
@@ -2939,7 +2695,7 @@ class DataManager {
         localStorage.removeItem(EXPENSES_KEY);
         localStorage.removeItem(SETTINGS_KEY);
         localStorage.removeItem(DATA_KEY);
-        localStorage.removeItem('moneyApp_assets');
+        
         localStorage.removeItem('moneyApp_gameDrawHistory');
         localStorage.removeItem('moneyApp_gameTimers');
         localStorage.removeItem('moneyApp_dailyGaps');
@@ -3890,52 +3646,6 @@ class DataManager {
         const phone = data.phones.find(p => p.id === phoneId);
         return phone ? (phone.games || []) : [];
     }
-    
-    // ==================== 游戏抽签历史记录功能 ====================
-    
-    static addGameDrawHistory(phoneId, drawResult) {
-        const data = this.loadData();
-        const phone = data.phones.find(p => p.id === phoneId);
-        if (phone) {
-            if (!phone.gameDrawHistory) {
-                phone.gameDrawHistory = [];
-            }
-            const historyItem = {
-                id: Date.now().toString(),
-                date: new Date().toISOString(),
-                games: drawResult.map(game => ({
-                    ...game,
-                    completed: false
-                }))
-            };
-            phone.gameDrawHistory.unshift(historyItem); // 最新的在前面
-            // 只保留最近30天的记录
-            if (phone.gameDrawHistory.length > 30) {
-                phone.gameDrawHistory = phone.gameDrawHistory.slice(0, 30);
-            }
-            this.saveData(data);
-        }
-        return data;
-    }
-    
-    static toggleGameCompleted(phoneId, historyId, gameIndex) {
-        const data = this.loadData();
-        const phone = data.phones.find(p => p.id === phoneId);
-        if (phone && phone.gameDrawHistory) {
-            const historyItem = phone.gameDrawHistory.find(h => h.id === historyId);
-            if (historyItem && historyItem.games[gameIndex]) {
-                historyItem.games[gameIndex].completed = !historyItem.games[gameIndex].completed;
-                this.saveData(data);
-            }
-        }
-        return data;
-    }
-    
-    static getPhoneGameDrawHistory(phoneId) {
-        const data = this.loadData();
-        const phone = data.phones.find(p => p.id === phoneId);
-        return phone ? (phone.gameDrawHistory || []) : [];
-    }
 
     static clearAllData() {
         // 清除旧的存储键
@@ -3981,90 +3691,18 @@ class DataManager {
         const theme = this.getTheme();
         const colors = {
             default: {
-                primary: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                secondary: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                accent: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                success: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
-            },
-            'youth-green': {
-                primary: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-                secondary: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 100%)',
+                primary: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
+                secondary: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
                 accent: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
-            },
-            'vitality-orange': {
-                primary: 'linear-gradient(135deg, #f97316 0%, #fb7185 100%)',
-                secondary: 'linear-gradient(135deg, #fb923c 0%, #fdba74 100%)',
-                accent: 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #eab308 0%, #facc15 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
-            },
-            'ocean-blue': {
-                primary: 'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)',
-                secondary: 'linear-gradient(135deg, #38bdf8 0%, #7dd3fc 100%)',
-                accent: 'linear-gradient(135deg, #22d3ee 0%, #67e8f9 100%)',
                 success: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
                 warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                info: 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)'
-            },
-            'sweet-pink': {
-                primary: 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)',
-                secondary: 'linear-gradient(135deg, #f9a8d4 0%, #fbcfe8 100%)',
-                accent: 'linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
-            },
-            'warm-sunset': {
-                primary: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
-                secondary: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                accent: 'linear-gradient(135deg, #f97316 0%, #fb923c 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
-            },
-            'minimal-dark': {
-                primary: 'linear-gradient(135deg, #404040 0%, #525252 100%)',
-                secondary: 'linear-gradient(135deg, #525252 0%, #737373 100%)',
-                accent: 'linear-gradient(135deg, #a3a3a3 0%, #d4d4d4 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
-            },
-            'morandi': {
-                primary: 'linear-gradient(135deg, #a8b5bd 0%, #7d8b96 100%)',
-                secondary: 'linear-gradient(135deg, #b8a9a1 0%, #c9b8b0 100%)',
-                accent: 'linear-gradient(135deg, #9db4c0 0%, #b8d4e3 100%)',
-                success: 'linear-gradient(135deg, #a8c5a8 0%, #c5d9c5 100%)',
-                warning: 'linear-gradient(135deg, #d4b896 0%, #e8d4b8 100%)',
-                info: 'linear-gradient(135deg, #9db4c0 0%, #b8d4e3 100%)'
-            },
-            'forest': {
-                primary: 'linear-gradient(135deg, #4a7c59 0%, #2d5a3d 100%)',
-                secondary: 'linear-gradient(135deg, #6b8e5a 0%, #8fbc8f 100%)',
-                accent: 'linear-gradient(135deg, #228b22 0%, #32cd32 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #d4b896 0%, #e8d4b8 100%)',
-                info: 'linear-gradient(135deg, #4682b4 0%, #87ceeb 100%)'
-            },
-            'business': {
-                primary: 'linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%)',
-                secondary: 'linear-gradient(135deg, #2d3748 0%, #4a5568 100%)',
-                accent: 'linear-gradient(135deg, #3182ce 0%, #63b3ed 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
-                warning: 'linear-gradient(135deg, #d69e2e 0%, #ecc94b 100%)',
-                info: 'linear-gradient(135deg, #4299e1 0%, #76c1e8 100%)'
+                info: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)'
             },
             'dark': {
-                primary: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                secondary: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-                accent: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
-                success: 'linear-gradient(135deg, #22c55e 0%, #4ade80 100%)',
+                primary: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                secondary: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
+                accent: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                success: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 100%)',
                 warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
                 info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
             }
@@ -5182,37 +4820,34 @@ function initTheme() {
 
 // 应用主题
 function applyTheme(theme) {
-    if (theme === 'default') {
+    const validThemes = ['default', 'dark'];
+    const finalTheme = validThemes.includes(theme) ? theme : 'default';
+    
+    if (finalTheme === 'default') {
         document.documentElement.removeAttribute('data-theme');
     } else {
-        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-theme', finalTheme);
     }
-    updateThemeSelector(theme);
+    updateThemeSelector(finalTheme);
 }
 
 // 设置主题
 function setTheme(theme) {
-    DataManager.setTheme(theme);
-    applyTheme(theme);
-    showSuccess(`主题已切换为${getThemeName(theme)}`);
+    const validThemes = ['default', 'dark'];
+    const finalTheme = validThemes.includes(theme) ? theme : 'default';
+    
+    DataManager.setTheme(finalTheme);
+    applyTheme(finalTheme);
+    showSuccess(`主题已切换为${getThemeName(finalTheme)}`);
 }
 
 // 获取主题名称
 function getThemeName(theme) {
     const themeNames = {
-        'default': '梦幻紫',
-        'youth-green': '青春绿',
-        'vitality-orange': '活力橙',
-        'ocean-blue': '海洋蓝',
-        'sweet-pink': '甜美粉',
-        'warm-sunset': '温暖夕阳',
-        'minimal-dark': '极简黑白',
-        'morandi': '莫兰迪色',
-        'forest': '森林自然',
-        'business': '极简商务风',
+        'default': '简约',
         'dark': '暗黑模式'
     };
-    return themeNames[theme] || '梦幻紫';
+    return themeNames[theme] || '简约';
 }
 
 // 更新主题选择器状态
@@ -5385,11 +5020,11 @@ function showPage(pageName) {
     if (pageName === 'withdraw-records') renderWithdrawRecords();
     if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
-    if (pageName === 'assets') renderAssetsPage();
+    
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     if (pageName === 'app-details') renderAppDetailsPage();
     if (pageName === 'phone-earnings') renderPhoneEarningsPage();
-    if (pageName === 'cashback-gift') renderCashbackGiftPage();
+    
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
     const quickEditFab = document.getElementById('quick-edit-fab');
@@ -5577,11 +5212,11 @@ function restorePageState(pageName) {
 // 渲染仪表盘
 function renderDashboard() {
     const data = DataManager.loadData();
-    
+
     // 统计数据
     const totalPhones = data.phones.length;
     const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
-    
+
     // 计算总提现金额
     const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => {
@@ -5593,7 +5228,7 @@ function renderDashboard() {
     const totalRepaid = data.installments ? data.installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0) : 0;
     // 剩余支出 = 总提现 - 总支出 - 已还分期
     const netEarning = totalWithdrawnAmount - totalExpenses - totalRepaid;
-    
+
     // 统计有提现记录的软件数量
     const appsWithWithdrawals = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.filter(app => {
@@ -5601,69 +5236,123 @@ function renderDashboard() {
             return withdrawals.length > 0;
         }).length;
     }, 0);
-    
-    // 更新DOM
-    document.getElementById('total-phones').textContent = totalPhones;
-    document.getElementById('total-apps').textContent = totalApps;
-    document.getElementById('total-balance').textContent = `¥${netEarning.toFixed(2)}`;
-    document.getElementById('ready-apps').textContent = appsWithWithdrawals;
 
-    // 计算并显示软件提现总目标
-    const dailyTarget = DataManager.calculateDailyWithdrawalTarget();
-    const dailyTargetEl = document.getElementById('daily-withdrawal-target');
-    if (dailyTargetEl) {
-        if (dailyTarget && dailyTarget.totalTargetAmount > 0) {
-            const progressPercent = dailyTarget.totalTargetAmount > 0
-                ? (dailyTarget.totalWithdrawn / dailyTarget.totalTargetAmount * 100).toFixed(1)
-                : 0;
-            dailyTargetEl.innerHTML = `
-                <div style="text-align: center; margin-bottom: 16px;">
-                    <div style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 6px;">软件提现总目标</div>
-                    <div style="font-size: 32px; font-weight: 700; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${dailyTarget.totalTargetAmount.toFixed(2)}</div>
-                </div>
+    // 计算今日与昨日收益（用于趋势）
+    const today = getCurrentDate();
+    const yesterday = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    let todayEarning = 0;
+    let yesterdayEarning = 0;
+    const last7 = []; // [{date, total}, ...] 共 7 天
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        let sum = 0;
+        data.phones.forEach(phone => {
+            (phone.apps || []).forEach(app => {
+                sum += parseFloat((app.dailyEarnings && app.dailyEarnings[ds]) || 0);
+            });
+        });
+        last7.push({ date: ds, total: sum });
+        if (ds === today) todayEarning = sum;
+        if (ds === yesterday) yesterdayEarning = sum;
+    }
+    const trendDelta = todayEarning - yesterdayEarning;
+    const trendClass = trendDelta > 0 ? 'up' : (trendDelta < 0 ? 'down' : 'flat');
+    const trendIcon = trendDelta > 0 ? '↗' : (trendDelta < 0 ? '↘' : '→');
+    const trendText = yesterdayEarning > 0
+        ? `${trendIcon} ${Math.abs(trendDelta).toFixed(2)}`
+        : (todayEarning > 0 ? `↗ 今日 ${todayEarning.toFixed(2)}` : '— 暂无数据');
 
-                <div style="background: rgba(255,255,255,0.2); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 16px;">
-                    <div style="background: linear-gradient(90deg, #38ef7d, #11998e); height: 100%; width: ${Math.min(100, progressPercent)}%; transition: width 0.5s ease; border-radius: 10px;"></div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; text-align: center;">
-                    <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 14px; border: 1px solid rgba(255,255,255,0.2);">
-                        <div style="font-size: 20px; font-weight: 700; color: #38ef7d;">¥${dailyTarget.totalWithdrawn.toFixed(2)}</div>
-                        <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px;">已提现</div>
+    // 渲染 v2 看板
+    const root = document.getElementById('dashboard-v2-root');
+    if (root) {
+        root.innerHTML = `
+            <div class="hero-card" onclick="showTotalEarningsDetail()">
+                <div class="hero-card__label">💰 总赚取金额</div>
+                <div class="hero-card__value" id="v2-total-earnings">¥0.00</div>
+                <div class="hero-card__sub">
+                    <div>
+                        <span class="hero-card__trend ${trendClass}" id="v2-total-trend">${trendText}</span>
+                        <div class="hero-card__hint">较昨日</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.15); border-radius: 12px; padding: 14px; border: 1px solid rgba(255,255,255,0.2);">
-                        <div style="font-size: 20px; font-weight: 700; color: #ffffff;">¥${dailyTarget.remainingTarget.toFixed(2)}</div>
-                        <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px;">剩余</div>
-                    </div>
+                    <svg class="hero-card__sparkline" viewBox="0 0 96 36" preserveAspectRatio="none" id="v2-sparkline">
+                        ${buildSparklineSvg(last7.map(p => p.total), 96, 36)}
+                    </svg>
                 </div>
+            </div>
 
-                <div style="display: flex; justify-content: space-between; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.2);">
-                    <span style="font-size: 13px; color: rgba(255,255,255,0.8);">共 ${dailyTarget.totalApps} 个软件</span>
-                    <span style="font-size: 13px; color: rgba(255,255,255,0.8);">每个需 ¥${dailyTarget.perAppTarget.toFixed(2)}</span>
+            <div class="kpi-grid">
+                <div class="kpi-tile kpi-tile--purple" onclick="showPage('phones')">
+                    <div class="kpi-tile__label">📱 总手机数</div>
+                    <div class="kpi-tile__value">${totalPhones}</div>
+                    <span class="kpi-tile__delta">${totalApps} 个软件</span>
                 </div>
-            `;
-        } else {
-            dailyTargetEl.innerHTML = '<span style="color: #e0e0e0;">无分期还款目标</span>';
-        }
+                <div class="kpi-tile kpi-tile--pink" onclick="showPage('phones')">
+                    <div class="kpi-tile__label">📦 总软件数</div>
+                    <div class="kpi-tile__value">${totalApps}</div>
+                    <span class="kpi-tile__delta">${appsWithWithdrawals} 有提现</span>
+                </div>
+                <div class="kpi-tile kpi-tile--violet" onclick="showPage('stats')">
+                    <div class="kpi-tile__label">💰 可用资金</div>
+                    <div class="kpi-tile__value">¥${netEarning.toFixed(2)}</div>
+                    <span class="kpi-tile__delta">净收益</span>
+                </div>
+                <div class="kpi-tile kpi-tile--amber" onclick="showPage('stats')">
+                    <div class="kpi-tile__label">✅ 有提现软件</div>
+                    <div class="kpi-tile__value">${appsWithWithdrawals}</div>
+                    <span class="kpi-tile__delta">查看明细 →</span>
+                </div>
+            </div>
+        `;
     }
 
-    // 渲染总赚取金额
+    // 渲染总赚取金额（写入 v2 元素）
     renderTotalEarnings();
 
     // 渲染收入日历
     renderIncomeCalendar();
-    
+
     // 渲染软件收益排行（基于余额变化）
     renderAppEarningsRanking();
-    
+
     // 渲染软件赚取分析
     renderAppEarningAnalysis();
-    
+
     // 渲染年度目标
     renderYearlyGoal();
-    
+
     // 更新今日收益显示
     updateTodayEarnings();
+}
+
+// 生成 SVG 迷你曲线（输入数组为数值序列）
+function buildSparklineSvg(values, width, height) {
+    if (!values || values.length < 2) {
+        return `<path d="M0 ${height - 2} L ${width} ${height - 2}" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-linecap="round"/>`;
+    }
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const range = (max - min) || 1;
+    const stepX = width / (values.length - 1);
+    const pad = 3;
+    const points = values.map((v, i) => {
+        const x = i * stepX;
+        const y = height - pad - ((v - min) / range) * (height - pad * 2);
+        return [x, y];
+    });
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+    const areaPath = linePath + ` L ${width} ${height} L 0 ${height} Z`;
+    const last = points[points.length - 1];
+    return `
+        <path d="${areaPath}" fill="rgba(255,255,255,0.18)"/>
+        <path d="${linePath}" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.5" fill="#fff"/>
+    `;
 }
 
 // 打开记收入弹窗
@@ -5889,7 +5578,7 @@ function openTransferModal() {
 
 // 渲染总赚取金额
 function renderTotalEarnings() {
-    const totalEarningsEl = document.getElementById('total-earnings');
+    const totalEarningsEl = document.getElementById('v2-total-earnings');
     if (!totalEarningsEl) return;
 
     const earnings = DataManager.calculateTotalEarnings();
@@ -5899,14 +5588,14 @@ function renderTotalEarnings() {
 // 显示总赚取详情
 function showTotalEarningsDetail() {
     const earnings = DataManager.calculateTotalEarnings();
-    
+
     const html = `
         <div style="padding: 16px;">
             <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; margin-bottom: 20px; color: white;">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">总赚取金额</div>
                 <div style="font-size: 32px; font-weight: 700;">¥${earnings.totalEarned.toFixed(2)}</div>
             </div>
-            
+
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">已提现</div>
@@ -5917,7 +5606,7 @@ function showTotalEarningsDetail() {
                     <div style="font-size: 18px; font-weight: 600; color: var(--primary-color);">¥${earnings.totalBalance.toFixed(2)}</div>
                 </div>
             </div>
-            
+
             <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px;">
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">统计信息</div>
                 <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
@@ -5931,7 +5620,7 @@ function showTotalEarningsDetail() {
             </div>
         </div>
     `;
-    
+
     showModal('总赚取详情', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
@@ -5941,52 +5630,6 @@ function showTotalEarningsDetail() {
 let incomeChart = null;
 
 // ==================== 智能提现方案 ====================
-
-// 渲染总赚取金额
-function renderTotalEarnings() {
-    const totalEarningsEl = document.getElementById('total-earnings');
-    if (!totalEarningsEl) return;
-    
-    const earnings = DataManager.calculateTotalEarnings();
-    totalEarningsEl.textContent = `¥${earnings.totalEarned.toFixed(2)}`;
-}
-
-// 显示总赚取详情
-function showTotalEarningsDetail() {
-    const earnings = DataManager.calculateTotalEarnings();
-    
-    let html = `
-        <div style="padding: 16px;">
-            <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; margin-bottom: 20px; color: white;">
-                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">总赚取金额</div>
-                <div style="font-size: 32px; font-weight: 700;">¥${earnings.totalEarned.toFixed(2)}</div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
-                <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">已提现</div>
-                    <div style="font-size: 20px; font-weight: 700; color: var(--success-color);">¥${earnings.totalWithdrawn.toFixed(2)}</div>
-                </div>
-                <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前余额</div>
-                    <div style="font-size: 20px; font-weight: 700; color: var(--primary-color);">¥${earnings.totalBalance.toFixed(2)}</div>
-                </div>
-            </div>
-            
-            <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px;">
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">设备统计</div>
-                <div style="display: flex; justify-content: space-between; font-size: 14px; color: var(--text-primary);">
-                    <span>手机数量: <strong>${earnings.phoneCount}</strong> 部</span>
-                    <span>软件数量: <strong>${earnings.appCount}</strong> 个</span>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    showModal('总赚取详情', html, [
-        { text: '关闭', class: 'btn-secondary', action: closeModal }
-    ]);
-}
 
 // ==================== 智能建议助手 ====================
 
@@ -6917,11 +6560,32 @@ function generateEmptyState(type, options = {}) {
     return html;
 }
 
+// 切换"更多"菜单（手机页）
+function togglePhonesMoreMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('phones-more-menu');
+    if (!menu) return;
+    menu.classList.toggle('is-open');
+}
+
+// 关闭"更多"菜单（手机页）
+function closePhonesMoreMenu() {
+    const menu = document.getElementById('phones-more-menu');
+    if (menu) menu.classList.remove('is-open');
+}
+
+// 点击页面其它位置时自动收起"更多"菜单
+document.addEventListener('click', function(e) {
+    const menu = document.getElementById('phones-more-menu');
+    if (!menu || !menu.classList.contains('is-open')) return;
+    if (e.target.closest('.page-actions__more')) return;
+    menu.classList.remove('is-open');
+});
+
 // 渲染手机管理页面
 function renderPhones() {
     const data = DataManager.loadData();
     const container = document.getElementById('phone-grid');
-    
     if (data.phones.length === 0) {
         container.innerHTML = generateEmptyState('phones');
         return;
@@ -6958,7 +6622,6 @@ function renderPhones() {
                     <div class="phone-header-top">
                         <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
                         <div class="phone-header-actions">
-                            <button class="btn-game-draw" onclick="openGameDrawModal('${phone.id}')" title="游戏抽签">🎮 游戏抽签</button>
                             <div class="phone-icon-buttons">
                                 <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
                                 <button class="icon-btn icon-btn-delete" onclick="deletePhone('${phone.id}')" title="删除手机">🗑️</button>
@@ -9326,367 +8989,6 @@ function initCalendars() {
     }
 }
 
-// ==================== 游戏抽签功能 ====================
-
-let currentGameDrawPhoneId = null;
-
-// 打开游戏抽签弹窗
-function openGameDrawModal(phoneId) {
-    currentGameDrawPhoneId = phoneId;
-    const modal = document.getElementById('game-draw-modal');
-    const manageSection = document.getElementById('game-manage-section');
-    const resultSection = document.getElementById('game-draw-result-section');
-    const historySection = document.getElementById('game-history-section');
-    const drawBtn = document.getElementById('game-draw-btn');
-    
-    // 重置状态
-    manageSection.classList.remove('hidden');
-    resultSection.classList.add('hidden');
-    historySection.classList.remove('hidden');
-    drawBtn.textContent = '开始抽签';
-    drawBtn.onclick = startGameDraw;
-    
-    // 加载游戏列表和历史记录
-    renderGameList();
-    renderGameHistory();
-    
-    modal.style.display = 'flex';
-}
-
-// 关闭游戏抽签弹窗
-function closeGameDrawModal() {
-    const modal = document.getElementById('game-draw-modal');
-    modal.style.display = 'none';
-    currentGameDrawPhoneId = null;
-}
-
-// 渲染游戏列表
-function renderGameList() {
-    const games = DataManager.getGames(currentGameDrawPhoneId);
-    const container = document.getElementById('game-list');
-    
-    console.log('renderGameList 被调用，游戏数量:', games.length);
-    
-    if (games.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无游戏，请添加游戏</div>';
-        return;
-    }
-    
-    let html = '';
-    games.forEach(game => {
-        console.log('渲染游戏:', game.name, 'ID:', game.id);
-        html += `
-            <div class="game-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px;">
-                <span class="game-name" style="flex: 1; font-weight: 500;">${game.name}</span>
-                <div style="display: flex; gap: 6px;">
-                    <button class="btn btn-sm" onclick="editGameName('${game.id}', '${game.name}')" style="font-size: 11px; padding: 4px 10px;">修改</button>
-                    <button class="btn btn-error btn-sm" onclick="deleteGame('${game.id}')" style="font-size: 11px; padding: 4px 10px;">删除</button>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-    console.log('游戏列表 HTML 已生成');
-}
-
-// 添加游戏
-function addGame() {
-    const input = document.getElementById('draw-game-name');
-    const gameName = input.value.trim();
-    
-    if (!gameName) {
-        showToast('请输入游戏名称', 'warning');
-        return;
-    }
-    
-    DataManager.addGame(currentGameDrawPhoneId, gameName);
-    input.value = '';
-    renderGameList();
-    showToast('游戏添加成功', 'success');
-}
-
-// 删除游戏
-function deleteGame(gameId) {
-    if (confirm('确定要删除这个游戏吗？')) {
-        DataManager.deleteGame(currentGameDrawPhoneId, gameId);
-        renderGameList();
-        showToast('游戏删除成功', 'success');
-    }
-}
-
-// 修改游戏名称
-function editGameName(gameId, currentName) {
-    const newName = prompt('请输入新的游戏名称：', currentName);
-    if (newName && newName.trim() && newName.trim() !== currentName) {
-        DataManager.updateGameName(currentGameDrawPhoneId, gameId, newName.trim());
-        renderGameList();
-        showToast('游戏名称修改成功', 'success');
-    }
-}
-
-// 随机打乱数组
-function shuffleArray(array) {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-}
-
-// 随机生成游玩时间（15-60分钟）
-function getRandomPlayTime() {
-    // 生成15-60分钟，步进5分钟
-    const times = [15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
-    return times[Math.floor(Math.random() * times.length)];
-}
-
-// 开始游戏抽签
-function startGameDraw() {
-    const games = DataManager.getGames(currentGameDrawPhoneId);
-    
-    if (games.length === 0) {
-        showToast('请先添加游戏', 'warning');
-        return;
-    }
-    
-    const manageSection = document.getElementById('game-manage-section');
-    const resultSection = document.getElementById('game-draw-result-section');
-    const drawBtn = document.getElementById('game-draw-btn');
-    const resultList = document.getElementById('game-draw-list');
-    
-    // 禁用按钮
-    drawBtn.disabled = true;
-    drawBtn.textContent = '抽签中...';
-    
-    // 动画效果
-    let animationCount = 0;
-    const emojis = ['🎲', '🎯', '🎰', '🎪', '🎨'];
-    
-    const animationInterval = setInterval(() => {
-        drawBtn.textContent = `抽签中 ${emojis[animationCount % emojis.length]}`;
-        animationCount++;
-        
-        if (animationCount >= 8) {
-            clearInterval(animationInterval);
-            
-            // 执行抽签
-            const result = performGameDraw(games);
-            
-            // 保存到历史记录
-            DataManager.addGameDrawHistory(currentGameDrawPhoneId, result);
-            
-            // 刷新历史记录
-            renderGameHistory();
-            
-            // 恢复按钮状态
-            drawBtn.disabled = false;
-            drawBtn.textContent = '开始抽签';
-            
-            // 显示弹出弹窗
-            openGameResultPopup(result);
-        }
-    }, 200);
-}
-
-// 格式化日期
-function formatDate(date) {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
-}
-
-// 执行游戏抽签
-function performGameDraw(games) {
-    // 随机决定抽取游戏数量 (1-3个，但不超过总数)
-    const maxGames = Math.min(3, games.length);
-    const minGames = 1;
-    const gameCount = Math.floor(Math.random() * (maxGames - minGames + 1)) + minGames;
-    
-    // 随机选择游戏
-    const shuffledGames = shuffleArray(games);
-    const selectedGames = shuffledGames.slice(0, gameCount);
-    
-    // 为每个游戏分配游玩时间
-    return selectedGames.map(game => ({
-        ...game,
-        playTime: getRandomPlayTime()
-    }));
-}
-
-// 显示游戏抽签结果
-function displayGameDrawResult(result, container, showCheckbox = false, historyId = null) {
-    let html = '';
-    
-    result.forEach((game, index) => {
-        const isCompleted = game.completed || false;
-        const completedClass = isCompleted ? 'completed' : '';
-        const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
-        const checkboxHtml = showCheckbox ? `
-            <label class="game-complete-checkbox">
-                <input type="checkbox" ${isCompleted ? 'checked' : ''} 
-                    onchange="toggleGameCompleted('${historyId}', ${index})" 
-                    ${!historyId ? 'disabled' : ''}>
-                <span class="checkmark"></span>
-            </label>
-        ` : '';
-        
-        html += `
-            <div class="game-draw-item ${completedClass}" style="animation-delay: ${index * 0.1}s">
-                <div class="game-draw-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);">${index + 1}</div>
-                <div class="game-draw-info">
-                    <span class="game-draw-name">${game.name}</span>
-                    <span class="game-draw-time">⏱️ ${playTime} 分钟</span>
-                </div>
-                ${checkboxHtml}
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 切换游戏完成状态
-function toggleGameCompleted(historyId, gameIndex) {
-    DataManager.toggleGameCompleted(currentGameDrawPhoneId, historyId, gameIndex);
-    renderGameHistory();
-}
-
-// 渲染历史记录
-function renderGameHistory() {
-    const history = DataManager.getPhoneGameDrawHistory(currentGameDrawPhoneId);
-    const container = document.getElementById('game-history-list');
-    
-    if (history.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无历史记录</div>';
-        return;
-    }
-    
-    let html = '';
-    history.forEach((item, index) => {
-        const date = formatDate(item.date);
-        const completedCount = item.games.filter(g => g.completed).length;
-        const totalCount = item.games.length;
-        const isAllCompleted = completedCount === totalCount;
-        
-        html += `
-            <div class="history-item">
-                <div class="history-header">
-                    <span class="history-date">${date}</span>
-                    <span class="history-progress ${isAllCompleted ? 'all-completed' : ''}">
-                        ${completedCount}/${totalCount} 完成
-                    </span>
-                </div>
-                <div class="history-games">
-        `;
-        
-        item.games.forEach((game, gameIndex) => {
-            const isCompleted = game.completed || false;
-            const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
-            html += `
-                <div class="history-game-item ${isCompleted ? 'completed' : ''}">
-                    <label class="game-complete-checkbox">
-                        <input type="checkbox" ${isCompleted ? 'checked' : ''} 
-                            onchange="toggleGameCompleted('${item.id}', ${gameIndex})">
-                        <span class="checkmark"></span>
-                    </label>
-                    <span class="history-game-name">${game.name}</span>
-                    <span class="history-game-time">${playTime}分钟</span>
-                </div>
-            `;
-        });
-        
-        html += `
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// ==================== 抽签结果弹窗功能 ====================
-
-// 打开抽签结果弹窗
-function openGameResultPopup(result) {
-    const popup = document.getElementById('game-result-popup');
-    const dateEl = document.getElementById('popup-draw-date');
-    const listEl = document.getElementById('popup-game-result-list');
-    
-    // 保存抽签结果到全局变量
-    todayDrawResult = result;
-    
-    // 重置计时器状态
-    gameTimerStates = {};
-    gameTimers = {};
-    saveTimerState();
-    
-    // 设置日期
-    const drawDate = new Date();
-    dateEl.textContent = formatDate(drawDate);
-    
-    // 显示结果
-    let html = '';
-    result.forEach((game, index) => {
-        const playTime = game.playTime || getRandomPlayTime(); // 如果没有playTime，重新生成一个
-        const totalSeconds = playTime * 60;
-        html += `
-            <div class="popup-game-item" style="animation-delay: ${index * 0.15}s">
-                <div class="popup-game-order" style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);">${index + 1}</div>
-                <div class="popup-game-info">
-                    <span class="popup-game-name">${game.name}</span>
-                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                        <span class="popup-game-time">⏱️ ${playTime} 分钟</span>
-                        <div style="flex: 1; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
-                            <div class="countdown-progress" data-game-index="${index}" style="width: 100%; height: 100%; background: linear-gradient(90deg, #10b981, #34d399); transition: width 1s linear;"></div>
-                        </div>
-                        <span class="countdown-timer" data-game-index="${index}">${playTime}:00</span>
-                    </div>
-                </div>
-                <div style="display: flex; gap: 4px; margin-top: 8px;">
-                    <button class="btn btn-sm" onclick="startGameTimerByIndex(${index})" style="font-size: 10px; padding: 2px 8px;">开始</button>
-                    <button class="btn btn-sm" onclick="pauseGameTimer(${index})" style="font-size: 10px; padding: 2px 8px;">暂停</button>
-                    <button class="btn btn-sm" onclick="resetGameTimer(${index})" style="font-size: 10px; padding: 2px 8px;">重置</button>
-                </div>
-            </div>
-        `;
-    });
-    listEl.innerHTML = html;
-    
-    // 显示弹窗
-    popup.style.display = 'flex';
-    // 强制重绘以触发动画
-    popup.offsetHeight;
-    popup.classList.add('show');
-    
-    // 抽签后自动开始计时
-    setTimeout(() => {
-        result.forEach((game, index) => {
-            console.log('自动启动游戏计时器:', index, game.name);
-            startGameTimerByIndex(index);
-        });
-    }, 1000);
-}
-
-// 关闭抽签结果弹窗
-function closeGameResultPopup() {
-    const popup = document.getElementById('game-result-popup');
-    popup.style.display = 'none';
-    popup.classList.remove('show');
-}
-
-// 点击弹窗背景关闭
-document.getElementById('game-result-popup').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeGameResultPopup();
-    }
-});
-
 // 点击模态框背景关闭
 document.getElementById('modal').addEventListener('click', function(e) {
     if (e.target === this) {
@@ -9694,454 +8996,7 @@ document.getElementById('modal').addEventListener('click', function(e) {
     }
 });
 
-// ==================== 下载游戏管理功能 ====================
 
-// 当前选中的手机ID
-let currentGamePhoneId = null;
-
-// 今天的抽签结果（内存中存储，不保存到localStorage）
-let todayDrawResult = null;
-
-// 倒计时相关变量
-let gameTimers = {}; // 存储每个游戏的计时器
-let gameTimerStates = {}; // 存储每个游戏的计时状态
-
-// 保存倒计时状态到localStorage
-function saveTimerState() {
-    localStorage.setItem('gameTimerStates', JSON.stringify(gameTimerStates));
-}
-
-// 从localStorage加载倒计时状态
-function loadTimerState() {
-    const saved = localStorage.getItem('gameTimerStates');
-    if (saved) {
-        gameTimerStates = JSON.parse(saved);
-    }
-}
-
-// 格式化时间为 MM:SS 格式
-function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
-
-// 开始游戏倒计时
-
-
-// 暂停游戏倒计时
-function pauseGameTimer(gameIndex) {
-    console.log('暂停游戏计时器:', gameIndex);
-    
-    const state = gameTimerStates[gameIndex];
-    if (state) {
-        state.isRunning = false;
-        if (gameTimers[gameIndex]) {
-            clearInterval(gameTimers[gameIndex]);
-            delete gameTimers[gameIndex];
-        }
-        saveTimerState();
-        console.log('计时器已暂停');
-    }
-}
-
-// 重置游戏倒计时
-function resetGameTimer(gameIndex) {
-    console.log('重置游戏计时器:', gameIndex);
-    
-    if (!todayDrawResult || !todayDrawResult[gameIndex]) {
-        console.error('错误: 没有找到游戏结果或游戏索引无效');
-        return;
-    }
-    
-    const game = todayDrawResult[gameIndex];
-    
-    // 确保playTime有值
-    let playTime = game.playTime;
-    if (!playTime || isNaN(playTime)) {
-        playTime = getRandomPlayTime();
-        console.log('生成随机游玩时间:', playTime);
-    }
-    
-    const totalSeconds = playTime * 60;
-    
-    // 清除计时器
-    if (gameTimers[gameIndex]) {
-        clearInterval(gameTimers[gameIndex]);
-        delete gameTimers[gameIndex];
-    }
-    
-    // 重置状态
-    gameTimerStates[gameIndex] = {
-        totalSeconds: totalSeconds,
-        remainingSeconds: totalSeconds,
-        isRunning: false,
-        lastUpdated: Date.now()
-    };
-    
-    console.log('游戏计时器已重置:', gameIndex, '时长', playTime, '分钟');
-
-    // 更新UI
-    updateTimerUI(gameIndex, totalSeconds, totalSeconds);
-    saveTimerState();
-}
-
-// 更新计时器UI
-function updateTimerUI(gameIndex, remainingSeconds, totalSeconds) {
-    console.log('=== 更新计时器UI ===', gameIndex, '剩余:', remainingSeconds, '总:', totalSeconds);
-    
-    // 直接通过索引查找元素
-    const popupGameItems = document.querySelectorAll('.popup-game-item');
-    if (popupGameItems.length > gameIndex) {
-        const gameItem = popupGameItems[gameIndex];
-        console.log('找到游戏项:', gameItem);
-        
-        // 查找计时器元素
-        const timerEl = gameItem.querySelector('.countdown-timer');
-        if (timerEl) {
-            timerEl.textContent = formatTime(remainingSeconds);
-            console.log('更新计时器显示:', formatTime(remainingSeconds));
-        } else {
-            console.error('未找到计时器元素');
-        }
-        
-        // 查找进度条元素
-        const progressEl = gameItem.querySelector('.countdown-progress');
-        if (progressEl) {
-            const percentage = (remainingSeconds / totalSeconds) * 100;
-            progressEl.style.width = `${percentage}%`;
-            console.log('更新进度条:', percentage);
-        } else {
-            console.error('未找到进度条元素');
-        }
-    } else {
-        console.error('未找到游戏项，索引:', gameIndex, '总数:', popupGameItems.length);
-    }
-}
-
-// 页面加载时加载计时器状态
-window.addEventListener('load', function() {
-    loadTimerState();
-    console.log('页面加载，已加载计时器状态');
-});
-
-// ==================== 资产管理页面 ====================
-
-// 渲染资产管理页面
-function renderAssetsPage() {
-    // 更新日期
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
-    const assetsDateEl = document.getElementById('assets-current-date');
-    if (assetsDateEl) {
-        assetsDateEl.textContent = dateStr;
-    }
-    
-    // 渲染资产统计
-    renderAssetsStats();
-    
-    // 渲染资产列表
-    renderAssetsList();
-    
-    // 渲染分类统计
-    renderAssetsCategory();
-}
-
-// 渲染资产统计
-function renderAssetsStats() {
-    const container = document.getElementById('assets-stats-content');
-    if (!container) return;
-    
-    const stats = DataManager.calculateAssetStats();
-    
-    if (stats.totalAssets === 0) {
-        container.innerHTML = `
-            <div class="empty-state" style="padding: 30px;">
-                <div style="font-size: 48px; margin-bottom: 16px;">💼</div>
-                <div style="font-size: 16px; margin-bottom: 8px;">暂无资产记录</div>
-                <div style="font-size: 13px; color: var(--text-secondary);">
-                    点击"添加资产"按钮记录您的物品
-                </div>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = `
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-            <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
-                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">总资产价值</div>
-                <div style="font-size: 24px; font-weight: 700;">¥${stats.totalValue.toFixed(2)}</div>
-            </div>
-            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; padding: 16px; color: white; text-align: center;">
-                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">资产数量</div>
-                <div style="font-size: 24px; font-weight: 700;">${stats.totalAssets}件</div>
-            </div>
-        </div>
-        <div style="background: var(--bg-cream); border-radius: 12px; padding: 16px; margin-top: 12px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">平均每日成本</div>
-            <div style="font-size: 20px; font-weight: 700; color: var(--primary-color);">¥${stats.totalDailyCost.toFixed(2)}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                （基于持有天数计算）
-            </div>
-        </div>
-    `;
-}
-
-// 渲染资产列表
-function renderAssetsList() {
-    const container = document.getElementById('assets-list-content');
-    if (!container) return;
-    
-    const stats = DataManager.calculateAssetStats();
-    const categories = DataManager.getAssetCategories();
-    
-    if (stats.assets.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    container.innerHTML = stats.assets.map(asset => {
-        const category = categories.find(c => c.id === asset.category) || { name: '其他', icon: '📦' };
-        return `
-            <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--primary-color);">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 20px;">${category.icon}</span>
-                        <div>
-                            <div style="font-weight: 600; font-size: 14px;">${asset.name}</div>
-                            <div style="font-size: 11px; color: var(--text-secondary);">${category.name}</div>
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-weight: 700; font-size: 16px; color: var(--primary-color);">¥${asset.price.toFixed(2)}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary);">¥${asset.dailyCost.toFixed(2)}/天</div>
-                    </div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary);">
-                    <span>购买于 ${asset.purchaseDate} · 已持有${asset.daysOwned}天</span>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-sm btn-secondary" onclick="editAsset('${asset.id}')">编辑</button>
-                        <button class="btn btn-sm" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;" onclick="deleteAsset('${asset.id}')">删除</button>
-                    </div>
-                </div>
-                ${asset.note ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">${asset.note}</div>` : ''}
-            </div>
-        `;
-    }).join('');
-}
-
-// 渲染分类统计
-function renderAssetsCategory() {
-    const container = document.getElementById('assets-category-content');
-    if (!container) return;
-    
-    const stats = DataManager.calculateAssetStats();
-    
-    if (stats.categoryStats.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无分类数据</div>';
-        return;
-    }
-    
-    container.innerHTML = stats.categoryStats.map(cat => `
-        <div style="display: flex; align-items: center; padding: 12px; background: var(--bg-secondary); border-radius: 10px; margin-bottom: 8px;">
-            <span style="font-size: 24px; margin-right: 12px;">${cat.icon}</span>
-            <div style="flex: 1;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                    <span style="font-weight: 600;">${cat.name}</span>
-                    <span style="font-weight: 700; color: var(--primary-color);">¥${cat.totalValue.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary);">
-                    <span>${cat.count}件物品</span>
-                    <span>¥${cat.dailyCost.toFixed(2)}/天</span>
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-// 打开添加资产弹窗
-function openAddAssetModal() {
-    const categories = DataManager.getAssetCategories();
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
-    showModal(
-        '➕ 添加资产',
-        `
-            <div class="form-group">
-                <label class="form-label">物品名称</label>
-                <input type="text" id="asset-name" class="form-input" placeholder="例如：iPhone 15 Pro">
-            </div>
-            <div class="form-group">
-                <label class="form-label">购买价格 (元)</label>
-                <input type="number" id="asset-price" class="form-input" placeholder="输入价格" step="0.01">
-            </div>
-            <div class="form-group">
-                <label class="form-label">购买日期</label>
-                <input type="text" id="asset-date" class="form-input" value="${todayStr}" placeholder="例如：2026-02-28" maxlength="10">
-                <div class="form-hint">格式：YYYY-MM-DD</div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">分类</label>
-                <select id="asset-category" class="form-input">
-                    <option value="">自动识别</option>
-                    ${categories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">备注 (可选)</label>
-                <input type="text" id="asset-note" class="form-input" placeholder="例如：工作用途、生日礼物等">
-            </div>
-        `,
-        [
-            {
-                text: '取消',
-                class: 'btn-secondary',
-                action: closeModal
-            },
-            {
-                text: '添加',
-                class: 'btn-primary',
-                action: () => {
-                    const name = document.getElementById('asset-name').value.trim();
-                    const price = parseFloat(document.getElementById('asset-price').value);
-                    const date = document.getElementById('asset-date').value;
-                    const category = document.getElementById('asset-category').value;
-                    const note = document.getElementById('asset-note').value.trim();
-                    
-                    if (!name) {
-                        showToast('请输入物品名称', 'error');
-                        return;
-                    }
-                    if (!price || price <= 0) {
-                        showToast('请输入有效的价格', 'error');
-                        return;
-                    }
-                    if (!date) {
-                        showToast('请输入购买日期', 'error');
-                        return;
-                    }
-                    // 验证日期格式
-                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-                    if (!dateRegex.test(date)) {
-                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
-                        return;
-                    }
-                    
-                    DataManager.addAsset({
-                        name,
-                        price,
-                        purchaseDate: date,
-                        category,
-                        note
-                    });
-                    
-                    showToast('资产添加成功！');
-                    renderAssetsPage();
-                    closeModal();
-                }
-            }
-        ]
-    );
-}
-
-// 编辑资产
-function editAsset(assetId) {
-    const assets = DataManager.getAssets();
-    const asset = assets.find(a => a.id === assetId);
-    if (!asset) return;
-    
-    const categories = DataManager.getAssetCategories();
-    
-    showModal(
-        '✏️ 编辑资产',
-        `
-            <div class="form-group">
-                <label class="form-label">物品名称</label>
-                <input type="text" id="asset-name" class="form-input" value="${asset.name}">
-            </div>
-            <div class="form-group">
-                <label class="form-label">购买价格 (元)</label>
-                <input type="number" id="asset-price" class="form-input" value="${asset.price.toFixed(2)}" step="0.01">
-            </div>
-            <div class="form-group">
-                <label class="form-label">购买日期</label>
-                <input type="text" id="asset-date" class="form-input" value="${asset.purchaseDate}" placeholder="例如：2026-02-28" maxlength="10">
-                <div class="form-hint">格式：YYYY-MM-DD</div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">分类</label>
-                <select id="asset-category" class="form-input">
-                    <option value="">自动识别</option>
-                    ${categories.map(c => `<option value="${c.id}" ${asset.category === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">备注 (可选)</label>
-                <input type="text" id="asset-note" class="form-input" value="${asset.note || ''}">
-            </div>
-        `,
-        [
-            {
-                text: '取消',
-                class: 'btn-secondary',
-                action: closeModal
-            },
-            {
-                text: '保存',
-                class: 'btn-primary',
-                action: () => {
-                    const name = document.getElementById('asset-name').value.trim();
-                    const price = parseFloat(document.getElementById('asset-price').value);
-                    const date = document.getElementById('asset-date').value;
-                    const category = document.getElementById('asset-category').value;
-                    const note = document.getElementById('asset-note').value.trim();
-                    
-                    if (!name) {
-                        showToast('请输入物品名称', 'error');
-                        return;
-                    }
-                    if (!price || price <= 0) {
-                        showToast('请输入有效的价格', 'error');
-                        return;
-                    }
-                    if (!date) {
-                        showToast('请输入购买日期', 'error');
-                        return;
-                    }
-                    // 验证日期格式
-                    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-                    if (!dateRegex.test(date)) {
-                        showToast('日期格式不正确，请使用 YYYY-MM-DD 格式', 'error');
-                        return;
-                    }
-                    
-                    DataManager.editAsset(assetId, {
-                        name,
-                        price,
-                        purchaseDate: date,
-                        category,
-                        note
-                    });
-                    
-                    showToast('资产更新成功！');
-                    renderAssetsPage();
-                    closeModal();
-                }
-            }
-        ]
-    );
-}
-
-// 删除资产
-function deleteAsset(assetId) {
-    if (!confirm('确定要删除这个资产吗？')) return;
-    
-    DataManager.deleteAsset(assetId);
-    showToast('资产已删除');
-    renderAssetsPage();
-}
 
 // 渲染游戏管理页面
 function renderGamesPage() {
@@ -11459,9 +10314,6 @@ function renderYearlyGoal() {
     const container = document.getElementById('yearly-goal-content');
     if (!container) return;
 
-    // 基于软件最小提现金额计算年度目标
-    DataManager.calculateYearlyGoalFromMinWithdraw();
-    
     const distribution = DataManager.autoDistributeSurplus();
     const goal = distribution.goal;
 
@@ -11503,73 +10355,115 @@ function renderYearlyGoal() {
     // 获取所有有记录的每日赚取
     const allDailyEarnings = DataManager.getAllDailyEarnings();
 
-    const themeColor = getThemeColor('primary');
-    
     let html = `
         <div style="padding: 16px;">
-            <!-- 总体进度 - 毛玻璃效果 -->
-            <div style="position: relative; background: ${themeColor}; border-radius: 16px; padding: 24px; margin-bottom: 20px; overflow: hidden;">
-                <!-- 背景装饰圆形 -->
-                <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(25px);"></div>
-                <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(20px);"></div>
-                
-                <!-- 毛玻璃卡片内容 -->
-                <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">🎯 ${goal.year}年度目标</span>
-                        ${daysRemaining > 0 ? `<span style="font-size: 12px; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 10px;">剩余${daysRemaining}天</span>` : ''}
+            <!-- 总体进度卡片 -->
+            <div style="background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow-card); border: 1px solid var(--border-color);">
+                <!-- 头部：年份和剩余天数 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #8b5cf6, #a78bfa); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;">🎯</div>
+                        <div>
+                            <div style="font-size: 16px; font-weight: 700; color: var(--text-primary);">${goal.year}年度目标</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">${goal.mode === 'minWithdraw' ? '📱 最小提现模式' : '✏️ 自定义模式'}</div>
+                        </div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 14px; color: rgba(255,255,255,0.9);">目标金额</span>
-                        <span style="font-size: 22px; font-weight: bold; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">¥${goal.amount.toFixed(2)}</span>
+                    ${daysRemaining > 0 ? `
+                    <div style="background: linear-gradient(135deg, #f59e0b, #fbbf24); padding: 6px 14px; border-radius: 20px;">
+                        <span style="font-size: 12px; font-weight: 600; color: white;">⏰ 剩余${daysRemaining}天</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                        <span style="font-size: 12px; color: rgba(255,255,255,0.85);">每日需赚取</span>
-                        <span style="font-size: 16px; font-weight: 700; color: #ffffff;">¥${dailyTargetAmount.toFixed(2)}</span>
+                    ` : ''}
+                </div>
+
+                <!-- 核心数据区 -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+                    <!-- 目标金额 -->
+                    <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(167, 139, 250, 0.1) 100%); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(139, 92, 246, 0.15);">
+                        <div style="font-size: 11px; color: #8b5cf6; margin-bottom: 4px;">目标金额</div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${goal.amount.toFixed(2)}</div>
                     </div>
                     
-                    <!-- 今日赚取金额和达标状态 -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: ${isTodayAchieved ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; border: 2px solid ${isTodayAchieved ? '#38ef7d' : 'rgba(255,255,255,0.2)'};">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 12px; color: rgba(255,255,255,0.95);">今日赚取</span>
-                            ${isTodayAchieved ? '<span style="font-size: 16px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));">✓</span>' : ''}
-                        </div>
-                        <div style="text-align: right;">
-                            <span style="font-size: 20px; font-weight: 700; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${todayEarned.toFixed(2)}</span>
-                            ${isTodayAchieved ? '<div style="font-size: 11px; color: #ffffff; font-weight: 600; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">已达标</div>' : `<div style="font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px;">还差 ¥${(dailyTargetAmount - todayEarned).toFixed(2)}</div>`}
-                        </div>
+                    <!-- 已赚取 -->
+                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(16, 185, 129, 0.15);">
+                        <div style="font-size: 11px; color: #10b981; margin-bottom: 4px;">已赚取</div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${distribution.totalEarned.toFixed(2)}</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.25); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 12px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
-                        <div style="background: ${isOverTarget ? 'linear-gradient(90deg, #fbbf24, #f59e0b)' : 'linear-gradient(90deg, #f472b6, #db2777)'}; height: 100%; width: ${progressPercent}%; transition: width 0.5s ease; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
+                    
+                    <!-- 剩余金额 -->
+                    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(248, 113, 113, 0.1) 100%); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(239, 68, 68, 0.15);">
+                        <div style="font-size: 11px; color: #ef4444; margin-bottom: 4px;">剩余</div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${Math.max(0, distribution.remaining).toFixed(2)}</div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: rgba(255,255,255,0.9);">
-                        <span>已赚取: <strong style="color: #ffffff;">¥${distribution.totalEarned.toFixed(2)}</strong></span>
-                        <span style="font-weight: 600;">${progressPercent}%</span>
-                    </div>
-                    ${isOverTarget ? `
-                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                        <div style="color: #38ef7d; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2); font-size: 14px; margin-bottom: 4px;">🎉 超额完成! 超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)}</div>
-                        ${daysRemaining > 0 ? `<div style="color: rgba(255,255,255,0.9); font-size: 12px;">本年度还剩 ${daysRemaining} 天，继续加油！</div>` : ''}
-                    </div>
-                    ` : `
-                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                        <span style="color: rgba(255,255,255,0.9);">剩余: <strong style="color: #ffffff;">¥${distribution.remaining.toFixed(2)}</strong></span>
-                        <!-- 预测完成日期和预计还需天数 -->
-                        ${(() => {
-                            const prediction = DataManager.calculatePredictedCompletionDate();
-                            if (prediction) {
-                                const formattedDate = `${prediction.date.getFullYear()}-${String(prediction.date.getMonth() + 1).padStart(2, '0')}-${String(prediction.date.getDate()).padStart(2, '0')}`;
-                                return `
-                                <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预计还需 ${prediction.daysNeeded} 天完成</span>
-                                <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">预测完成日期: ${formattedDate}</span>
-                                <br><span style="color: rgba(255,255,255,0.85); font-size: 12px;">平均收益: ¥${prediction.predictedDailyEarnings.toFixed(2)}/天</span>
-                                `;
-                            }
-                            return '';
-                        })()}
-                    </div>
-                    `}
                 </div>
+
+                <!-- 进度条区域 -->
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 13px; color: var(--text-secondary);">总体进度</span>
+                        <span style="font-size: 14px; font-weight: 700; color: ${isOverTarget ? '#f59e0b' : '#8b5cf6'};">${progressPercent}%</span>
+                    </div>
+                    <div style="background: var(--bg-secondary); border-radius: 12px; height: 12px; overflow: hidden;">
+                        <div style="background: ${isOverTarget ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #8b5cf6, #a78bfa)'}; height: 100%; width: ${progressPercent}%; transition: width 0.6s ease; border-radius: 12px; box-shadow: 0 2px 8px ${isOverTarget ? 'rgba(245, 158, 11, 0.3)' : 'rgba(139, 92, 246, 0.3)'};"></div>
+                    </div>
+                </div>
+
+                <!-- 今日赚取和每日目标 -->
+                <div style="display: flex; gap: 12px;">
+                    <!-- 每日目标 -->
+                    <div style="flex: 1; background: rgba(59, 130, 246, 0.08); border-radius: 12px; padding: 14px; border: 1px solid rgba(59, 130, 246, 0.15);">
+                        <div style="font-size: 11px; color: #3b82f6; margin-bottom: 4px;">每日需赚取</div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${dailyTargetAmount.toFixed(2)}</div>
+                    </div>
+                    
+                    <!-- 今日赚取 -->
+                    <div style="flex: 1; background: ${isTodayAchieved ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)'}; border-radius: 12px; padding: 14px; border: 2px solid ${isTodayAchieved ? '#10b981' : '#f59e0b'};">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                            <span style="font-size: 11px; color: ${isTodayAchieved ? '#10b981' : '#f59e0b'};">今日赚取</span>
+                            ${isTodayAchieved ? '<span style="font-size: 14px;">✅</span>' : '<span style="font-size: 14px;">⏳</span>'}
+                        </div>
+                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${todayEarned.toFixed(2)}</div>
+                        ${!isTodayAchieved && dailyTargetAmount > 0 ? `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">还差 ¥${(dailyTargetAmount - todayEarned).toFixed(2)}</div>` : ''}
+                    </div>
+                </div>
+
+                <!-- 预测信息 -->
+                ${!isOverTarget ? `
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    ${(() => {
+                        const prediction = DataManager.calculatePredictedCompletionDate();
+                        if (prediction) {
+                            const formattedDate = `${prediction.date.getFullYear()}-${String(prediction.date.getMonth() + 1).padStart(2, '0')}-${String(prediction.date.getDate()).padStart(2, '0')}`;
+                            return `
+                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 12px; color: #6b7280;">📅 预计完成:</span>
+                                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${formattedDate}</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 12px; color: #6b7280;">⏱️ 还需:</span>
+                                    <span style="font-size: 13px; font-weight: 600; color: #8b5cf6;">${prediction.daysNeeded}天</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 12px; color: #6b7280;">📈 日均:</span>
+                                    <span style="font-size: 13px; font-weight: 600; color: #10b981;">¥${prediction.predictedDailyEarnings.toFixed(2)}</span>
+                                </div>
+                            </div>
+                            `;
+                        }
+                        return '';
+                    })()}
+                </div>
+                ` : `
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                        <span style="font-size: 24px;">🎉</span>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 700; color: #10b981;">超额完成!</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)} · 继续加油!</div>
+                        </div>
+                    </div>
+                </div>
+                `}
             </div>
 
 
@@ -11652,88 +10546,92 @@ function renderYearlyGoal() {
             const dailyTarget = dailyTargetInfo.isValid ? dailyTargetInfo.perAppDailyTarget : 0;
             const dailyStats = DataManager.calculateAppAchievementStats(app.appId);
             
-            // 根据状态确定边框颜色
-            const borderColor = isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor;
-            const bgColor = isCompleted ? 'rgba(56, 239, 125, 0.15)' : hasAllocation ? 'rgba(240, 147, 251, 0.15)' : `${rankColor}15`;
+            const cardBg = isCompleted ? 'rgba(16, 185, 129, 0.08)' : hasAllocation ? 'rgba(139, 92, 246, 0.08)' : 'var(--card-bg)';
+            const cardBorder = isCompleted ? 'rgba(16, 185, 129, 0.3)' : hasAllocation ? 'rgba(139, 92, 246, 0.3)' : 'var(--border-color)';
             
             html += `
-                <div style="background: ${bgColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 3px solid ${borderColor}; cursor: pointer; position: relative; overflow: hidden; box-shadow: var(--shadow-card); transition: all 0.3s ease;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-hover)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow-card)'">
-                    <!-- 左侧彩色条 -->
-                    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: ${isCompleted ? '#38ef7d' : hasAllocation ? '#f093fb' : rankColor}; border-radius: 12px 0 0 12px;"></div>
+                <div style="background: ${cardBg}; border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid ${cardBorder}; cursor: pointer; position: relative; transition: all 0.2s ease;" onclick="openDailyGoalModal('${app.appId}', '${app.phoneId}')" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">
+                    <!-- 左侧状态指示条 -->
+                    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: ${isCompleted ? '#10b981' : hasAllocation ? '#8b5cf6' : '#f59e0b'}; border-radius: 16px 0 0 16px;"></div>
                     
-                    <!-- 第一行：排名 + 软件名 + 手机名 -->
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-left: 8px;">
-                        <span style="font-size: 11px; background: ${rankColor}25; color: ${rankColor}; padding: 2px 8px; border-radius: 10px; font-weight: 600; flex-shrink: 0; border: 1px solid ${rankColor}40;">${index + 1}</span>
-                        <span style="font-weight: 600; font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #78350f;">${app.appName}</span>
-                        <span style="font-size: 11px; color: #92400e; flex-shrink: 0;">(${app.phoneName})</span>
+                    <!-- 头部：排名 + 软件名 + 手机名 -->
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-left: 8px;">
+                        <div style="width: 24px; height: 24px; background: ${isCompleted ? '#10b981' : hasAllocation ? '#8b5cf6' : '#f59e0b'}; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0;">${index + 1}</div>
+                        <div style="flex: 1; overflow: hidden;">
+                            <div style="font-weight: 600; font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${app.appName}</div>
+                            <div style="font-size: 11px; color: var(--text-secondary);">📱 ${app.phoneName}</div>
+                        </div>
+                        <span style="font-size: 11px; font-weight: 600; color: ${isCompleted ? '#10b981' : hasAllocation ? '#8b5cf6' : '#f59e0b'}; padding: 3px 8px; border-radius: 10px; background: ${isCompleted ? 'rgba(16, 185, 129, 0.15)' : hasAllocation ? 'rgba(139, 92, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)'};">${rankBadge}</span>
                     </div>
                     
-                    <!-- 第二行：状态标签（换行显示） -->
-                    <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; padding-left: 8px;">
-                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: ${rankColor}20; color: #78350f; border: 1px solid ${rankColor}50; font-weight: 600;">
-                            ${rankBadge}
-                        </span>
-                        ${isCompleted ? `
-                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: linear-gradient(135deg, #38ef7d, #11998e); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            🎉 年目标完成
-                        </span>
-                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(56, 239, 125, 0.2); color: #166534; border: 1px solid rgba(56, 239, 125, 0.4); font-weight: 600;">
-                            超额 ¥${(app.totalEarned - app.adjustedTarget).toFixed(2)}
-                        </span>
-                        ` : `
-                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 6px; background: ${hasAllocation ? 'rgba(240, 147, 251, 0.15)' : 'rgba(239, 68, 68, 0.1)'}; color: ${hasAllocation ? '#be185d' : '#991b1b'}; border: 1px solid ${hasAllocation ? 'rgba(240, 147, 251, 0.25)' : 'rgba(239, 68, 68, 0.2)'}; font-weight: 600;">
-                            ${hasAllocation ? '受助' : '进行中'}
-                        </span>
-                        `}
-                    </div>
-                    
-                    <!-- 第三行：目标金额 -->
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #92400e; padding-left: 8px;">
-                        <span>年目标: <strong style="color: #78350f;">¥${app.adjustedTarget.toFixed(2)}</strong></span>
-                        <span>已赚: <strong style="color: #78350f;">¥${app.totalEarned.toFixed(2)}</strong></span>
+                    <!-- 核心数据：目标和已赚 -->
+                    <div style="display: flex; gap: 16px; margin-bottom: 12px; padding-left: 8px;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">年目标</div>
+                            <div style="font-size: 15px; font-weight: 700; color: var(--text-primary);">¥${app.adjustedTarget.toFixed(2)}</div>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">已赚取</div>
+                            <div style="font-size: 15px; font-weight: 700; color: ${isCompleted ? '#10b981' : '#8b5cf6'};">¥${app.totalEarned.toFixed(2)}</div>
+                        </div>
+                        <div style="flex: 1; text-align: right;">
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">剩余</div>
+                            <div style="font-size: 15px; font-weight: 700; color: ${isCompleted ? '#10b981' : '#ef4444'};">¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</div>
+                        </div>
                     </div>
                     
                     <!-- 进度条 -->
-                    <div style="background: rgba(120, 53, 15, 0.1); border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 8px; margin-left: 8px;">
-                        <div style="background: ${isCompleted ? '#38ef7d' : rankColor}; height: 100%; width: ${appProgress}%; transition: width 0.3s ease; border-radius: 6px;"></div>
-                    </div>
-                    
-                    <!-- 第四行：剩余和进度 -->
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #92400e; margin-bottom: 8px; padding-left: 8px;">
-                        <span>剩: <strong style="color: #78350f;">¥${Math.max(0, app.adjustedTarget - app.totalEarned).toFixed(2)}</strong></span>
-                        <span style="font-weight: 600; color: #78350f;">${appProgress}%</span>
-                    </div>
-                    
-                    <!-- 每日目标信息（毛玻璃效果） -->
-                    <div style="background: ${dailyStats.todayAchieved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(251, 191, 36, 0.2)'}; backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-left: 8px; border: 1px solid ${dailyStats.todayAchieved ? 'rgba(34, 197, 94, 0.25)' : 'rgba(251, 191, 36, 0.3)'};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
-                            <span style="color: #92400e;">
-                                日目标: <strong style="color: #78350f;">¥${dailyTarget.toFixed(2)}</strong>
-                                ${app.baseDailyGoal && dailyTarget < app.baseDailyGoal ? `<span style="font-size: 9px; color: #166534; margin-left: 4px;">(已降${((1 - dailyTarget / app.baseDailyGoal) * 100).toFixed(0)}%)</span>` : ''}
-                            </span>
-                            <span style="color: ${dailyStats.todayAchieved ? '#166534' : '#92400e'}; font-size: 10px; font-weight: 600;">
-                                ${dailyStats.todayAchieved ? '✅ 已达标' : '⏳ 未达标'} · ${dailyStats.achievedDays}天
-                            </span>
+                    <div style="margin-bottom: 8px; padding-left: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 11px; color: var(--text-secondary);">进度</span>
+                            <span style="font-size: 11px; font-weight: 600; color: ${isCompleted ? '#10b981' : '#8b5cf6'};">${appProgress}%</span>
+                        </div>
+                        <div style="background: var(--bg-secondary); border-radius: 6px; height: 6px; overflow: hidden;">
+                            <div style="background: ${isCompleted ? 'linear-gradient(90deg, #10b981, #34d399)' : hasAllocation ? 'linear-gradient(90deg, #8b5cf6, #a78bfa)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)'}; height: 100%; width: ${appProgress}%; transition: width 0.5s ease; border-radius: 6px;"></div>
                         </div>
                     </div>
                     
-                    <!-- 预测完成时间 -->
-                    ${app.predictedCompletion ? `
-                    <div style="background: rgba(14, 165, 233, 0.15); backdrop-filter: blur(5px); border-radius: 8px; padding: 8px; margin-left: 8px; margin-top: 8px; border: 1px solid rgba(14, 165, 233, 0.25);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
-                            <span style="color: #1e40af;">
-                                预测完成: <strong style="color: #1e3a8a;">${app.predictedCompletion.date.getFullYear()}-${String(app.predictedCompletion.date.getMonth() + 1).padStart(2, '0')}-${String(app.predictedCompletion.date.getDate()).padStart(2, '0')}</strong>
-                            </span>
-                            <span style="color: #1e40af; font-size: 10px; font-weight: 600;">
-                                还需 ${app.predictedCompletion.daysNeeded} 天
-                            </span>
-                        </div>
+                    <!-- 状态标签 -->
+                    <div style="display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; padding-left: 8px;">
+                        ${isCompleted ? `
+                        <span style="font-size: 10px; padding: 2px 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 600;">🎉 已完成</span>
+                        <span style="font-size: 10px; padding: 2px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); font-weight: 600;">超额 ¥${(app.totalEarned - app.adjustedTarget).toFixed(2)}</span>
+                        ` : `
+                        <span style="font-size: 10px; padding: 2px 8px; border-radius: 6px; background: ${hasAllocation ? 'rgba(139, 92, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; color: ${hasAllocation ? '#7c3aed' : '#d97706'}; border: 1px solid ${hasAllocation ? 'rgba(139, 92, 246, 0.25)' : 'rgba(245, 158, 11, 0.25)'}; font-weight: 600;">${hasAllocation ? '💝 受助中' : '⏳ 进行中'}</span>
+                        `}
                     </div>
-                    ` : ''}
                     
+                    <!-- 每日目标和预测信息 -->
+                    <div style="display: flex; gap: 12px; padding-left: 8px;">
+                        <!-- 每日目标 -->
+                        <div style="flex: 1; background: ${dailyStats.todayAchieved ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)'}; border-radius: 8px; padding: 10px; border: 1px solid ${dailyStats.todayAchieved ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-size: 10px; color: var(--text-secondary);">日目标</div>
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">¥${dailyTarget.toFixed(2)}</div>
+                                </div>
+                                <span style="font-size: 12px;">${dailyStats.todayAchieved ? '✅' : '⏳'}</span>
+                            </div>
+                            <div style="font-size: 10px; color: ${dailyStats.todayAchieved ? '#10b981' : '#f59e0b'}; margin-top: 4px;">${dailyStats.todayAchieved ? '今日达标' : `已达标 ${dailyStats.achievedDays}天`}</div>
+                        </div>
+                        
+                        <!-- 预测完成 -->
+                        ${app.predictedCompletion ? `
+                        <div style="flex: 1; background: rgba(59, 130, 246, 0.08); border-radius: 8px; padding: 10px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                            <div style="font-size: 10px; color: var(--text-secondary);">预计完成</div>
+                            <div style="font-size: 12px; font-weight: 600; color: #3b82f6;">${app.predictedCompletion.date.getMonth() + 1}/${app.predictedCompletion.date.getDate()}</div>
+                            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">还需 ${app.predictedCompletion.daysNeeded}天</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <!-- 超额分配提示 -->
                     ${hasAllocation ? `
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(120, 53, 15, 0.2); font-size: 12px; color: #be185d; padding-left: 8px;">
-                        💝 获得超额分配: <strong>¥${app.allocatedSurplus.toFixed(2)}</strong> · 新目标: <strong>¥${app.newTarget.toFixed(2)}</strong>
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; gap: 8px; padding-left: 8px;">
+                        <span style="font-size: 14px;">💝</span>
+                        <div style="font-size: 11px; color: #7c3aed;">
+                            获得超额分配: <strong>¥${app.allocatedSurplus.toFixed(2)}</strong> · 新目标: <strong>¥${app.newTarget.toFixed(2)}</strong>
+                        </div>
                     </div>
                     ` : ''}
                 </div>
@@ -11839,31 +10737,99 @@ function generateYearOptions() {
     yearSelect.innerHTML = html;
 }
 
+// 设置目标模式
+function setGoalMode(mode) {
+    const customRadio = document.getElementById('goal-mode-custom');
+    const minRadio = document.getElementById('goal-mode-minWithdraw');
+    if (customRadio) customRadio.checked = mode === 'custom';
+    if (minRadio) minRadio.checked = mode === 'minWithdraw';
+    onGoalModeChange();
+}
+
+// 目标模式切换处理
+function onGoalModeChange() {
+    const mode = document.querySelector('input[name="goal-mode"]:checked')?.value || 'custom';
+    const amountGroup = document.getElementById('yearly-goal-amount-group');
+    const minInfo = document.getElementById('yearly-goal-min-info');
+    const customLabel = document.getElementById('goal-mode-custom-label');
+    const minLabel = document.getElementById('goal-mode-min-label');
+    const hint = document.getElementById('goal-mode-hint');
+    
+    // 更新选中样式
+    if (customLabel) {
+        customLabel.style.borderColor = mode === 'custom' ? 'var(--primary-color)' : 'var(--border-color)';
+        customLabel.style.background = mode === 'custom' ? 'var(--bg-cream)' : 'transparent';
+    }
+    if (minLabel) {
+        minLabel.style.borderColor = mode === 'minWithdraw' ? 'var(--primary-color)' : 'var(--border-color)';
+        minLabel.style.background = mode === 'minWithdraw' ? 'var(--bg-cream)' : 'transparent';
+    }
+    
+    // 显示/隐藏对应内容
+    if (mode === 'custom') {
+        if (amountGroup) amountGroup.style.display = '';
+        if (minInfo) minInfo.style.display = 'none';
+        if (hint) hint.textContent = '手动输入年度目标金额';
+    } else {
+        if (amountGroup) amountGroup.style.display = 'none';
+        if (minInfo) minInfo.style.display = '';
+        if (hint) hint.textContent = '根据所有软件的最小提现金额自动计算目标';
+        
+        // 更新最小提现计算结果显示
+        const result = DataManager.calculateYearlyGoalFromMinWithdraw(false);
+        const displayEl = document.getElementById('min-withdraw-goal-display');
+        if (displayEl) {
+            displayEl.textContent = `¥${result.totalYearlyGoal.toFixed(2)}`;
+        }
+    }
+}
+
 function saveYearlyGoal() {
+    // 防重复点击
+    if (!acquireLock('saveYearlyGoal')) {
+        console.log('保存年度目标操作被锁定，跳过重复点击');
+        return;
+    }
+    
     const yearSelect = document.getElementById('yearly-goal-year');
     const amountInput = document.getElementById('yearly-goal-amount');
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
+    const modeRadio = document.querySelector('input[name="goal-mode"]:checked');
 
     const year = parseInt(yearSelect.value);
-    const amount = parseFloat(amountInput.value);
     const autoDistribute = autoDistributeCheckbox.checked;
+    const mode = modeRadio?.value || 'custom';
+    let amount;
 
     if (!year || year < 2000 || year > 2100) {
         showToast('请选择有效的年份', 'error');
+        releaseLock('saveYearlyGoal');
         return;
     }
 
-    if (!amount || amount <= 0) {
-        showToast('请输入有效的目标金额', 'error');
-        return;
+    if (mode === 'custom') {
+        amount = parseFloat(amountInput.value);
+        if (!amount || amount <= 0) {
+            showToast('请输入有效的目标金额', 'error');
+            releaseLock('saveYearlyGoal');
+            return;
+        }
+    } else {
+        // 最小提现模式，动态计算
+        const result = DataManager.calculateYearlyGoalFromMinWithdraw(false);
+        amount = result.totalYearlyGoal;
     }
 
     // 保存年度目标
-    DataManager.saveYearlyGoal(amount, year, autoDistribute);
+    DataManager.saveYearlyGoal(amount, year, autoDistribute, mode);
 
     
     // 刷新仪表盘显示
     renderYearlyGoal();
+    showToast('目标已保存', 'success');
+    
+    // 延迟释放操作锁，防止快速重复点击
+    setTimeout(() => releaseLock('saveYearlyGoal'), LOCK_DURATION);
 }
 
 // 加载收益目标到设置页面
@@ -11877,13 +10843,14 @@ function loadYearlyGoalSettings() {
     const yearSelect = document.getElementById('yearly-goal-year');
     const amountInput = document.getElementById('yearly-goal-amount');
     if (yearSelect && goal.year) yearSelect.value = goal.year;
-    if (amountInput) amountInput.value = goal.amount > 0 ? goal.amount : '';
+    if (amountInput) amountInput.value = goal.customAmount > 0 ? goal.customAmount : '';
     
     // 加载自动分配设置
     const autoDistributeCheckbox = document.getElementById('yearly-goal-auto-distribute');
     if (autoDistributeCheckbox) autoDistributeCheckbox.checked = goal.autoDistribute;
     
-
+    // 加载模式
+    setGoalMode(goal.mode || 'custom');
     
 }
 
@@ -12690,966 +11657,175 @@ function toggleDateAchievement(date) {
     showToast(newAchieved ? '✅ 已标记为达标' : '✗ 已标记为未达标', newAchieved ? 'success' : 'info');
 }
 
-// ==================== 返现/礼品功能 ====================
 
-// 默认平台兑换率配置
-const DEFAULT_PLATFORM_RATES = {
-    'taobao': { name: '淘宝', rate: 100, icon: '🛒' },      // 100金币 = 1元
-    'jd': { name: '京东', rate: 100, icon: '📦' },          // 100金币 = 1元
-    'pdd': { name: '拼多多', rate: 150, icon: '🎁' },       // 150金币 = 1元
-    'tmall': { name: '天猫', rate: 100, icon: '🐱' },       // 100金币 = 1元
-    'douyin': { name: '抖音', rate: 120, icon: '🎵' },      // 120金币 = 1元
-    'xiaohongshu': { name: '小红书', rate: 130, icon: '📕' } // 130金币 = 1元
-};
 
-// 初始化返现/礼品数据
-function initCashbackGiftData() {
-    try {
-        let data = DataManager.loadData();
-        
-        // 确保data对象存在
-        if (!data || typeof data !== 'object') {
-            data = {};
-        }
-        
-        // 初始化cashbackGift对象
-        if (!data.cashbackGift || typeof data.cashbackGift !== 'object') {
-            data.cashbackGift = {};
-        }
-        
-        // 初始化各个字段
-        if (typeof data.cashbackGift.goldCoins !== 'number') {
-            data.cashbackGift.goldCoins = 0;
-        }
-        
-        if (!Array.isArray(data.cashbackGift.transactions)) {
-            data.cashbackGift.transactions = [];
-        }
-        
-        if (!Array.isArray(data.cashbackGift.pendingReviews)) {
-            data.cashbackGift.pendingReviews = [];
-        }
-        
-        if (typeof data.cashbackGift.giftCashbackAmount !== 'number') {
-            data.cashbackGift.giftCashbackAmount = 0.70;
-        }
-        
-        // 确保platformRates存在且是对象
-        if (!data.cashbackGift.platformRates || typeof data.cashbackGift.platformRates !== 'object' || Array.isArray(data.cashbackGift.platformRates)) {
-            data.cashbackGift.platformRates = JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
-        }
-        
-        DataManager.saveData(data);
-        return data.cashbackGift;
-    } catch (e) {
-        console.error('initCashbackGiftData error:', e);
-        // 返回默认对象
-        return {
-            goldCoins: 0,
-            transactions: [],
-            pendingReviews: [],
-            platformRates: JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES)),
-            giftCashbackAmount: 0.70
-        };
-    }
-}
 
-// 渲染返现/礼品页面
-function renderCashbackGiftPage() {
-    try {
-        const cashbackData = initCashbackGiftData();
-        
-        // 确保cashbackData有效
-        if (!cashbackData || typeof cashbackData !== 'object') {
-            console.error('renderCashbackGiftPage: Invalid cashbackData');
-            return;
-        }
-        
-        // 更新金币显示
-        const goldCoinsEl = document.getElementById('user-gold-coins');
-        const goldCoinValueEl = document.getElementById('gold-coin-value');
-        if (goldCoinsEl) {
-            const goldCoins = typeof cashbackData.goldCoins === 'number' ? cashbackData.goldCoins : 0;
-            goldCoinsEl.textContent = goldCoins.toLocaleString();
-        }
-        if (goldCoinValueEl) {
-            const goldCoins = typeof cashbackData.goldCoins === 'number' ? cashbackData.goldCoins : 0;
-            const value = (goldCoins / 100).toFixed(2);
-            goldCoinValueEl.textContent = value;
-        }
-        
-        // 渲染平台兑换率
-        renderPlatformRates();
-        
-        // 渲染待审核交易
-        renderPendingTransactions();
-        
-        // 渲染统计报表
-        renderCashbackStats();
-    } catch (e) {
-        console.error('renderCashbackGiftPage error:', e);
-    }
-}
 
-// 获取当前平台配置
-function getPlatformRates() {
-    try {
-        const cashbackData = initCashbackGiftData();
-        if (cashbackData && cashbackData.platformRates && typeof cashbackData.platformRates === 'object') {
-            return cashbackData.platformRates;
-        }
-    } catch (e) {
-        console.error('getPlatformRates error:', e);
-    }
-    // 返回默认配置
-    return JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
-}
 
-// 渲染平台兑换率 - 只显示用户自己添加的平台
-function renderPlatformRates() {
-    const container = document.getElementById('platform-rates-content');
-    const emptyState = document.getElementById('platform-empty-state');
-    if (!container) {
-        console.log('renderPlatformRates: container not found');
-        return;
-    }
-    
-    // 获取用户自定义的平台（不包括默认平台）
-    const data = DataManager.loadData();
-    let userPlatforms = {};
-    
-    console.log('renderPlatformRates - data:', data);
-    console.log('renderPlatformRates - cashbackGift:', data.cashbackGift);
-    
-    if (data.cashbackGift && data.cashbackGift.platformRates) {
-        // 过滤掉默认平台，只保留用户添加的
-        const defaultKeys = Object.keys(DEFAULT_PLATFORM_RATES);
-        Object.entries(data.cashbackGift.platformRates).forEach(([key, platform]) => {
-            if (!defaultKeys.includes(key)) {
-                userPlatforms[key] = platform;
-            }
-        });
-    }
-    
-    const platformCount = Object.keys(userPlatforms).length;
-    console.log('renderPlatformRates - userPlatforms count:', platformCount, userPlatforms);
-    
-    // 显示或隐藏空状态
-    if (emptyState) {
-        emptyState.style.display = platformCount === 0 ? 'block' : 'none';
-    }
-    
-    // 如果没有用户平台，显示空状态
-    if (platformCount === 0) {
-        container.innerHTML = '';
-        return;
-    }
-    
-    // 渲染用户添加的平台
-    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-    Object.entries(userPlatforms).forEach(([key, platform]) => {
-        html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 20px;">${platform.icon || '🛒'}</span>
-                    <span style="font-weight: 500;">${platform.name}</span>
-                </div>
-                <div style="color: var(--text-secondary); font-size: 14px;">
-                    ${platform.rate}金币 = ¥1.00
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-    
-    container.innerHTML = html;
-}
 
-// 打开平台管理器
-function openPlatformManager() {
-    // 获取所有平台（包括默认和用户添加的）
-    const data = DataManager.loadData();
-    let allRates = {};
-    
-    if (data.cashbackGift && data.cashbackGift.platformRates) {
-        allRates = data.cashbackGift.platformRates;
-    }
-    
-    const platformCount = Object.keys(allRates).length;
-    
-    let html = `
-        <div style="max-height: 450px; overflow-y: auto; padding: 4px;">
-            <!-- 平台列表 -->
-            <div id="platform-list" style="display: flex; flex-direction: column; gap: 12px;">
-    `;
-    
-    if (platformCount === 0) {
-        html += `
-            <div style="text-align: center; padding: 32px 20px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%); border-radius: 12px; border: 2px dashed var(--border-color);">
-                <div style="font-size: 48px; margin-bottom: 12px;">🛒</div>
-                <div style="font-size: 15px; color: var(--text-primary); font-weight: 500;">暂无平台配置</div>
-                <div style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">请在下方添加您的第一个平台</div>
-            </div>
-        `;
-    } else {
-        Object.entries(allRates).forEach(([key, platform]) => {
-            html += `
-                <div class="platform-item" data-key="${key}" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-soft);">
-                    <!-- 平台信息行 -->
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                        <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
-                            ${platform.icon || '🛒'}
-                        </div>
-                        <div style="flex: 1;">
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 2px;">平台名称</div>
-                            <input type="text" class="platform-name-input form-input" value="${platform.name}" style="width: 100%; font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 8px;">
-                        </div>
-                    </div>
-                    
-                    <!-- 兑换率行 -->
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                        <div style="flex: 1;">
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 2px;">兑换率</div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <input type="number" class="platform-rate-input form-input" value="${platform.rate}" style="flex: 1; font-size: 15px; font-weight: 600; color: #8b5cf6; padding: 8px 12px; border-radius: 8px; text-align: center;">
-                                <span style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">金币 = ¥1.00</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 操作按钮 -->
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-sm btn-primary" onclick="savePlatform('${key}', this)" style="flex: 1; padding: 8px; font-size: 13px;">
-                            💾 保存
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="deletePlatform('${key}')" style="padding: 8px 16px; font-size: 13px;">
-                            🗑️ 删除
-                        </button>
-                    </div>
-                </div>
-            `;
-        });
-    }
-    
-    html += `
-            </div>
-            
-            <!-- 添加新平台区域 -->
-            <div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%); border-radius: 12px; border: 1px solid var(--border-color);">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-                    <span style="font-size: 20px;">➕</span>
-                    <span style="font-size: 15px; font-weight: 600; color: var(--text-primary);">添加新平台</span>
-                </div>
-                
-                <!-- 图标和名称 -->
-                <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                    <div style="width: 80px;">
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">图标</div>
-                        <input type="text" id="new-platform-icon" class="form-input" placeholder="🛒" style="width: 100%; font-size: 18px; text-align: center; padding: 10px;">
-                    </div>
-                    <div style="flex: 1;">
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">平台名称</div>
-                        <input type="text" id="new-platform-name" class="form-input" placeholder="如：淘宝、京东" style="width: 100%; font-size: 14px; padding: 10px 12px;">
-                    </div>
-                </div>
-                
-                <!-- 兑换率 -->
-                <div style="margin-bottom: 16px;">
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">兑换率（多少金币 = 1元）</div>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <input type="number" id="new-platform-rate" class="form-input" placeholder="100" style="flex: 1; font-size: 15px; font-weight: 600; color: #10b981; padding: 10px 12px; text-align: center;">
-                        <span style="font-size: 14px; color: var(--text-secondary);">金币 = ¥1.00</span>
-                    </div>
-                </div>
-                
-                <!-- 添加按钮 -->
-                <button class="btn btn-primary" onclick="addNewPlatform()" style="width: 100%; padding: 12px; font-size: 14px; font-weight: 500;">
-                    ✨ 添加平台
-                </button>
-            </div>
-        </div>
-    `;
-    
-    showModal('💱 管理平台', html, [
-        { text: '关闭', class: 'btn-secondary', action: closeModal }
-    ]);
-}
-
-// 保存平台设置
-function savePlatform(key, btn) {
-    const row = btn.closest('.platform-item');
-    const name = row.querySelector('.platform-name-input').value.trim();
-    const rate = parseInt(row.querySelector('.platform-rate-input').value) || 100;
-    
-    if (!name) {
-        showToast('请输入平台名称', 'error');
-        return;
-    }
-    
-    const data = DataManager.loadData();
-    
-    // 确保cashbackGift和platformRates存在
-    if (!data.cashbackGift) {
-        data.cashbackGift = {};
-    }
-    if (!data.cashbackGift.platformRates) {
-        data.cashbackGift.platformRates = JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
-    }
-    
-    const platform = data.cashbackGift.platformRates[key];
-    if (platform) {
-        platform.name = name;
-        platform.rate = rate;
-        DataManager.saveData(data);
-        showToast('保存成功', 'success');
-        renderPlatformRates();
-    } else {
-        showToast('平台不存在', 'error');
-    }
-}
-
-// 删除平台
-function deletePlatform(key) {
-    if (!confirm('确定要删除这个平台吗？')) return;
-    
-    const data = DataManager.loadData();
-    
-    // 确保cashbackGift和platformRates存在
-    if (!data.cashbackGift) {
-        data.cashbackGift = {};
-    }
-    if (!data.cashbackGift.platformRates) {
-        data.cashbackGift.platformRates = JSON.parse(JSON.stringify(DEFAULT_PLATFORM_RATES));
-    }
-    
-    delete data.cashbackGift.platformRates[key];
-    DataManager.saveData(data);
-    
-    showToast('删除成功', 'success');
-    renderPlatformRates();
-    closeModal();
-    setTimeout(() => openPlatformManager(), 100);
-}
-
-// 添加新平台
-function addNewPlatform() {
-    const icon = document.getElementById('new-platform-icon').value.trim() || '🛒';
-    const name = document.getElementById('new-platform-name').value.trim();
-    const rate = parseInt(document.getElementById('new-platform-rate').value) || 100;
-    
-    if (!name) {
-        showToast('请输入平台名称', 'error');
-        return;
-    }
-    
-    const data = DataManager.loadData();
-    
-    // 确保cashbackGift和platformRates存在
-    if (!data.cashbackGift) {
-        data.cashbackGift = {};
-    }
-    if (!data.cashbackGift.platformRates) {
-        data.cashbackGift.platformRates = {};
-    }
-    
-    const key = 'platform_' + Date.now();
-    data.cashbackGift.platformRates[key] = {
-        name: name,
-        rate: rate,
-        icon: icon
-    };
-    DataManager.saveData(data);
-    
-    console.log('平台添加成功:', key, data.cashbackGift.platformRates);
-    
-    showToast('添加成功', 'success');
-    
-    // 先刷新平台列表显示（在关闭模态框前）
-    renderPlatformRates();
-    
-    // 强制刷新主页面显示
-    const container = document.getElementById('platform-rates-content');
-    if (container) {
-        console.log('刷新平台列表显示');
-    }
-    
-    // 清空输入框
-    document.getElementById('new-platform-icon').value = '';
-    document.getElementById('new-platform-name').value = '';
-    document.getElementById('new-platform-rate').value = '';
-    
-    // 关闭模态框后延迟重新打开管理器
-    closeModal();
-    setTimeout(() => {
-        openPlatformManager();
-    }, 200);
-}
-
-// 打开赠送礼品模态框
-function openGiftModal() {
-    const cashbackData = initCashbackGiftData();
+function exportToExcel() {
     const data = DataManager.loadData();
     const phones = data.phones || [];
     
-    // 生成手机选项
-    const phoneOptions = phones.length > 0 
-        ? phones.map(p => `<option value="${p.id}">📱 ${p.name}</option>`).join('')
-        : '<option value="">暂无手机</option>';
-    
-    // 获取用户自定义的平台（不包括默认平台）
-    let userPlatforms = {};
-    if (data.cashbackGift && data.cashbackGift.platformRates) {
-        const defaultKeys = Object.keys(DEFAULT_PLATFORM_RATES);
-        Object.entries(data.cashbackGift.platformRates).forEach(([key, platform]) => {
-            if (!defaultKeys.includes(key)) {
-                userPlatforms[key] = platform;
-            }
-        });
-    }
-    
-    // 生成平台选项
-    const platformEntries = Object.entries(userPlatforms);
-    const platformOptions = platformEntries.length > 0
-        ? platformEntries.map(([key, platform]) => 
-            `<option value="${key}">${platform.icon || '🛒'} ${platform.name}</option>`
-        ).join('')
-        : '<option value="">请先添加平台</option>';
-    
-    showModal('🎁 赠送礼品', `
-        <div style="max-height: 400px; overflow-y: auto;">
-            <div class="form-group">
-                <label class="form-label">选择手机 <span style="color: var(--text-secondary); font-size: 12px;">(用于购买的手机)</span></label>
-                <select id="gift-phone-id" class="form-input">
-                    <option value="">请选择手机</option>
-                    ${phoneOptions}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">商品名称</label>
-                <input type="text" id="gift-product-name" class="form-input" placeholder="输入商品名称">
-            </div>
-            <div class="form-group">
-                <label class="form-label">购买金额 (元)</label>
-                <input type="number" id="gift-amount" class="form-input" placeholder="输入购买金额" step="0.01">
-            </div>
-            <div class="form-group">
-                <label class="form-label">购买平台</label>
-                <select id="gift-platform" class="form-input">
-                    ${platformOptions}
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">返还金币</label>
-                <input type="number" id="gift-coins" class="form-input" placeholder="输入实际返还的金币数量" min="0" step="1">
-            </div>
-            <div style="background: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 12px; margin-top: 12px;">
-                <div style="font-size: 13px; color: #10b981; font-weight: 500;">💰 返现说明</div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                    • 您将获得对应平台的金币奖励<br>
-                    • 审核通过后可获得 ¥${cashbackData.giftCashbackAmount.toFixed(2)} 返现<br>
-                    • 返现将在审核通过后发放
-                </div>
-            </div>
-        </div>
-    `, [
-        { text: '取消', class: 'btn-secondary', action: closeModal },
-        {
-            text: '确认',
-            class: 'btn-primary',
-            action: () => {
-                const productName = document.getElementById('gift-product-name').value.trim();
-                const amount = parseFloat(document.getElementById('gift-amount').value) || 0;
-                const platform = document.getElementById('gift-platform').value;
-                const earnedCoins = parseInt(document.getElementById('gift-coins').value) || 0;
-                
-                // 验证
-                const phoneId = document.getElementById('gift-phone-id').value;
-                if (!phoneId) {
-                    showToast('请选择购买手机', 'error');
-                    return;
-                }
-                if (!platform) {
-                    showToast('请先添加平台', 'error');
-                    return;
-                }
-                if (!productName) {
-                    showToast('请输入商品名称', 'error');
-                    return;
-                }
-                if (amount <= 0) {
-                    showToast('请输入有效的购买金额', 'error');
-                    return;
-                }
-                if (earnedCoins < 0) {
-                    showToast('请输入有效的金币数量', 'error');
-                    return;
-                }
-                // 创建交易记录
-                processGiftTransaction({
-                    phoneId,
-                    productName,
-                    amount,
-                    platform,
-                    earnedCoins,
-                    timestamp: new Date().toISOString()
-                });
-            }
-        }
-    ]);
-}
-
-// 处理礼品交易
-function processGiftTransaction(transaction) {
-    const data = DataManager.loadData();
-    const cashbackData = data.cashbackGift;
-    const rates = getPlatformRates();
-    const platform = rates[transaction.platform];
-    
-    if (!platform) {
-        showToast('平台配置错误', 'error');
+    if (phones.length === 0) {
+        showToast('暂无数据可导出', 'info');
         return;
     }
     
-    // 获取手机信息
-    const phone = data.phones.find(p => p.id === transaction.phoneId);
-    const phoneName = phone ? phone.name : '未知手机';
+    const wb = XLSX.utils.book_new();
     
-    // 使用用户输入的金币数量
-    const earnedCoins = transaction.earnedCoins || 0;
-    
-    // 计算金币价值（元）
-    const coinValue = earnedCoins / platform.rate;
-    
-    // 更新用户金币
-    cashbackData.goldCoins += earnedCoins;
-    
-    // 计算实际支出（初始，未验证时返现不计入）
-    const actualExpense = transaction.amount - coinValue;
-    
-    // 创建完整交易记录
-    const fullTransaction = {
-        id: 'tx_' + Date.now(),
-        ...transaction,
-        phoneName: phoneName,
-        platformName: platform.name,
-        platformIcon: platform.icon,
-        earnedCoins: earnedCoins,
-        coinValue: coinValue,           // 金币价值
-        recipientCashback: cashbackData.giftCashbackAmount,
-        actualExpense: actualExpense,   // 实际支出（未验证时不含返现）
-        finalExpense: actualExpense,    // 最终支出（验证后更新）
-        status: 'pending', // pending, approved, rejected
-        // 快递信息（可后填）
-        trackingNumber: null,
-        courierName: null,
-        deliveryPerson: null,
-        deliveryVerified: false,
-        // 审核信息
-        reviewer: null,
-        reviewTime: null,
-        reviewNote: null
-    };
-    
-    // 添加到待审核列表
-    cashbackData.pendingReviews.push(fullTransaction);
-    
-    // 保存数据
-    DataManager.saveData(data);
-    
-    // 显示成功提示
-    showToast(`🎁 礼品赠送成功！获得 ${earnedCoins} 金币`, 'success');
-    closeModal();
-    
-    // 刷新页面
-    renderCashbackGiftPage();
-}
-
-// 渲染待审核交易
-function renderPendingTransactions() {
-    const card = document.getElementById('pending-transactions-card');
-    const container = document.getElementById('pending-transactions-content');
-    if (!card || !container) return;
-    
-    const cashbackData = initCashbackGiftData();
-    const pendingList = cashbackData.pendingReviews || [];
-    
-    if (pendingList.length === 0) {
-        card.style.display = 'none';
-        return;
-    }
-    
-    card.style.display = 'block';
-    
-    let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
-    pendingList.slice(0, 5).forEach(tx => {
-        const date = new Date(tx.timestamp).toLocaleDateString('zh-CN');
+    phones.forEach((phone, index) => {
+        let sheetData = [];
         
-        // 计算实际支出/收入
-        const expense = tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0;
-        let expenseBadge = '';
-        if (expense < 0) {
-            expenseBadge = `<span style="font-size: 10px; background: #10b981; color: white; padding: 1px 4px; border-radius: 6px;">收入¥${Math.abs(expense).toFixed(2)}</span>`;
-        } else if (expense > 0) {
-            expenseBadge = `<span style="font-size: 10px; background: #ef4444; color: white; padding: 1px 4px; border-radius: 6px;">支出¥${expense.toFixed(2)}</span>`;
-        } else {
-            expenseBadge = `<span style="font-size: 10px; background: #6b7280; color: white; padding: 1px 4px; border-radius: 6px;">平衡</span>`;
-        }
+        sheetData.push(['📱 手机名称:', phone.name]);
+        sheetData.push(['📅 创建时间:', phone.id ? new Date(parseInt(phone.id.slice(0, 8), 36) * 1000).toLocaleString('zh-CN') : '未知']);
+        sheetData.push(['📊 软件数量:', phone.apps.length]);
+        sheetData.push([]);
         
-        html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border-left: 3px solid #f59e0b; cursor: pointer;" onclick="openTransactionDetail('${tx.id}')">
-                <div>
-                    <div style="font-weight: 500;">${tx.platformIcon} ${tx.productName}</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">
-                        📱 ${tx.phoneName} · ¥${tx.amount.toFixed(2)} · ${date}
-                    </div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 11px; color: #f59e0b; font-weight: 500;">⏳ 待审核</div>
-                    <div style="margin-top: 2px;">${expenseBadge}</div>
-                    <div style="font-size: 11px; color: #10b981; margin-top: 2px;">+${tx.earnedCoins}金币</div>
-                </div>
-            </div>
-        `;
-    });
-    if (pendingList.length > 5) {
-        html += `<div style="text-align: center; color: var(--text-secondary); font-size: 12px;">还有 ${pendingList.length - 5} 笔待审核...</div>`;
-    }
-    html += '</div>';
-    
-    container.innerHTML = html;
-}
-
-// 打开交易历史
-function openTransactionHistory() {
-    const cashbackData = initCashbackGiftData();
-    const allTransactions = cashbackData.pendingReviews || [];
-    
-    if (allTransactions.length === 0) {
-        showModal('📋 交易记录', '<div class="empty-state">暂无交易记录</div>', [
-            { text: '关闭', class: 'btn-secondary', action: closeModal }
+        const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+        const totalWithdrawn = phone.apps.reduce((sum, app) => sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0), 0);
+        
+        sheetData.push(['💰 手机总余额:', `¥${totalBalance.toFixed(2)}`]);
+        sheetData.push(['💸 手机总提现:', `¥${totalWithdrawn.toFixed(2)}`]);
+        sheetData.push(['📈 手机总收入:', `¥${(totalBalance + totalWithdrawn).toFixed(2)}`]);
+        sheetData.push([]);
+        
+        sheetData.push(['📋 软件列表']);
+        sheetData.push([]);
+        
+        sheetData.push([
+            '序号',
+            '软件名称',
+            '当前余额 (元)',
+            '最低提现 (元)',
+            '累计提现 (元)',
+            '历史提现 (元)',
+            '总收益 (元)',
+            '最后更新'
         ]);
-        return;
-    }
-    
-    const sortedTx = [...allTransactions].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    let html = '<div style="max-height: 400px; overflow-y: auto;">';
-    html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
-    
-    sortedTx.forEach(tx => {
-        const date = new Date(tx.timestamp).toLocaleDateString('zh-CN');
-        const statusColors = {
-            'pending': { color: '#f59e0b', text: '⏳ 待审核' },
-            'approved': { color: '#10b981', text: '✅ 已通过' },
-            'rejected': { color: '#ef4444', text: '❌ 已拒绝' }
-        };
-        const status = statusColors[tx.status] || statusColors['pending'];
         
-        const phoneInfo = tx.phoneName ? `📱 ${tx.phoneName}` : '未知手机';
-        
-        // 计算实际支出/收入
-        const expense = tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0;
-        let expenseBadge = '';
-        if (expense < 0) {
-            expenseBadge = `<span style="font-size: 11px; background: #10b981; color: white; padding: 2px 6px; border-radius: 8px;">收入¥${Math.abs(expense).toFixed(2)}</span>`;
-        } else if (expense > 0) {
-            expenseBadge = `<span style="font-size: 11px; background: #ef4444; color: white; padding: 2px 6px; border-radius: 8px;">支出¥${expense.toFixed(2)}</span>`;
-        } else {
-            expenseBadge = `<span style="font-size: 11px; background: #6b7280; color: white; padding: 2px 6px; border-radius: 8px;">平衡</span>`;
-        }
-        
-        html += `
-            <div style="padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div>
-                        <div style="font-weight: 500;">${tx.platformIcon} ${tx.productName}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                            ${phoneInfo} · ¥${tx.amount.toFixed(2)} · ${date}
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 12px; color: ${status.color}; font-weight: 500;">${status.text}</div>
-                        <div style="margin-top: 4px;">${expenseBadge}</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">+${tx.earnedCoins}金币</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += '</div></div>';
-    
-    showModal('📋 交易记录', html, [
-        { text: '关闭', class: 'btn-secondary', action: closeModal }
-    ]);
-}
-
-// 渲染统计报表
-function renderCashbackStats() {
-    const container = document.getElementById('cashback-stats-content');
-    if (!container) return;
-    
-    const cashbackData = initCashbackGiftData();
-    const transactions = cashbackData.pendingReviews || [];
-    
-    // 计算统计数据
-    const totalTransactions = transactions.length;
-    const approvedTransactions = transactions.filter(tx => tx.status === 'approved').length;
-    const pendingTransactions = transactions.filter(tx => tx.status === 'pending').length;
-    const totalEarnedCoins = transactions.reduce((sum, tx) => sum + (tx.earnedCoins || 0), 0);
-    const totalRecipientCashback = transactions.reduce((sum, tx) => sum + (tx.recipientCashback || 0), 0);
-    
-    // 计算支出统计
-    const totalPayment = transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    const totalCoinValue = transactions.reduce((sum, tx) => sum + (tx.coinValue || 0), 0);
-    const totalActualExpense = transactions.reduce((sum, tx) => sum + (tx.actualExpense || 0), 0);
-    const totalFinalExpense = transactions.reduce((sum, tx) => {
-        // 如果已审核通过且已验证，使用最终支出，否则使用实际支出
-        if (tx.status === 'approved') {
-            return sum + (tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0);
-        }
-        return sum + (tx.actualExpense || 0);
-    }, 0);
-    
-    // 按平台统计
-    const platformStats = {};
-    transactions.forEach(tx => {
-        if (!platformStats[tx.platform]) {
-            platformStats[tx.platform] = { count: 0, amount: 0, coins: 0 };
-        }
-        platformStats[tx.platform].count++;
-        platformStats[tx.platform].amount += tx.amount;
-        platformStats[tx.platform].coins += tx.earnedCoins;
-    });
-    
-    let html = `
-        <!-- 交易数量统计 -->
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
-                <div style="font-size: 20px; font-weight: 700; color: #8b5cf6;">${totalTransactions}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">总交易</div>
-            </div>
-            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">
-                <div style="font-size: 20px; font-weight: 700; color: #10b981;">${approvedTransactions}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">已完成</div>
-            </div>
-            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 8px;">
-                <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${pendingTransactions}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">待审核</div>
-            </div>
-        </div>
-        
-        <!-- 支出计算明细 -->
-        <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%); border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid rgba(139, 92, 246, 0.15);">
-            <div style="font-size: 13px; font-weight: 600; color: #8b5cf6; margin-bottom: 12px;">💰 支出计算明细</div>
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 12px; color: var(--text-secondary);">支付总额</span>
-                    <span style="font-size: 14px; font-weight: 500;">¥${totalPayment.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 12px; color: var(--text-secondary);">金币抵扣</span>
-                    <span style="font-size: 14px; font-weight: 500; color: #10b981;">-¥${totalCoinValue.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 12px; color: var(--text-secondary);">返现抵扣</span>
-                    <span style="font-size: 14px; font-weight: 500; color: #10b981;">-¥${totalRecipientCashback.toFixed(2)}</span>
-                </div>
-                <div style="margin-top: 4px; padding-top: 8px; border-top: 1px dashed rgba(139, 92, 246, 0.2); display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">实际总支出</span>
-                    <span style="font-size: 18px; font-weight: 700; color: #8b5cf6;">¥${totalFinalExpense.toFixed(2)}</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 金币和返现统计 -->
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
-                <div style="font-size: 18px; font-weight: 700; color: #3b82f6;">${totalEarnedCoins.toLocaleString()}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">累计金币</div>
-            </div>
-            <div style="flex: 1; text-align: center; padding: 12px; background: rgba(236, 72, 153, 0.1); border-radius: 8px;">
-                <div style="font-size: 18px; font-weight: 700; color: #ec4899;">¥${totalRecipientCashback.toFixed(2)}</div>
-                <div style="font-size: 11px; color: var(--text-secondary);">累计返现</div>
-            </div>
-        </div>
-    `;
-    
-    // 平台分布
-    if (Object.keys(platformStats).length > 0) {
-        html += '<div style="margin-top: 12px;"><div style="font-size: 13px; font-weight: 500; margin-bottom: 8px;">平台分布</div>';
-        const rates = getPlatformRates();
-        Object.entries(platformStats).forEach(([platform, stats]) => {
-            const platformInfo = rates[platform] || { icon: '🛒', name: '未知平台' };
-            html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,0,0,0.02); border-radius: 6px; margin-bottom: 6px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span>${platformInfo.icon || '🛒'}</span>
-                        <span style="font-size: 13px;">${platformInfo.name || '未知平台'}</span>
-                    </div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">
-                        ${stats.count}笔 · ¥${stats.amount.toFixed(2)} · ${stats.coins}金币
-                    </div>
-                </div>
-            `;
+        phone.apps.forEach((app, appIndex) => {
+            const totalWithdrawnApp = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            const totalEarned = app.balance + totalWithdrawnApp;
+            
+            sheetData.push([
+                appIndex + 1,
+                app.name || '-',
+                `¥${(app.balance || 0).toFixed(2)}`,
+                `¥${(app.minWithdraw || 0).toFixed(2)}`,
+                `¥${(app.withdrawn || 0).toFixed(2)}`,
+                `¥${(app.historicalWithdrawn || 0).toFixed(2)}`,
+                `¥${totalEarned.toFixed(2)}`,
+                app.lastUpdated ? new Date(app.lastUpdated).toLocaleString('zh-CN') : '-'
+            ]);
         });
-        html += '</div>';
-    }
-    
-    container.innerHTML = html;
-}
-
-// 打开交易详情（用于填写快递信息）
-function openTransactionDetail(txId) {
-    const data = DataManager.loadData();
-    const cashbackData = data.cashbackGift;
-    const tx = cashbackData.pendingReviews.find(t => t.id === txId);
-    
-    if (!tx) {
-        showToast('交易不存在', 'error');
-        return;
-    }
-    
-    const hasDeliveryInfo = tx.trackingNumber && tx.deliveryPerson;
-    const deliveryStatus = tx.deliveryVerified 
-        ? '<span style="color: #10b981;">✅ 已验证</span>' 
-        : (hasDeliveryInfo ? '<span style="color: #f59e0b;">⏳ 待验证</span>' : '<span style="color: var(--text-secondary);">未填写</span>');
-    
-    showModal('📦 交易详情', `
-        <div style="max-height: 400px; overflow-y: auto;">
-            <!-- 商品信息 -->
-            <div style="padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; margin-bottom: 16px;">
-                <div style="font-weight: 500; margin-bottom: 8px;">${tx.platformIcon} ${tx.productName}</div>
-                <div style="font-size: 13px; color: var(--text-secondary);">
-                    📱 购买手机: ${tx.phoneName}<br>
-                    💰 购买金额: ¥${tx.amount.toFixed(2)}<br>
-                    🏪 购买平台: ${tx.platformName}<br>
-                    🕐 时间: ${new Date(tx.timestamp).toLocaleString('zh-CN')}
-                </div>
-            </div>
+        
+        if (phone.apps.length === 0) {
+            sheetData.push(['', '暂无软件', '', '', '', '', '', '']);
+        }
+        
+        if (phone.dailyTotalEarnedHistory && Object.keys(phone.dailyTotalEarnedHistory).length > 0) {
+            sheetData.push([]);
+            sheetData.push(['📅 每日收益记录']);
+            sheetData.push([]);
+            sheetData.push(['日期', '收益 (元)']);
             
-            <!-- 支出计算 -->
-            <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%); border-radius: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid rgba(139, 92, 246, 0.2);">
-                <div style="font-size: 13px; color: #8b5cf6;">
-                    <strong>💰 支出计算:</strong><br>
-                    支付金额: ¥${tx.amount.toFixed(2)}<br>
-                    金币价值: -¥${(tx.coinValue || 0).toFixed(2)} (${tx.earnedCoins}金币)<br>
-                    ${tx.status === 'approved' && tx.deliveryVerified ? `返现抵扣: -¥${(tx.recipientCashback || 0).toFixed(2)}<br>` : ''}
-                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(139, 92, 246, 0.3); display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 600;">实际支出:</span>
-                        <span style="font-size: 18px; font-weight: 700;">¥${(tx.finalExpense || tx.actualExpense || 0).toFixed(2)}</span>
-                    </div>
-                    ${(() => {
-                        const expense = tx.finalExpense !== undefined ? tx.finalExpense : tx.actualExpense || 0;
-                        if (expense < 0) {
-                            return `<div style="margin-top: 4px; text-align: right;"><span style="font-size: 12px; background: #10b981; color: white; padding: 2px 8px; border-radius: 10px;">🎉 实际收入 ¥${Math.abs(expense).toFixed(2)}</span></div>`;
-                        } else if (expense > 0) {
-                            return `<div style="margin-top: 4px; text-align: right;"><span style="font-size: 12px; background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px;">💸 实际支出 ¥${expense.toFixed(2)}</span></div>`;
-                        } else {
-                            return `<div style="margin-top: 4px; text-align: right;"><span style="font-size: 12px; background: #6b7280; color: white; padding: 2px 8px; border-radius: 10px;">➖ 收支平衡</span></div>`;
-                        }
-                    })()}
-                    ${tx.status === 'pending' ? '<div style="margin-top: 4px; text-align: right;"><span style="font-size: 11px; color: var(--text-secondary);">(审核通过后可再减¥0.70)</span></div>' : ''}
-                </div>
-            </div>
-            
-            <!-- 奖励信息 -->
-            <div style="background: rgba(16, 185, 129, 0.1); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-                <div style="font-size: 13px; color: #10b981;">
-                    <strong>🎁 奖励信息:</strong><br>
-                    赠送者获得: ${tx.earnedCoins} 金币 (价值¥${(tx.coinValue || 0).toFixed(2)})<br>
-                    ${tx.status === 'pending' ? `审核通过后返现: ¥${tx.recipientCashback.toFixed(2)}` : `已返现: ¥${(tx.recipientCashback || 0).toFixed(2)}`}
-                </div>
-            </div>
-        </div>
-    `, [
-        { text: '不通过', class: 'btn-danger', action: () => {
-            if (!confirm('确定要标记为不通过吗？')) return;
-            reviewTransaction(tx.id, 'rejected', '审核不通过');
-        }},
-        { text: '通过', class: 'btn-primary', action: () => {
-            reviewTransaction(tx.id, 'approved', '审核通过');
-        }}
-    ]);
-}
-
-// 管理员审核功能
-function openAdminReviewModal() {
-    const cashbackData = initCashbackGiftData();
-    const pendingList = cashbackData.pendingReviews.filter(tx => tx.status === 'pending');
-    
-    if (pendingList.length === 0) {
-        showToast('暂无待审核交易', 'info');
-        return;
-    }
-    
-    // 显示待审核列表
-    let html = '<div style="max-height: 400px; overflow-y: auto;"><div style="display: flex; flex-direction: column; gap: 12px;">';
-    
-    pendingList.forEach(tx => {
-        html += `
-            <div style="padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; cursor: pointer; border-left: 3px solid #f59e0b;" onclick="openTransactionDetail('${tx.id}')">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div>
-                        <div style="font-weight: 500;">${tx.platformIcon} ${tx.productName}</div>
-                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                            📱 ${tx.phoneName} · ¥${tx.amount.toFixed(2)}
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 11px; color: #f59e0b; font-weight: 500;">⏳ 待审核</div>
-                        <div style="font-size: 12px; color: #10b981; margin-top: 4px;">+${tx.earnedCoins}金币</div>
-                    </div>
-                </div>
-            </div>
-        `;
+            const sortedDates = Object.keys(phone.dailyTotalEarnedHistory).sort();
+            sortedDates.forEach(date => {
+                const amount = phone.dailyTotalEarnedHistory[date];
+                sheetData.push([date, `¥${(amount || 0).toFixed(2)}`]);
+            });
+        }
+        
+        let sheetName = phone.name || `手机${index + 1}`;
+        sheetName = sheetName.replace(/[\\/:*?"<>|]/g, '_');
+        if (sheetName.length > 31) {
+            sheetName = sheetName.substring(0, 31);
+        }
+        
+        const ws = XLSX.utils.aoa_to_sheet(sheetData);
+        
+        const headerStyle = {
+            font: { bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { fgColor: { rgb: '8B5CF6' } },
+            alignment: { horizontal: 'center', vertical: 'center' }
+        };
+        
+        Object.keys(ws).forEach(key => {
+            if (key !== '!ref' && key !== '!cols') {
+                if (ws[key].v === '序号' || ws[key].v === '软件名称' || ws[key].v === '当前余额 (元)' || 
+                    ws[key].v === '最低提现 (元)' || ws[key].v === '累计提现 (元)' || 
+                    ws[key].v === '历史提现 (元)' || ws[key].v === '总收益 (元)' || ws[key].v === '最后更新') {
+                    ws[key].s = headerStyle;
+                }
+            }
+        });
+        
+        ws['!cols'] = [
+            { wch: 8 },
+            { wch: 20 },
+            { wch: 16 },
+            { wch: 16 },
+            { wch: 16 },
+            { wch: 16 },
+            { wch: 14 },
+            { wch: 22 }
+        ];
+        
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
     });
     
-    html += '</div></div>';
+    if (phones.length > 1) {
+        const summaryData = [];
+        
+        summaryData.push(['📊 汇总报表']);
+        summaryData.push([]);
+        summaryData.push(['手机名称', '软件数量', '总余额 (元)', '总提现 (元)', '总收入 (元)']);
+        
+        let grandTotalBalance = 0;
+        let grandTotalWithdrawn = 0;
+        
+        phones.forEach(phone => {
+            const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+            const totalWithdrawn = phone.apps.reduce((sum, app) => sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0), 0);
+            
+            grandTotalBalance += totalBalance;
+            grandTotalWithdrawn += totalWithdrawn;
+            
+            summaryData.push([
+                phone.name || '-',
+                phone.apps.length,
+                `¥${totalBalance.toFixed(2)}`,
+                `¥${totalWithdrawn.toFixed(2)}`,
+                `¥${(totalBalance + totalWithdrawn).toFixed(2)}`
+            ]);
+        });
+        
+        summaryData.push([]);
+        summaryData.push(['合计', phones.length, `¥${grandTotalBalance.toFixed(2)}`, `¥${grandTotalWithdrawn.toFixed(2)}`, `¥${(grandTotalBalance + grandTotalWithdrawn).toFixed(2)}`]);
+        
+        const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+        summaryWs['!cols'] = [
+            { wch: 16 },
+            { wch: 12 },
+            { wch: 14 },
+            { wch: 14 },
+            { wch: 14 }
+        ];
+        
+        XLSX.utils.book_append_sheet(wb, summaryWs, '汇总');
+    }
     
-    showModal('🔍 待审核交易', html, [
-        { text: '关闭', class: 'btn-secondary', action: closeModal }
-    ]);
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const fileName = `赚钱软件数据_${dateStr}_${timeStr}.xlsx`;
+    
+    XLSX.writeFile(wb, fileName);
+    
+    showToast('✅ 导出成功！', 'success');
 }
 
-// 审核交易
-function reviewTransaction(txId, status, note) {
-    const data = DataManager.loadData();
-    const cashbackData = data.cashbackGift;
-    
-    const tx = cashbackData.pendingReviews.find(t => t.id === txId);
-    if (!tx) {
-        showToast('交易不存在', 'error');
-        return;
-    }
-    
-    tx.status = status;
-    tx.reviewer = 'admin';
-    tx.reviewTime = new Date().toISOString();
-    tx.reviewNote = note;
-    
-    // 计算最终支出（包含返现抵扣）
-    if (status === 'approved') {
-        tx.finalExpense = tx.actualExpense - tx.recipientCashback;
-    }
-    
-    // 如果拒绝，扣除相应的金币
-    if (status === 'rejected') {
-        cashbackData.goldCoins = Math.max(0, cashbackData.goldCoins - tx.earnedCoins);
-        // 拒绝时不给予返现
-        tx.recipientCashback = 0;
-    }
-    
-    DataManager.saveData(data);
-    
-    const statusText = status === 'approved' ? '已通过' : '已拒绝';
-    const message = status === 'approved' 
-        ? `交易${statusText}，获得¥${tx.recipientCashback.toFixed(2)}返现` 
-        : `交易${statusText}`;
-    showToast(message, status === 'approved' ? 'success' : 'info');
-    closeModal();
-    renderCashbackGiftPage();
-}
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
