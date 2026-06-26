@@ -576,6 +576,39 @@
     background: rgba(248, 113, 113, 0.1);
 }
 
+/* 暗黑模式下的首页数据卡片 */
+[data-theme="dark"] .hero-card {
+    background: linear-gradient(135deg, #065f46 0%, #064e3b 100%);
+}
+
+[data-theme="dark"] .hero-card:hover {
+    box-shadow: 0 16px 40px rgba(6, 95, 70, 0.45);
+}
+
+[data-theme="dark"] .kpi-tile--purple {
+    background: linear-gradient(135deg, #3b3054 0%, #4c1d95 100%);
+}
+
+[data-theme="dark"] .kpi-tile--pink {
+    background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+}
+
+[data-theme="dark"] .kpi-tile--violet {
+    background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%);
+}
+
+[data-theme="dark"] .kpi-tile--amber {
+    background: linear-gradient(135deg, #78350f 0%, #92400e 100%);
+}
+
+[data-theme="dark"] .kpi-tile__delta {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .kpi-tile__value {
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
 /* 全局样式 */
 * {
     margin: 0;
