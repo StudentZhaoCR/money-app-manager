@@ -5984,287 +5984,271 @@ function generateSmartSuggestions(data) {
 
 // ==================== 软件赚取分析功能 ====================
 
-// 渲染软件赚取分析
+// 渲染软件收益排行榜
 function renderAppEarningAnalysis() {
     const card = document.getElementById('app-earning-analysis-card');
     const content = document.getElementById('app-earning-analysis-content');
     if (!card || !content) return;
 
-    const appAnalysis = DataManager.calculateAppEarningGap();
-    const advice = DataManager.generateAppEarningAdvice(appAnalysis);
-    const completedApps = appAnalysis.filter(a => a.status === 'completed');
+    const data = DataManager.loadData();
+    
+    let allApps = [];
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            const totalEarned = calculateAppEarned(app);
+            const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+            const balance = app.balance || 0;
+            
+            let averageDailyEarnings = 0;
+            if (app.dailyEarnings) {
+                const days = Object.keys(app.dailyEarnings).length;
+                const total = Object.values(app.dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+                averageDailyEarnings = days > 0 ? total / days : 0;
+            }
+            
+            const minWithdraw = parseFloat(app.minWithdraw || '0') || 0;
+            const canWithdraw = balance >= minWithdraw && minWithdraw > 0;
+            
+            const daysUntilNextPlay = minWithdraw > 0 && averageDailyEarnings > 0 
+                ? Math.floor(balance / minWithdraw) 
+                : 0;
 
-    if (appAnalysis.length === 0) {
+            allApps.push({
+                phoneName: phone.name,
+                phoneId: phone.id,
+                appName: app.name,
+                appId: app.id,
+                totalEarned,
+                totalWithdrawn,
+                balance,
+                averageDailyEarnings,
+                minWithdraw,
+                canWithdraw,
+                daysUntilNextPlay,
+                withdrawalCount: app.withdrawals ? app.withdrawals.length : 0
+            });
+        });
+    });
+
+    if (allApps.length === 0) {
         card.style.display = 'none';
         return;
     }
 
     card.style.display = 'block';
 
-    let html = '';
+    allApps.sort((a, b) => b.totalEarned - a.totalEarned);
 
-    // 显示建议
-    if (advice.length > 0) {
-        advice.forEach(item => {
-            // 还款周期分析使用特殊布局 - 毛玻璃效果
-            if (item.title === '还款周期分析' || item.title === '还款资金充足') {
-                const isAchieved = item.todayAchieved;
-                const todayStatusColor = isAchieved ? '#22c55e' : '#f59e0b';
-                const todayStatusBg = isAchieved ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)';
-                
-                html += `
-                    <div style="margin-bottom: 16px; position: relative; background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%); border-radius: 16px; padding: 20px; overflow: hidden;">
-                        <!-- 背景装饰圆形 -->
-                        <div style="position: absolute; top: -30px; right: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.3); border-radius: 50%; filter: blur(20px);"></div>
-                        <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(15px);"></div>
-                        
-                        <!-- 毛玻璃卡片内容 -->
-                        <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
-                            <!-- 标题 -->
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                                <span style="font-size: 20px;">${item.icon}</span>
-                                <span style="font-size: 15px; font-weight: 700; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${item.title}</span>
-                            </div>
-                            
-                            <!-- 今日达标状态 - 毛玻璃效果 -->
-                            <div style="background: ${todayStatusBg}; backdrop-filter: blur(5px); border-radius: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid ${isAchieved ? 'rgba(34, 197, 94, 0.3)' : 'rgba(245, 158, 11, 0.3)'};">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <span style="font-size: 13px; font-weight: 600; color: ${isAchieved ? '#166534' : '#92400e'};">
-                                        ${isAchieved ? '✅ 今日已达标' : '⏳ 今日未达标'}
-                                    </span>
-                                    <span style="font-size: 12px; color: ${isAchieved ? '#166534' : '#92400e'}; font-weight: 600;">
-                                        ${isAchieved ? '超额完成' : `还需 ¥${(item.todayTarget - item.todayEarned).toFixed(2)}`}
-                                    </span>
-                                </div>
-                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                                    <div style="background: rgba(255,255,255,0.25); backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
-                                        <div style="font-size: 18px; font-weight: 700; color: ${isAchieved ? '#166534' : '#92400e'};">¥${item.todayEarned.toFixed(2)}</div>
-                                        <div style="font-size: 10px; color: #78350f; margin-top: 2px;">今日已赚</div>
-                                    </div>
-                                    <div style="background: rgba(255,255,255,0.25); backdrop-filter: blur(5px); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.3);">
-                                        <div style="font-size: 18px; font-weight: 700; color: #0369a1;">¥${item.todayTarget.toFixed(2)}</div>
-                                        <div style="font-size: 10px; color: #78350f; margin-top: 2px;">今日目标</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- 还款信息 - 毛玻璃效果 -->
-                            <div style="background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.25);">
-                                <div style="font-size: 12px; color: #78350f; margin-bottom: 8px; line-height: 1.6; font-weight: 500;">
-                                    ${item.message}
-                                </div>
-                                <div style="font-size: 11px; color: #92400e; padding-top: 8px; border-top: 1px dashed rgba(120, 53, 15, 0.2);">
-                                    ${item.detail}
-                                </div>
-                                
-                                <!-- 已完成软件统计 -->
-                                ${completedApps.length > 0 ? `
-                                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(120, 53, 15, 0.2);">
-                                    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #166534; font-weight: 600;">
-                                        <span>✅</span>
-                                        <span><b>${completedApps.length}</b> 个软件已完成目标</span>
-                                    </div>
-                                    <div style="font-size: 10px; color: #92400e; margin-top: 4px; padding-left: 20px;">
-                                        ${completedApps.slice(0, 2).map(a => a.appName).join('、')}${completedApps.length > 2 ? '等' : ''}
-                                    </div>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                // 其他建议使用原有布局
-                const bgColor = item.type === 'success' ? 'rgba(34, 197, 94, 0.1)' :
-                               item.type === 'critical' ? 'rgba(239, 68, 68, 0.1)' :
-                               item.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
-                               'rgba(59, 130, 246, 0.1)';
-                const borderColor = item.type === 'success' ? '#22c55e' :
-                                   item.type === 'critical' ? '#ef4444' :
-                                   item.type === 'warning' ? '#f59e0b' :
-                                   '#3b82f6';
-                const textColor = item.type === 'success' ? '#16a34a' :
-                                 item.type === 'critical' ? '#dc2626' :
-                                 item.type === 'warning' ? '#d97706' :
-                                 '#2563eb';
+    const topEarner = allApps[0];
+    const totalEarnings = allApps.reduce((sum, app) => sum + app.totalEarned, 0);
+    const totalBalance = allApps.reduce((sum, app) => sum + app.balance, 0);
+    const canWithdrawCount = allApps.filter(a => a.canWithdraw).length;
 
-                html += `
-                    <div style="margin-bottom: 12px; padding: 12px; background: ${bgColor}; border-radius: 8px; border-left: 3px solid ${borderColor};">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                            <span style="font-size: 16px;">${item.icon}</span>
-                            <span style="font-size: 13px; font-weight: 600; color: ${textColor};">${item.title}</span>
-                        </div>
-                        <div style="font-size: 12px; color: var(--text-primary); margin-bottom: 4px;">${item.message}</div>
-                        <div style="font-size: 11px; color: var(--text-secondary);">${item.detail}</div>
-                    </div>
-                `;
-            }
-        });
-    }
-
-    // 显示软件列表（显示所有软件，按差额排序）
-    if (appAnalysis.length > 0) {
-        // 计算统计信息
-        const completedCount = appAnalysis.filter(a => a.gap <= 0).length;
-        const criticalCount = appAnalysis.filter(a => a.status === 'critical').length;
-        const warningCount = appAnalysis.filter(a => a.status === 'warning').length;
-        
-        html += `<div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">`;
-        html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div style="font-size: 12px; font-weight: 600; color: var(--text-primary);">
-                    📱 软件赚取分析 (${appAnalysis.length}个)
+    let html = `
+        <div style="margin-bottom: 16px; position: relative; background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); border-radius: 16px; padding: 20px; overflow: hidden;">
+            <div style="position: absolute; top: -30px; right: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(20px);"></div>
+            <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.15); border-radius: 50%; filter: blur(15px);"></div>
+            
+            <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); padding: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    <span style="font-size: 20px;">🏆</span>
+                    <span style="font-size: 15px; font-weight: 700; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">收益排行榜总览</span>
                 </div>
-                <button class="btn btn-sm btn-secondary" onclick="showAllAppsAnalysis()" style="font-size: 11px; padding: 4px 12px;">
-                    查看全部
+                
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 700; color: #ffffff;">¥${totalEarnings.toFixed(2)}</div>
+                        <div style="font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px;">总赚取</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 700; color: #ffffff;">¥${totalBalance.toFixed(2)}</div>
+                        <div style="font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px;">当前余额</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 700; color: #ffffff;">${canWithdrawCount}</div>
+                        <div style="font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px;">可提现</div>
+                    </div>
+                </div>
+                
+                ${topEarner ? `
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.2);">
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.9);">
+                            🥇 最强赚钱软件: <strong>${topEarner.phoneName} - ${topEarner.appName}</strong>
+                            <span style="margin-left: 8px;">累计赚 ¥${topEarner.totalEarned.toFixed(2)}</span>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    const displayApps = allApps.slice(0, 6);
+    displayApps.forEach((app, index) => {
+        const rankIcons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣'];
+        const rankIcon = rankIcons[index] || `${index + 1}`;
+        const rankColors = [
+            'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)',
+            'linear-gradient(135deg, #cd7f32 0%, #b87333 100%)',
+            'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+            'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+            'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)'
+        ];
+        const cardGradient = rankColors[index] || 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)';
+
+        html += `
+            <div style="position: relative; background: ${cardGradient}; border-radius: 14px; padding: 14px; margin-bottom: 10px; overflow: hidden;">
+                <div style="position: absolute; top: -15px; right: -15px; width: 50px; height: 50px; background: rgba(255,255,255,0.15); border-radius: 50%; filter: blur(12px);"></div>
+                
+                <div style="position: relative; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; overflow: hidden;" onclick="showAppDetailModal('${app.appId}')">
+                            <span style="font-size: 16px; flex-shrink: 0;">${rankIcon}</span>
+                            <div style="min-width: 0;">
+                                <div style="font-size: 13px; font-weight: 600; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${app.appName}</div>
+                                <div style="font-size: 10px; color: rgba(255,255,255,0.7);">${app.phoneName}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 9px; padding: 3px 6px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white;">✏️</button>
+                            <button class="btn btn-sm" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 9px; padding: 3px 6px; background: rgba(56, 239, 125, 0.3); border: 1px solid rgba(56, 239, 125, 0.4); color: white;">💰</button>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div>
+                                <span style="color: rgba(255,255,255,0.7); font-size: 10px;">总赚</span>
+                                <span style="color: #ffffff; font-weight: 600; margin-left: 4px;">¥${app.totalEarned.toFixed(2)}</span>
+                            </div>
+                            <div>
+                                <span style="color: rgba(255,255,255,0.7); font-size: 10px;">余额</span>
+                                <span style="color: #ffffff; font-weight: 600; margin-left: 4px;">¥${app.balance.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            ${app.canWithdraw ? `
+                                <span style="font-size: 11px; font-weight: 600; color: #22c55e;">✅ 可提现</span>
+                            ` : app.minWithdraw > 0 ? `
+                                <span style="font-size: 11px; color: rgba(255,255,255,0.8);">还差 ¥${(app.minWithdraw - app.balance).toFixed(2)}</span>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    ${app.averageDailyEarnings > 0 ? `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15);">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px;">
+                                <span style="color: rgba(255,255,255,0.7);">日均收益</span>
+                                <span style="color: #ffffff; font-weight: 600;">¥${app.averageDailyEarnings.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+
+    if (allApps.length > 6) {
+        html += `
+            <div style="text-align: center; margin-top: 8px;">
+                <button class="btn btn-sm btn-secondary" onclick="showAllAppsAnalysis()" style="font-size: 11px;">
+                    查看全部 ${allApps.length} 个软件
                 </button>
             </div>
         `;
-        
-        // 显示统计摘要
-        html += `
-            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-                ${completedCount > 0 ? `<span style="font-size: 11px; background: rgba(34, 197, 94, 0.1); color: #16a34a; padding: 2px 8px; border-radius: 10px;">✅ 已完成 ${completedCount}</span>` : ''}
-                ${criticalCount > 0 ? `<span style="font-size: 11px; background: rgba(239, 68, 68, 0.1); color: #dc2626; padding: 2px 8px; border-radius: 10px;">🔴 紧急 ${criticalCount}</span>` : ''}
-                ${warningCount > 0 ? `<span style="font-size: 11px; background: rgba(245, 158, 11, 0.1); color: #d97706; padding: 2px 8px; border-radius: 10px;">🟡 警告 ${warningCount}</span>` : ''}
-            </div>
-        `;
-
-        // 只显示前5个（差额最大的在前）
-        const displayApps = appAnalysis.slice(0, 5);
-        displayApps.forEach(app => {
-            const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : app.gap <= 0 ? '✅' : '🟢';
-            const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : app.gap <= 0 ? '#22c55e' : '#3b82f6';
-            const gapText = app.gap <= 0 ? '已完成' : `差额 ¥${app.gap.toFixed(2)}`;
-            
-            // 计算今日达标状态
-            const isTodayAchieved = app.todayEarned >= app.dailyNeed;
-            const todayStatusIcon = isTodayAchieved ? '✅' : '⏳';
-            const todayStatusColor = isTodayAchieved ? '#22c55e' : '#f59e0b';
-            const todayStatusText = isTodayAchieved ? '今日已达标' : '今日未达标';
-
-            html += `
-                <div style="position: relative; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 16px; margin-bottom: 12px; overflow: hidden;">
-                    <!-- 背景装饰圆形 -->
-                    <div style="position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(15px);"></div>
-                    <div style="position: absolute; bottom: -15px; left: -15px; width: 50px; height: 50px; background: rgba(255,255,255,0.15); border-radius: 50%; filter: blur(12px);"></div>
-                    
-                    <!-- 毛玻璃卡片内容 -->
-                    <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.25); padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 0; overflow: hidden;" onclick="showAppDetailModal('${app.appId}')">
-                                <span style="font-size: 14px; flex-shrink: 0;">${statusIcon}</span>
-                                <span style="font-size: 13px; font-weight: 600; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${app.phoneName} - ${app.appName}</span>
-                            </div>
-                            <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                                <button class="btn btn-sm" onclick="editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; white-space: nowrap; flex-shrink: 0;">✏️ 编辑</button>
-                                <button class="btn btn-sm" onclick="withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 10px; padding: 4px 8px; background: rgba(56, 239, 125, 0.3); border: 1px solid rgba(56, 239, 125, 0.4); color: white; white-space: nowrap; flex-shrink: 0;">💰 提现</button>
-                            </div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,0.85); margin-bottom: 8px;">
-                            <span>目标: <strong style="color: #ffffff;">¥${app.targetAmount.toFixed(2)}</strong></span>
-                            <span>余额: <strong style="color: #ffffff;">¥${app.currentBalance.toFixed(2)}</strong></span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2);">
-                            <div>
-                                <span style="font-size: 11px; color: rgba(255,255,255,0.9);">${gapText}</span>
-                            </div>
-                            <div style="text-align: right;">
-                                ${app.gap > 0 ? `
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <div style="text-align: right;">
-                                            <div style="font-size: 10px; color: rgba(255,255,255,0.8);">每天需赚取</div>
-                                            <div style="font-size: 16px; font-weight: 700; color: ${statusColor}; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">¥${app.dailyNeed.toFixed(2)}</div>
-                                        </div>
-                                        <div style="text-align: right; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.2);">
-                                            <div style="font-size: 10px; color: ${todayStatusColor};">${todayStatusText}</div>
-                                            <div style="font-size: 13px; font-weight: 600; color: ${todayStatusColor};">${todayStatusIcon} ¥${app.todayEarned.toFixed(2)}</div>
-                                        </div>
-                                    </div>
-                                ` : `
-                                    <div style="font-size: 13px; color: #38ef7d; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">✓ 已达标</div>
-                                `}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
-        // 如果还有更多，显示提示
-        if (appAnalysis.length > 5) {
-            html += `
-                <div style="text-align: center; padding: 8px; font-size: 11px; color: var(--text-secondary);">
-                    还有 ${appAnalysis.length - 5} 个软件，点击查看全部
-                </div>
-            `;
-        }
-
-        html += `</div>`;
     }
-
     content.innerHTML = html;
 }
 
 // 显示所有软件分析
 function showAllAppsAnalysis() {
-    const appAnalysis = DataManager.calculateAppEarningGap();
+    const data = DataManager.loadData();
     
-    if (appAnalysis.length === 0) {
+    let allApps = [];
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            const totalEarned = calculateAppEarned(app);
+            const balance = app.balance || 0;
+            
+            let averageDailyEarnings = 0;
+            if (app.dailyEarnings) {
+                const days = Object.keys(app.dailyEarnings).length;
+                const total = Object.values(app.dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+                averageDailyEarnings = days > 0 ? total / days : 0;
+            }
+            
+            const minWithdraw = parseFloat(app.minWithdraw || '0') || 0;
+            const canWithdraw = balance >= minWithdraw && minWithdraw > 0;
+
+            allApps.push({
+                phoneName: phone.name,
+                phoneId: phone.id,
+                appName: app.name,
+                appId: app.id,
+                totalEarned,
+                balance,
+                averageDailyEarnings,
+                minWithdraw,
+                canWithdraw
+            });
+        });
+    });
+    
+    if (allApps.length === 0) {
         showToast('暂无软件数据');
         return;
     }
     
+    allApps.sort((a, b) => b.totalEarned - a.totalEarned);
+    
     let html = `
         <div style="max-height: 70vh; overflow-y: auto;">
             <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                📱 所有软件赚取分析 (${appAnalysis.length}个)
+                🏆 所有软件收益排行 (${allApps.length}个)
             </div>
     `;
     
-    appAnalysis.forEach(app => {
-        const statusIcon = app.status === 'critical' ? '🔴' : app.status === 'warning' ? '🟡' : app.gap <= 0 ? '✅' : '🟢';
-        const statusColor = app.status === 'critical' ? '#ef4444' : app.status === 'warning' ? '#f59e0b' : app.gap <= 0 ? '#22c55e' : '#3b82f6';
-        const gapText = app.gap <= 0 ? '已完成' : `差额 ¥${app.gap.toFixed(2)}`;
-        
-        // 计算今日达标状态
-        const isTodayAchieved = app.todayEarned >= app.dailyNeed;
-        const todayStatusIcon = isTodayAchieved ? '✅' : '⏳';
-        const todayStatusColor = isTodayAchieved ? '#22c55e' : '#f59e0b';
-        const todayStatusText = isTodayAchieved ? '今日已达标' : '今日未达标';
+    allApps.forEach((app, index) => {
+        const rankIcons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+        const rankIcon = rankIcons[index] || `${index + 1}`;
         
         html += `
-            <div style="padding: 12px; background: var(--bg-cream); border-radius: 8px; margin-bottom: 8px; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
+            <div style="padding: 12px; background: var(--bg-secondary); border-radius: 10px; margin-bottom: 10px; cursor: pointer; border: 1px solid var(--border-color);" onclick="showAppDetailModal('${app.appId}')">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 12px;">${statusIcon}</span>
-                        <span style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.phoneName} - ${app.appName}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 16px;">${rankIcon}</span>
+                        <div>
+                            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.appName}</div>
+                            <div style="font-size: 10px; color: var(--text-secondary);">${app.phoneName}</div>
+                        </div>
                     </div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">${app.daysRemaining}天后</div>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-sm" onclick="event.stopPropagation(); editAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 9px; padding: 3px 6px;">✏️</button>
+                        <button class="btn btn-sm" onclick="event.stopPropagation(); withdrawAppFromAnalysis('${app.appId}', '${app.phoneId}')" style="font-size: 9px; padding: 3px 6px;">💰</button>
+                    </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
-                    <span>目标: ¥${app.targetAmount.toFixed(2)}</span>
-                    <span>余额: ¥${app.currentBalance.toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                    <div style="display: flex; gap: 16px;">
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 10px;">总赚</span>
+                            <span style="color: var(--text-primary); font-weight: 600; margin-left: 4px;">¥${app.totalEarned.toFixed(2)}</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 10px;">余额</span>
+                            <span style="color: var(--text-primary); font-weight: 600; margin-left: 4px;">¥${app.balance.toFixed(2)}</span>
+                        </div>
+                        ${app.averageDailyEarnings > 0 ? `
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 10px;">日均</span>
+                            <span style="color: var(--text-primary); font-weight: 600; margin-left: 4px;">¥${app.averageDailyEarnings.toFixed(2)}</span>
+                        </div>
+                        ` : ''}
+                    </div>
                     <div>
-                        <span style="font-size: 11px; color: var(--text-secondary);">${gapText}</span>
-                    </div>
-                    <div style="text-align: right;">
-                        ${app.gap > 0 ? `
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="text-align: right;">
-                                    <div style="font-size: 10px; color: var(--text-secondary);">每天需赚取</div>
-                                    <div style="font-size: 14px; font-weight: 700; color: ${statusColor};">¥${app.dailyNeed.toFixed(2)}</div>
-                                </div>
-                                <div style="text-align: right; padding-left: 8px; border-left: 1px solid var(--border-color);">
-                                    <div style="font-size: 10px; color: ${todayStatusColor};">${todayStatusText}</div>
-                                    <div style="font-size: 12px; font-weight: 600; color: ${todayStatusColor};">${todayStatusIcon} ¥${app.todayEarned.toFixed(2)}</div>
-                                </div>
-                            </div>
-                        ` : `
-                            <div style="font-size: 12px; color: #22c55e; font-weight: 600;">✓ 已达标</div>
-                        `}
+                        ${app.canWithdraw ? `
+                            <span style="font-size: 11px; font-weight: 600; color: #22c55e;">✅ 可提现</span>
+                        ` : app.minWithdraw > 0 ? `
+                            <span style="font-size: 11px; color: var(--text-secondary);">还差 ¥${(app.minWithdraw - app.balance).toFixed(2)}</span>
+                        ` : ''}
                     </div>
                 </div>
             </div>
@@ -6273,7 +6257,7 @@ function showAllAppsAnalysis() {
     
     html += `</div>`;
     
-    showModal('所有软件赚取分析', html, [
+    showModal('所有软件收益排行', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
 }
@@ -6299,9 +6283,6 @@ function showAppDetailModal(appId) {
         return;
     }
     
-    const appAnalysis = DataManager.calculateAppEarningGap();
-    const analysis = appAnalysis.find(a => a.appId === appId);
-    
     const earned = (targetApp.withdrawn || 0) + (targetApp.historicalWithdrawn || 0);
     const balance = targetApp.balance || 0;
     const totalEarned = balance + earned;
@@ -6324,28 +6305,6 @@ function showAppDetailModal(appId) {
                     <div style="font-size: 11px; color: var(--text-secondary);">总赚取</div>
                 </div>
             </div>
-            
-            ${analysis ? `
-                <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">📊 还款分析</div>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
-                        <div><span style="color: var(--text-secondary);">目标:</span> ¥${analysis.targetAmount.toFixed(2)}</div>
-                        <div><span style="color: var(--text-secondary);">余额:</span> ¥${analysis.currentBalance.toFixed(2)}</div>
-                        <div><span style="color: var(--text-secondary);">差额:</span> ¥${Math.max(0, analysis.gap).toFixed(2)}</div>
-                        <div><span style="color: var(--text-secondary);">剩余天数:</span> ${analysis.daysRemaining}天</div>
-                    </div>
-                    ${analysis.gap > 0 ? `
-                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); text-align: center;">
-                            <div style="font-size: 11px; color: var(--text-secondary);">每天需赚取</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #ef4444;">¥${analysis.dailyNeed.toFixed(2)}</div>
-                        </div>
-                    ` : `
-                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); text-align: center;">
-                            <div style="font-size: 14px; color: #22c55e; font-weight: 600;">✅ 已达标</div>
-                        </div>
-                    `}
-                </div>
-            ` : ''}
             
             <!-- 每日赚取记录 -->
             ${targetApp.dailyEarnings && Object.keys(targetApp.dailyEarnings).length > 0 ? `
