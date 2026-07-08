@@ -7338,7 +7338,10 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         </div>
         <div class="form-group">
             <label class="form-label">当前余额 (元) <span style="color: var(--text-secondary); font-size: 12px;">(预测今日: ¥${predictedBalance.toFixed(2)})</span></label>
-            <input type="number" id="edit-app-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01">
+            <div style="position: relative;">
+                <input type="number" id="edit-app-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" style="padding-right: 40px;" onclick="this.select();" onfocus="this.select();">
+                <button type="button" onclick="document.getElementById('edit-app-balance').value=''; document.getElementById('edit-app-balance').focus();" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; padding: 4px;">✕</button>
+            </div>
             <div class="form-hint">
                 软件账户中当前可提现的金额
                 ${earningsCount > 0 ? `<br><span style="color: #10b981;">📊 基于${earningsCount}天历史数据，平均日收益¥${avgEarnings}，预测今日¥${predictedDailyEarnings.toFixed(2)}</span>` : '<br><span style="color: var(--text-secondary);">暂无历史数据，使用最小提现金额作为预测</span>'}
@@ -7351,7 +7354,10 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         </div>
         <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
-            <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01">
+            <div style="position: relative;">
+                <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
+                <button type="button" onclick="document.getElementById('edit-app-historical').value=''; document.getElementById('edit-app-historical').focus();" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; padding: 4px;">✕</button>
+            </div>
             <div class="form-hint">修改历史提现金额（如需补录之前的提现记录）</div>
         </div>
     `, [
