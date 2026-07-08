@@ -11,11 +11,11 @@ const GAME_DRAW_HISTORY_KEY = 'moneyApp_gameDrawHistory';
 
 // ==================== 通用计算函数 ====================
 
-// 计算软件的已赚金额（累计）
-// 简化后：只计算已提现金额
+// 计算软件的已赚金额（累计）= 当前余额 + 已提现金额 + 历史提现金额
 function calculateAppEarned(app) {
+    const balance = app.balance || 0;
     const withdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-    return withdrawn;
+    return balance + withdrawn;
 }
 
 // 计算手机的总已赚金额
@@ -5015,6 +5015,7 @@ function showPage(pageName) {
     // 再刷新页面数据（避免覆盖已恢复的状态）
     if (pageName === 'dashboard') renderDashboard();
     if (pageName === 'phones') renderPhones();
+    if (pageName === 'next-play') renderNextPlay();
     if (pageName === 'stats') renderStats();
     if (pageName === 'settings') renderSettings();
     if (pageName === 'withdraw-records') renderWithdrawRecords();
@@ -5328,6 +5329,157 @@ function renderDashboard() {
 
     // 更新今日收益显示
     updateTodayEarnings();
+}
+
+function renderNextPlay() {
+    const data = DataManager.loadData();
+    const container = document.getElementById('next-play-container');
+    
+    if (!container) return;
+
+    const today = new Date();
+    const currentDateEl = document.getElementById('next-play-current-date');
+    if (currentDateEl) {
+        currentDateEl.textContent = today.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+        });
+    }
+
+    const appList = [];
+    
+    data.phones.forEach(phone => {
+        (phone.apps || []).forEach(app => {
+            const totalEarned = calculateAppEarned(app);
+            const minWithdraw = app.minWithdraw || 0.3;
+            
+            const daysCanWait = Math.floor(totalEarned / minWithdraw);
+            const remainingAmount = totalEarned % minWithdraw;
+            
+            const nextPlayDate = new Date(today);
+            nextPlayDate.setDate(today.getDate() + daysCanWait);
+            
+            const daysUntilNextPlay = daysCanWait;
+            
+            appList.push({
+                id: app.id,
+                name: app.name,
+                phoneName: phone.name,
+                totalEarned: totalEarned,
+                minWithdraw: minWithdraw,
+                daysCanWait: daysCanWait,
+                remainingAmount: remainingAmount,
+                nextPlayDate: nextPlayDate,
+                daysUntilNextPlay: daysUntilNextPlay,
+                balance: app.balance || 0
+            });
+        });
+    });
+
+    appList.sort((a, b) => {
+        if (a.daysUntilNextPlay === 0 && b.daysUntilNextPlay > 0) return -1;
+        if (a.daysUntilNextPlay > 0 && b.daysUntilNextPlay === 0) return 1;
+        return a.daysUntilNextPlay - b.daysUntilNextPlay;
+    });
+
+    if (appList.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state__icon">🎮</div>
+                <div class="empty-state__title">暂无软件数据</div>
+                <div class="empty-state__hint">添加手机和软件后即可查看</div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="next-play-stats">
+            <div class="next-play-stat">
+                <span class="next-play-stat__value">${appList.filter(a => a.daysUntilNextPlay === 0).length}</span>
+                <span class="next-play-stat__label">需要立即玩</span>
+            </div>
+            <div class="next-play-stat">
+                <span class="next-play-stat__value">${appList.filter(a => a.daysUntilNextPlay > 0 && a.daysUntilNextPlay <= 7).length}</span>
+                <span class="next-play-stat__label">7天内需要玩</span>
+            </div>
+            <div class="next-play-stat">
+                <span class="next-play-stat__value">${appList.filter(a => a.daysUntilNextPlay > 7).length}</span>
+                <span class="next-play-stat__label">7天后需要玩</span>
+            </div>
+        </div>
+    `;
+
+    html += '<div class="next-play-list">';
+
+    appList.forEach((app, index) => {
+        let statusClass = '';
+        let statusText = '';
+        let statusColor = '';
+        
+        if (app.daysUntilNextPlay === 0) {
+            statusClass = 'next-play-item--urgent';
+            statusText = '⚠️ 立即游玩';
+            statusColor = '#ef4444';
+        } else if (app.daysUntilNextPlay <= 3) {
+            statusClass = 'next-play-item--warning';
+            statusText = `⏳ ${app.daysUntilNextPlay}天后`;
+            statusColor = '#f59e0b';
+        } else if (app.daysUntilNextPlay <= 7) {
+            statusClass = 'next-play-item--soon';
+            statusText = `📅 ${app.daysUntilNextPlay}天后`;
+            statusColor = '#3b82f6';
+        } else {
+            statusClass = 'next-play-item--relax';
+            statusText = `✓ ${app.daysUntilNextPlay}天后`;
+            statusColor = '#10b981';
+        }
+
+        const progressPercent = Math.min(100, (app.remainingAmount / app.minWithdraw) * 100);
+        
+        html += `
+            <div class="next-play-item ${statusClass}">
+                <div class="next-play-item__rank">${index + 1}</div>
+                <div class="next-play-item__content">
+                    <div class="next-play-item__header">
+                        <span class="next-play-item__name">${app.name}</span>
+                        <span class="next-play-item__phone">${app.phoneName}</span>
+                    </div>
+                    <div class="next-play-item__info">
+                        <div class="next-play-item__stat">
+                            <span class="next-play-item__stat-label">总赚取</span>
+                            <span class="next-play-item__stat-value">¥${app.totalEarned.toFixed(2)}</span>
+                        </div>
+                        <div class="next-play-item__stat">
+                            <span class="next-play-item__stat-label">最小提现</span>
+                            <span class="next-play-item__stat-value">¥${app.minWithdraw.toFixed(2)}</span>
+                        </div>
+                        <div class="next-play-item__stat">
+                            <span class="next-play-item__stat-label">当前余额</span>
+                            <span class="next-play-item__stat-value">¥${app.balance.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <div class="next-play-item__progress">
+                        <div class="next-play-item__progress-bar">
+                            <div class="next-play-item__progress-fill" style="width: ${progressPercent}%; background: ${statusColor};"></div>
+                        </div>
+                        <span class="next-play-item__progress-text">
+                            剩余可用: ¥${app.remainingAmount.toFixed(2)} / ¥${app.minWithdraw.toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+                <div class="next-play-item__status" style="color: ${statusColor};">
+                    <span class="next-play-item__status-text">${statusText}</span>
+                    <span class="next-play-item__status-date">${app.nextPlayDate.toLocaleDateString('zh-CN')}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 // 生成 SVG 迷你曲线（输入数组为数值序列）
