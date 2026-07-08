@@ -23,6 +23,13 @@ function calculatePhoneTotalEarned(phone) {
     return phone.apps.reduce((sum, app) => sum + calculateAppEarned(app), 0);
 }
 
+// 计算手机的总提现金额（仅已提现部分，不含余额）
+function calculatePhoneTotalWithdrawn(phone) {
+    return phone.apps.reduce((sum, app) => {
+        return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+    }, 0);
+}
+
 // 全局变量和辅助函数定义
 let modalIsShowing = false;
 
@@ -777,8 +784,8 @@ function updatePhoneCard(phoneId) {
     const index = data.phones.findIndex(p => p.id === phoneId);
     const isExpanded = expandedPhones[phoneId];
     
-    // 计算该手机的总提现金额
-    const totalWithdrawn = calculatePhoneTotalEarned(phone);
+    // 计算该手机的总提现金额（仅已提现部分）
+    const totalWithdrawn = calculatePhoneTotalWithdrawn(phone);
     
     // 计算该手机的提现次数
     const totalWithdrawals = phone.apps.reduce((sum, app) => {
@@ -854,8 +861,8 @@ function updateAppCard(phoneId, appId) {
         return;
     }
     
-    // 使用统一函数计算已赚金额（现在只计算已提现金额）
-    const earned = calculateAppEarned(app);
+    // 计算累计提现金额（仅已提现部分，不含余额）
+    const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     const totalWithdrawals = app.withdrawals ? app.withdrawals.length : 0;
     
     // 更新卡片内容
@@ -867,8 +874,8 @@ function updateAppCard(phoneId, appId) {
             </span>
         </div>
         <div class="app-core-info">
-            <span class="core-label">累计提现:</span>
-            <span class="core-value">¥${earned.toFixed(2)}</span>
+            <span class="core-label">当前余额:</span>
+            <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
         </div>
         <div class="app-info-row">
             <span>提现次数: ${totalWithdrawals}次</span>
@@ -5218,8 +5225,14 @@ function renderDashboard() {
     const totalPhones = data.phones.length;
     const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
 
-    // 计算总提现金额
+    // 计算总提现金额（仅已提现部分，不含余额）
     const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
+        return sum + phone.apps.reduce((appSum, app) => {
+            return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+        }, 0);
+    }, 0);
+    // 计算总已赚金额（余额 + 已提现）
+    const totalEarnedAmount = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => {
             return appSum + calculateAppEarned(app);
         }, 0);
@@ -5227,8 +5240,8 @@ function renderDashboard() {
     const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
     // 已还分期总额
     const totalRepaid = data.installments ? data.installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0) : 0;
-    // 剩余支出 = 总提现 - 总支出 - 已还分期
-    const netEarning = totalWithdrawnAmount - totalExpenses - totalRepaid;
+    // 可用资金 = 总已赚金额 - 总支出 - 已还分期
+    const netEarning = totalEarnedAmount - totalExpenses - totalRepaid;
 
     // 统计有提现记录的软件数量
     const appsWithWithdrawals = data.phones.reduce((sum, phone) => {
@@ -6753,8 +6766,8 @@ function renderPhones() {
     container.innerHTML = data.phones.map((phone, index) => {
         const isExpanded = expandedPhones[phone.id];
         
-        // 计算该手机的总提现金额
-        const totalWithdrawn = calculatePhoneTotalEarned(phone);
+        // 计算该手机的总提现金额（仅已提现部分）
+        const totalWithdrawn = calculatePhoneTotalWithdrawn(phone);
         
         // 计算该手机的当前总余额
         const totalBalance = phone.apps.reduce((sum, app) => sum + (app.balance || 0), 0);
@@ -6825,8 +6838,8 @@ function renderAppList(phone) {
     }
 
     return phone.apps.map(app => {
-        // 使用统一函数计算已赚金额（现在只计算已提现金额）
-        const earned = calculateAppEarned(app);
+        // 计算累计提现金额（仅已提现部分，不含余额）
+        const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const totalWithdrawals = app.withdrawals ? app.withdrawals.length : 0;
 
         return `
@@ -6842,7 +6855,7 @@ function renderAppList(phone) {
                     <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
                 </div>
                 <div class="app-info-row">
-                    <span>累计提现: ¥${earned.toFixed(2)} · 提现次数: ${totalWithdrawals}次</span>
+                    <span>累计提现: ¥${totalWithdrawn.toFixed(2)} · 提现次数: ${totalWithdrawals}次</span>
                 </div>
                 <div class="action-buttons">
                     <button class="btn btn-primary" onclick="openWithdrawModal('${phone.id}', '${app.id}')">记录提现</button>
@@ -8032,12 +8045,17 @@ function renderStats() {
         });
     });
     
-    // 统计基于提现记录
+    // 统计基于提现记录（仅已提现部分，不含余额）
     const totalWithdrawn = allAppsWithPhone.reduce((sum, app) => {
+        return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+    }, 0);
+    // 总已赚金额（余额 + 已提现）
+    const totalEarned = allAppsWithPhone.reduce((sum, app) => {
         return sum + calculateAppEarned(app);
     }, 0);
     const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
-    const netEarning = totalWithdrawn - totalExpenses;
+    // 可用资金 = 总已赚金额 - 总支出
+    const netEarning = totalEarned - totalExpenses;
     
     const statsTotalEarnedEl = document.getElementById('stats-total-earned');
     if (statsTotalEarnedEl) statsTotalEarnedEl.textContent = `¥${totalWithdrawn.toFixed(2)}`;
