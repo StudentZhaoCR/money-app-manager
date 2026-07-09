@@ -158,56 +158,39 @@
                 <span class="current-date" id="stats-current-date"></span>
             </div>
 
-            <!-- 统计卡片 - 毛玻璃效果 -->
-            <div style="position: relative; background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%); border-radius: 20px; padding: 20px; margin-bottom: 20px; overflow: hidden;">
-                <!-- 背景装饰圆形 -->
-                <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(25px);"></div>
-                <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(20px);"></div>
-                
-                <!-- 毛玻璃卡片内容 -->
-                <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.25); padding: 20px;">
-                    <div class="section-header" style="margin-bottom: 16px;">
-                        <div class="section-title" style="color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">提现与收入统计</div>
-                        <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
+            <!-- 统计卡片 -->
+            <div class="stats-overview">
+                <div class="stats-card stats-card--primary">
+                    <div class="stats-card__icon">💰</div>
+                    <div class="stats-card__content">
+                        <div class="stats-card__label">累计提现</div>
+                        <div class="stats-card__value" id="stats-total-earned">¥0.00</div>
                     </div>
-
-                    <div class="stats-grid">
-                        <div class="stats-row">
-                            <!-- 累计提现 - 绿色毛玻璃 -->
-                            <div style="position: relative; background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(52, 211, 153, 0.3) 100%); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(52, 211, 153, 0.4); backdrop-filter: blur(8px);">
-                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">累计提现</span>
-                                <span style="color: #ffffff; font-size: 24px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="stats-total-earned">¥0.00</span>
-                            </div>
-                            <!-- 支出金额 - 红色毛玻璃 -->
-                            <div style="position: relative; background: linear-gradient(135deg, rgba(248, 113, 113, 0.3) 0%, rgba(252, 165, 165, 0.3) 100%); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(248, 113, 113, 0.4); backdrop-filter: blur(8px);">
-                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">支出金额</span>
-                                <span style="color: #ffffff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="stats-total-expenses">¥0.00</span>
-                            </div>
-                            <!-- 可用资金 - 紫色毛玻璃 -->
-                            <div style="position: relative; background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(167, 139, 250, 0.3) 100%); border-radius: 12px; padding: 16px; flex: 1; border: 1px solid rgba(167, 139, 250, 0.4); backdrop-filter: blur(8px);">
-                                <span style="color: rgba(255,255,255,0.9); font-size: 13px; display: block; margin-bottom: 8px;">可用资金</span>
-                                <span style="color: #ffffff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="stats-total-balance">¥0.00</span>
-                            </div>
-                        </div>
+                </div>
+                <div class="stats-card stats-card--danger">
+                    <div class="stats-card__icon">💳</div>
+                    <div class="stats-card__content">
+                        <div class="stats-card__label">支出金额</div>
+                        <div class="stats-card__value" id="stats-total-expenses">¥0.00</div>
+                    </div>
+                </div>
+                <div class="stats-card stats-card--success">
+                    <div class="stats-card__icon">💵</div>
+                    <div class="stats-card__content">
+                        <div class="stats-card__label">可用资金</div>
+                        <div class="stats-card__value" id="stats-total-balance">¥0.00</div>
                     </div>
                 </div>
             </div>
 
-            <!-- 各软件提现与收入情况 - 毛玻璃效果 -->
-            <div style="position: relative; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; padding: 20px; overflow: hidden;">
-                <!-- 背景装饰圆形 -->
-                <div style="position: absolute; top: -50px; right: -50px; width: 120px; height: 120px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(30px);"></div>
-                <div style="position: absolute; bottom: -40px; left: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(25px);"></div>
-                
-                <!-- 毛玻璃卡片内容 -->
-                <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.25); padding: 20px;">
-                    <div class="section-header" style="margin-bottom: 16px;">
-                        <div class="section-title" style="color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">各软件提现与收入情况</div>
-                        <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
-                    </div>
-                    <div class="app-withdraw-list" id="app-withdraw-list">
-                        <div class="empty-state" style="color: rgba(255,255,255,0.8);">暂无软件数据</div>
-                    </div>
+            <!-- 各软件提现与收入情况 -->
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title">📊 软件收益排行</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="app-withdraw-list" id="app-withdraw-list">
+                    <div class="empty-state">暂无软件数据</div>
                 </div>
             </div>
         </div>

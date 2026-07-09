@@ -2659,9 +2659,251 @@ body {
     transform: scale(1.05);
 }
 
-/* 软件提现列表 */
+/* 统计页面概览卡片 */
+.stats-overview {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stats-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-color);
+    transition: all var(--transition-normal);
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+}
+
+.stats-card__icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.stats-card__label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.stats-card__value {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+}
+
+.stats-card--primary {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.12) 100%);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.stats-card--primary .stats-card__value {
+    color: var(--primary-color);
+}
+
+.stats-card--danger {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.12) 100%);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.stats-card--danger .stats-card__value {
+    color: var(--error-color);
+}
+
+.stats-card--success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.12) 100%);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.stats-card--success .stats-card__value {
+    color: var(--success-color);
+}
+
+/* 软件收益排行列表 */
 .app-withdraw-list {
     margin-top: 16px;
+}
+
+.stats-rank-item {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-color);
+    transition: all var(--transition-normal);
+}
+
+.stats-rank-item:hover {
+    border-color: var(--primary-light);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-hover);
+}
+
+.stats-rank-number {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--bg-cream);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.stats-rank-item:nth-child(1) .stats-rank-number {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: white;
+}
+
+.stats-rank-item:nth-child(2) .stats-rank-number {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+    color: white;
+}
+
+.stats-rank-item:nth-child(3) .stats-rank-number {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: white;
+}
+
+.stats-rank-info {
+    flex: 1;
+}
+
+.stats-rank-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.stats-rank-phone {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.stats-rank-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.stats-rank-stat {
+    text-align: right;
+}
+
+.stats-rank-stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 2px;
+}
+
+.stats-rank-stat-value {
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-display);
+}
+
+.stats-rank-stat-value.earned {
+    color: var(--primary-color);
+}
+
+.stats-rank-stat-value.withdrawn {
+    color: var(--success-color);
+}
+
+.stats-rank-stat-value.balance {
+    color: var(--accent-color);
+}
+
+.stats-rank-status {
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.stats-rank-status.has-record {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-color);
+}
+
+.stats-rank-status.new {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--accent-color);
+}
+
+[data-theme="dark"] .stats-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .stats-card--primary {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.2) 100%);
+}
+
+[data-theme="dark"] .stats-card--danger {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.2) 100%);
+}
+
+[data-theme="dark"] .stats-card--success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.2) 100%);
+}
+
+[data-theme="dark"] .stats-rank-item {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .stats-rank-number {
+    background: var(--bg-primary);
+}
+
+@media (max-width: 640px) {
+    .stats-overview {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .stats-card {
+        flex-direction: row;
+        justify-content: flex-start;
+        text-align: left;
+        gap: 12px;
+    }
+    
+    .stats-card__icon {
+        font-size: 24px;
+        margin-bottom: 0;
+    }
+    
+    .stats-rank-stats {
+        gap: 8px;
+    }
+    
+    .stats-rank-stat-value {
+        font-size: 12px;
+    }
 }
 
 .app-stats {

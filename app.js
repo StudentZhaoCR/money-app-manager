@@ -8115,44 +8115,47 @@ function renderStats() {
     const statsTotalBalanceEl = document.getElementById('stats-total-balance');
     if (statsTotalBalanceEl) statsTotalBalanceEl.textContent = `¥${netEarning.toFixed(2)}`;
     
-    // 渲染各软件提现情况
+    // 渲染各软件收益排行
     const container = document.getElementById('app-withdraw-list');
     if (allAppsWithPhone.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无软件数据</div>';
         return;
     }
     
-    container.innerHTML = allAppsWithPhone.map(app => {
+    const sortedApps = [...allAppsWithPhone].sort((a, b) => {
+        const earnedA = (a.withdrawn || 0) + (a.balance || 0);
+        const earnedB = (b.withdrawn || 0) + (b.balance || 0);
+        return earnedB - earnedA;
+    });
+    
+    container.innerHTML = sortedApps.map((app, index) => {
         const withdrawalCount = app.withdrawals ? app.withdrawals.length : 0;
-        const statusColor = withdrawalCount > 0 ? 'rgba(52, 211, 153, 0.4)' : 'rgba(251, 191, 36, 0.4)';
-        const statusBorder = withdrawalCount > 0 ? 'rgba(52, 211, 153, 0.6)' : 'rgba(251, 191, 36, 0.6)';
-        const statusText = withdrawalCount > 0 ? '#34d399' : '#fbbf24';
-        
-        // 已赚 = 累计提现 + 当前余额
         const totalEarned = (app.withdrawn || 0) + (app.balance || 0);
         
         return `
-            <div style="position: relative; background: rgba(30, 27, 75, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.3);" data-app-id="${app.id}">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="font-weight: 700; color: #ffffff; font-size: 14px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">${app.phoneName} - ${app.name}</span>
-                    <span style="font-size: 11px; padding: 4px 12px; border-radius: 12px; background: ${withdrawalCount > 0 ? 'rgba(34, 197, 94, 0.9)' : 'rgba(251, 191, 36, 0.9)'}; border: 1px solid rgba(255,255,255,0.5); color: #1e1b4b; font-weight: 700;">
-                        ${withdrawalCount > 0 ? '有记录' : '新软件'}
-                    </span>
+            <div class="stats-rank-item" data-app-id="${app.id}">
+                <div class="stats-rank-number">${index + 1}</div>
+                <div class="stats-rank-info">
+                    <div class="stats-rank-name">${app.name}</div>
+                    <div class="stats-rank-phone">📱 ${app.phoneName}</div>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
-                    <div style="background: rgba(34, 197, 94, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">已赚</span>
-                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${totalEarned.toFixed(2)}</span>
+                <div class="stats-rank-stats">
+                    <div class="stats-rank-stat">
+                        <span class="stats-rank-stat-label">已赚</span>
+                        <span class="stats-rank-stat-value earned">¥${totalEarned.toFixed(2)}</span>
                     </div>
-                    <div style="background: rgba(59, 130, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">累计提现</span>
-                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${(app.withdrawn || 0).toFixed(2)}</span>
+                    <div class="stats-rank-stat">
+                        <span class="stats-rank-stat-label">提现</span>
+                        <span class="stats-rank-stat-value withdrawn">¥${(app.withdrawn || 0).toFixed(2)}</span>
                     </div>
-                    <div style="background: rgba(139, 92, 246, 0.9); border-radius: 8px; padding: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.5);">
-                        <span style="font-size: 10px; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; font-weight: 600;">当前余额</span>
-                        <span style="font-size: 15px; font-weight: 800; color: #ffffff;">¥${(app.balance || 0).toFixed(2)}</span>
+                    <div class="stats-rank-stat">
+                        <span class="stats-rank-stat-label">余额</span>
+                        <span class="stats-rank-stat-value balance">¥${(app.balance || 0).toFixed(2)}</span>
                     </div>
                 </div>
+                <span class="stats-rank-status ${withdrawalCount > 0 ? 'has-record' : 'new'}">
+                    ${withdrawalCount > 0 ? '有记录' : '新软件'}
+                </span>
             </div>
         `;
     }).join('');
