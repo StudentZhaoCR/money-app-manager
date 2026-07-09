@@ -5023,6 +5023,7 @@ function showPage(pageName) {
     if (pageName === 'dashboard') renderDashboard();
     if (pageName === 'phones') renderPhones();
     if (pageName === 'next-play') renderNextPlay();
+    if (pageName === 'return-cost') renderReturnCost();
     if (pageName === 'stats') renderStats();
     if (pageName === 'settings') renderSettings();
     if (pageName === 'withdraw-records') renderWithdrawRecords();
@@ -5342,6 +5343,270 @@ function renderDashboard() {
 
     // 更新今日收益显示
     updateTodayEarnings();
+}
+
+function calculateAverageDailyEarnings() {
+    const data = DataManager.loadData();
+    let totalEarnings = 0;
+    let totalDays = 0;
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            if (app.dailyEarnings) {
+                const days = Object.keys(app.dailyEarnings).length;
+                const total = Object.values(app.dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+                totalEarnings += total;
+                totalDays += days;
+            }
+        });
+    });
+    
+    return totalDays > 0 ? totalEarnings / totalDays : 0;
+}
+
+function calculateTotalWithdrawn() {
+    const data = DataManager.loadData();
+    let totalWithdrawn = 0;
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            totalWithdrawn += (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+        });
+    });
+    
+    return totalWithdrawn;
+}
+
+function renderReturnCost() {
+    const content = document.getElementById('return-cost-content');
+    if (!content) return;
+    
+    const data = DataManager.loadData();
+    const expenses = data.expenses || [];
+    
+    const averageDailyEarnings = calculateAverageDailyEarnings();
+    const totalWithdrawn = calculateTotalWithdrawn();
+    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const netProfit = totalWithdrawn - totalExpenses;
+    
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    let html = `
+        <div class="return-cost-summary">
+            <div class="return-cost-item ${netProfit >= 0 ? 'return-cost-item--positive' : 'return-cost-item--negative'}">
+                <div class="return-cost-item__label">净收益</div>
+                <div class="return-cost-item__value">¥${netProfit.toFixed(2)}</div>
+            </div>
+            <div class="return-cost-item">
+                <div class="return-cost-item__label">累计支出</div>
+                <div class="return-cost-item__value">¥${totalExpenses.toFixed(2)}</div>
+            </div>
+            <div class="return-cost-item">
+                <div class="return-cost-item__label">累计提现</div>
+                <div class="return-cost-item__value">¥${totalWithdrawn.toFixed(2)}</div>
+            </div>
+            <div class="return-cost-item return-cost-item--warning">
+                <div class="return-cost-item__label">日均收益</div>
+                <div class="return-cost-item__value">¥${averageDailyEarnings.toFixed(2)}</div>
+            </div>
+        </div>
+    `;
+    
+    if (totalExpenses > totalWithdrawn && averageDailyEarnings > 0) {
+        const remaining = totalExpenses - totalWithdrawn;
+        const daysNeeded = Math.ceil(remaining / averageDailyEarnings);
+        const returnDate = new Date(today);
+        returnDate.setDate(today.getDate() + daysNeeded);
+        
+        html += `
+            <div style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.1) 100%); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.3);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 24px;">⏰</span>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">预计回本时间</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                            还需 <strong style="color: #f59e0b;">${daysNeeded}</strong> 天，预计 <strong style="color: #f59e0b;">${returnDate.getMonth() + 1}月${returnDate.getDate()}日</strong> 回本
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 12px; height: 6px; background: var(--bg-cream); border-radius: 3px; overflow: hidden;">
+                    <div style="height: 100%; width: ${Math.min(100, (totalWithdrawn / totalExpenses) * 100)}%; background: linear-gradient(90deg, #f59e0b, #fbbf24); border-radius: 3px;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-secondary); margin-top: 6px;">
+                    <span>已收回 ¥${totalWithdrawn.toFixed(2)}</span>
+                    <span>还差 ¥${remaining.toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+    } else if (totalExpenses <= totalWithdrawn) {
+        html += `
+            <div style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 12px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 24px;">🎉</span>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">已回本！</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                            净盈利 <strong style="color: #10b981;">¥${Math.abs(netProfit).toFixed(2)}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    html += `<div style="margin-bottom: 12px; font-size: 12px; font-weight: 600; color: var(--text-primary);">📝 消费记录</div>`;
+    
+    if (expenses.length === 0) {
+        html += `
+            <div style="text-align: center; padding: 24px; color: var(--text-secondary); font-size: 12px;">
+                <span style="font-size: 32px; display: block; margin-bottom: 8px;">🛒</span>
+                暂无消费记录
+                <div style="font-size: 10px; margin-top: 4px;">点击下方按钮添加</div>
+            </div>
+        `;
+    } else {
+        const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        sortedExpenses.forEach((exp, index) => {
+            const isToday = exp.date === todayStr;
+            const recoveredAmount = Math.min(exp.amount, totalWithdrawn);
+            const recoveryProgress = Math.min(100, (recoveredAmount / exp.amount) * 100);
+            const progressClass = recoveryProgress >= 100 ? 'return-cost-card__progress-bar--success' : 
+                                  recoveryProgress >= 50 ? 'return-cost-card__progress-bar--warning' : 
+                                  'return-cost-card__progress-bar--error';
+            
+            let recoveryInfo = '';
+            if (recoveryProgress >= 100) {
+                recoveryInfo = '已回本';
+            } else if (averageDailyEarnings > 0) {
+                const remaining = exp.amount - recoveredAmount;
+                const daysNeeded = Math.ceil(remaining / averageDailyEarnings);
+                const returnDate = new Date(today);
+                returnDate.setDate(today.getDate() + daysNeeded);
+                recoveryInfo = `${daysNeeded}天后回本`;
+            } else {
+                recoveryInfo = '暂无收益数据';
+            }
+            
+            html += `
+                <div class="return-cost-card">
+                    <div class="return-cost-card__header">
+                        <div class="return-cost-card__title">${exp.name}</div>
+                        <div class="return-cost-card__amount">-¥${exp.amount.toFixed(2)}</div>
+                    </div>
+                    <div class="return-cost-card__meta">
+                        <span>${exp.date}</span>
+                        ${exp.category ? `<span>${exp.category}</span>` : ''}
+                        ${isToday ? `<span style="color: #f59e0b; font-weight: 600;">今日</span>` : ''}
+                    </div>
+                    <div class="return-cost-card__progress">
+                        <div class="${progressClass}" style="width: ${recoveryProgress}%;"></div>
+                    </div>
+                    <div class="return-cost-card__info">
+                        <span>回本进度</span>
+                        <span>${recoveryProgress.toFixed(0)}% · ${recoveryInfo}</span>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                        <button class="btn btn-sm btn-danger" onclick="deleteReturnCostRecord('${exp.id}')" style="font-size: 10px; padding: 3px 8px;">删除</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    html += `
+        <button class="return-cost-add-btn" onclick="showAddReturnCostModal()">
+            <span>+</span>
+            <span>添加消费记录</span>
+        </button>
+    `;
+    
+    content.innerHTML = html;
+}
+
+function showAddReturnCostModal() {
+    const html = `
+        <div style="padding: 16px;">
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">物品名称</label>
+                <input type="text" id="return-cost-name" placeholder="例如：手机、游戏充值" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-secondary);">
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">消费金额</label>
+                <input type="number" id="return-cost-amount" placeholder="0.00" step="0.01" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-secondary);">
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">分类</label>
+                <select id="return-cost-category" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-secondary);">
+                    <option value="">未分类</option>
+                    <option value="数码产品">数码产品</option>
+                    <option value="游戏充值">游戏充值</option>
+                    <option value="日常消费">日常消费</option>
+                    <option value="娱乐休闲">娱乐休闲</option>
+                    <option value="其他">其他</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">日期</label>
+                <input type="date" id="return-cost-date" value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-secondary);">
+            </div>
+        </div>
+    `;
+    
+    showModal('添加消费记录', html, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        { text: '添加', class: 'btn-primary', action: () => {
+            const name = document.getElementById('return-cost-name').value.trim();
+            const amount = parseFloat(document.getElementById('return-cost-amount').value);
+            const category = document.getElementById('return-cost-category').value;
+            const date = document.getElementById('return-cost-date').value;
+            
+            if (!name) {
+                showToast('请输入物品名称', 'error');
+                return;
+            }
+            if (!amount || amount <= 0) {
+                showToast('请输入有效的金额', 'error');
+                return;
+            }
+            
+            addReturnCostRecord({ name, amount, category, date });
+            closeModal();
+            renderReturnCost();
+            showToast('添加成功！', 'success');
+        }}
+    ]);
+}
+
+function addReturnCostRecord(record) {
+    const data = DataManager.loadData();
+    if (!data.expenses) {
+        data.expenses = [];
+    }
+    
+    data.expenses.push({
+        id: Date.now().toString(),
+        name: record.name,
+        amount: record.amount,
+        category: record.category || '',
+        date: record.date || new Date().toISOString().split('T')[0],
+        createdAt: Date.now()
+    });
+    
+    DataManager.saveData(data);
+}
+
+function deleteReturnCostRecord(id) {
+    if (!confirm('确定删除这条消费记录吗？')) return;
+    
+    const data = DataManager.loadData();
+    if (data.expenses) {
+        data.expenses = data.expenses.filter(exp => exp.id !== id);
+        DataManager.saveData(data);
+        renderReturnCost();
+        showToast('删除成功', 'success');
+    }
 }
 
 function renderNextPlay() {

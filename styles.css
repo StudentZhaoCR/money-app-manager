@@ -1497,7 +1497,7 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);
     border-radius: var(--radius-md);
     padding: 12px 14px;
@@ -1521,8 +1521,8 @@ body {
 .stat-value {
     font-size: 18px;
     font-weight: 800;
-    color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 0 10px rgba(0, 0, 0, 0.2);
+    color: #fef3c7;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
     font-family: var(--font-display);
     letter-spacing: 0.5px;
 }
@@ -1530,7 +1530,7 @@ body {
 /* 统计标签 */
 .stat-label {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.95);
+    color: #e0f2fe;
     font-weight: 600;
     font-family: var(--font-secondary);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -5084,6 +5084,149 @@ body {
 .glass-panel--violet  { background: linear-gradient(135deg, #7c6bcf 0%, #9c89ff 100%); }
 .glass-panel .section-title { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.12); }
 .glass-panel .section-divider { background: rgba(255, 255, 255, 0.3); }
+
+/* 回本追踪样式 */
+.return-cost-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.return-cost-item {
+    background: var(--bg-cream);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    text-align: center;
+}
+.return-cost-item__label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+.return-cost-item__value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.return-cost-item--positive .return-cost-item__value {
+    color: var(--success-color);
+}
+.return-cost-item--negative .return-cost-item__value {
+    color: var(--error-color);
+}
+.return-cost-item--warning .return-cost-item__value {
+    color: var(--accent-color);
+}
+
+.return-cost-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+.return-cost-card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-1px);
+}
+.return-cost-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+.return-cost-card__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.return-cost-card__amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--error-color);
+}
+.return-cost-card__meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+.return-cost-card__progress {
+    height: 8px;
+    background: var(--bg-cream);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+.return-cost-card__progress-bar {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+.return-cost-card__progress-bar--success {
+    background: linear-gradient(90deg, var(--success-color), #34d399);
+}
+.return-cost-card__progress-bar--warning {
+    background: linear-gradient(90deg, var(--accent-color), #fbbf24);
+}
+.return-cost-card__progress-bar--error {
+    background: linear-gradient(90deg, var(--error-color), #f87171);
+}
+.return-cost-card__info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+.return-cost-card__info span:first-child {
+    color: var(--text-secondary);
+}
+.return-cost-card__info span:last-child {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.return-cost-add-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.return-cost-add-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="dark"] .return-cost-item {
+    background: rgba(30, 41, 59, 0.8);
+}
+[data-theme="dark"] .return-cost-item__label {
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .return-cost-item__value {
+    color: var(--text-primary);
+}
+[data-theme="dark"] .return-cost-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+[data-theme="dark"] .return-cost-card__title {
+    color: var(--text-primary);
+}
+[data-theme="dark"] .return-cost-card__progress {
+    background: rgba(51, 65, 85, 0.8);
+}
 
 
 
