@@ -2879,6 +2879,78 @@ body {
     background: var(--bg-primary);
 }
 
+/* 年度目标统计卡片响应式 */
+.yearly-goal-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.yearly-goal-stat {
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+    border: 1px solid;
+}
+
+.yearly-goal-stat--purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(167, 139, 250, 0.1) 100%);
+    border-color: rgba(139, 92, 246, 0.15);
+}
+
+.yearly-goal-stat--purple .yearly-goal-stat__label {
+    color: #8b5cf6;
+}
+
+.yearly-goal-stat--green {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.15);
+}
+
+.yearly-goal-stat--green .yearly-goal-stat__label {
+    color: #10b981;
+}
+
+.yearly-goal-stat--red {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(248, 113, 113, 0.1) 100%);
+    border-color: rgba(239, 68, 68, 0.15);
+}
+
+.yearly-goal-stat--red .yearly-goal-stat__label {
+    color: #ef4444;
+}
+
+.yearly-goal-stat__label {
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.yearly-goal-stat__value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .yearly-goal-stat {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 480px) {
+    .yearly-goal-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .yearly-goal-stat:last-child {
+        grid-column: 1 / -1;
+    }
+    
+    .yearly-goal-stat__value {
+        font-size: 16px;
+    }
+}
+
 @media (max-width: 640px) {
     .stats-overview {
         grid-template-columns: 1fr;

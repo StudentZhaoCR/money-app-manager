@@ -10606,23 +10606,23 @@ function renderYearlyGoal() {
                 </div>
 
                 <!-- 核心数据区 -->
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+                <div class="yearly-goal-stats">
                     <!-- 目标金额 -->
-                    <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(167, 139, 250, 0.1) 100%); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(139, 92, 246, 0.15);">
-                        <div style="font-size: 11px; color: #8b5cf6; margin-bottom: 4px;">目标金额</div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${goal.amount.toFixed(2)}</div>
+                    <div class="yearly-goal-stat yearly-goal-stat--purple">
+                        <div class="yearly-goal-stat__label">目标金额</div>
+                        <div class="yearly-goal-stat__value">¥${goal.amount.toFixed(2)}</div>
                     </div>
                     
                     <!-- 已赚取 -->
-                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(16, 185, 129, 0.15);">
-                        <div style="font-size: 11px; color: #10b981; margin-bottom: 4px;">已赚取</div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${distribution.totalEarned.toFixed(2)}</div>
+                    <div class="yearly-goal-stat yearly-goal-stat--green">
+                        <div class="yearly-goal-stat__label">已赚取</div>
+                        <div class="yearly-goal-stat__value">¥${distribution.totalEarned.toFixed(2)}</div>
                     </div>
                     
                     <!-- 剩余金额 -->
-                    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(248, 113, 113, 0.1) 100%); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(239, 68, 68, 0.15);">
-                        <div style="font-size: 11px; color: #ef4444; margin-bottom: 4px;">剩余</div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${Math.max(0, distribution.remaining).toFixed(2)}</div>
+                    <div class="yearly-goal-stat yearly-goal-stat--red">
+                        <div class="yearly-goal-stat__label">剩余</div>
+                        <div class="yearly-goal-stat__value">¥${Math.max(0, distribution.remaining).toFixed(2)}</div>
                     </div>
                 </div>
 
