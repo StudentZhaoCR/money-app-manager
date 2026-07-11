@@ -10201,7 +10201,7 @@ function renderYearlyGoal() {
             <!-- 总体进度卡片 -->
             <div style="background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow-card); border: 1px solid var(--border-color);">
                 <!-- 头部：年份和剩余天数 -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div class="yearly-goal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #8b5cf6, #a78bfa); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;">🎯</div>
                         <div>
@@ -10210,7 +10210,7 @@ function renderYearlyGoal() {
                         </div>
                     </div>
                     ${daysRemaining > 0 ? `
-                    <div style="background: linear-gradient(135deg, #f59e0b, #fbbf24); padding: 6px 14px; border-radius: 20px;">
+                    <div class="yearly-goal-days" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); padding: 6px 14px; border-radius: 20px; white-space: nowrap;">
                         <span style="font-size: 12px; font-weight: 600; color: white;">⏰ 剩余${daysRemaining}天</span>
                     </div>
                     ` : ''}
