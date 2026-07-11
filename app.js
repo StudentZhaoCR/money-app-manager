@@ -2581,74 +2581,6 @@ class DataManager {
         };
     }
 
-    // 记录个人支出
-    static addPersonalExpense(expenseData) {
-        const finance = this.getPersonalFinance();
-        const now = new Date();
-        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        
-        const amount = parseFloat(expenseData.amount) || 0;
-        
-        if (amount <= 0) {
-            return { success: false, message: '金额必须大于0' };
-        }
-        
-        if (amount > finance.wallet) {
-            return { success: false, message: `钱包余额不足，当前余额：¥${finance.wallet.toFixed(2)}` };
-        }
-        
-        const newExpense = {
-            id: Date.now().toString(),
-            category: expenseData.category,
-            categoryName: this.getExpenseCategoryName(expenseData.category),
-            amount: amount,
-            date: expenseData.date || today,
-            description: expenseData.description || '',
-            createdAt: new Date().toISOString()
-        };
-        
-        finance.expenses.push(newExpense);
-        finance.wallet -= amount;
-        finance.totalSpent += amount;
-        
-        this.savePersonalFinance(finance);
-        
-        return { 
-            success: true, 
-            message: '支出记录成功',
-            expense: newExpense
-        };
-    }
-
-    // 获取支出分类名称
-    static getExpenseCategoryName(category) {
-        const categoryMap = {
-            'food': '🍔 餐饮',
-            'transport': '🚗 交通',
-            'shopping': '🛍️ 购物',
-            'entertainment': '🎮 娱乐',
-            'housing': '🏠 住房',
-            'medical': '🏥 医疗',
-            'education': '📚 教育',
-            'other': '📦 其他'
-        };
-        return categoryMap[category] || '📦 其他';
-    }
-
-    // 获取支出分类列表
-    static getExpenseCategories() {
-        return [
-            { id: 'food', name: '🍔 餐饮' },
-            { id: 'transport', name: '🚗 交通' },
-            { id: 'shopping', name: '🛍️ 购物' },
-            { id: 'entertainment', name: '🎮 娱乐' },
-            { id: 'housing', name: '🏠 住房' },
-            { id: 'medical', name: '🏥 医疗' },
-            { id: 'education', name: '📚 教育' },
-            { id: 'other', name: '📦 其他' }
-        ];
-    }
-
     // 计算完整的财务统计
     static calculateCompleteFinancialStats() {
         const finance = this.getPersonalFinance();
@@ -2662,10 +2594,6 @@ class DataManager {
             .filter(s => s.date.startsWith(currentMonth))
             .reduce((sum, s) => sum + s.amount, 0);
         
-        const monthlyExpenses = finance.expenses
-            .filter(e => e.date.startsWith(currentMonth))
-            .reduce((sum, e) => sum + e.amount, 0);
-        
         // 计算软件收入本月统计
         const monthlyAppEarnings = this.calculateMonthlyEarnings(now.getFullYear(), now.getMonth() + 1);
         
@@ -2676,19 +2604,15 @@ class DataManager {
             // 个人资金
             personalWallet: finance.wallet,
             personalTotalEarned: finance.totalEarned,
-            personalTotalSpent: finance.totalSpent,
             
             totalWealth: finance.wallet + appEarnings.totalBalance,
             
             // 本月统计
             monthlyIncome: monthlyIncome,
-            monthlyExpenses: monthlyExpenses,
             monthlyAppEarnings: monthlyAppEarnings,
-            monthlyNetSavings: monthlyIncome + monthlyAppEarnings - monthlyExpenses,
             
             // 历史记录
             incomeSources: finance.incomeSources.sort((a, b) => new Date(b.date) - new Date(a.date)),
-            expenses: finance.expenses.sort((a, b) => new Date(b.date) - new Date(a.date)),
             transfers: finance.transfers.sort((a, b) => new Date(b.date) - new Date(a.date))
         };
     }
@@ -3511,79 +3435,6 @@ class DataManager {
                 this.saveData(data);
             }
         }
-        return data;
-    }
-
-    static addExpense(phoneId, appId, expenseData) {
-        const data = this.loadData();
-        const phone = data.phones.find(p => p.id === phoneId);
-        if (phone) {
-            const app = phone.apps.find(a => a.id === appId);
-            if (app) {
-                const expense = {
-                    id: Date.now().toString(),
-                    amount: parseFloat(expenseData.amount),
-                    purpose: expenseData.purpose,
-                    date: expenseData.date,
-                    created: new Date().toISOString()
-                };
-                
-                if (!app.expenses) {
-                    app.expenses = [];
-                }
-                app.expenses.push(expense);
-                app.remainingWithdrawn = parseFloat((app.remainingWithdrawn - expenseData.amount).toFixed(2));
-                app.lastUpdated = new Date().toISOString();
-                
-                this.saveData(data);
-            }
-        }
-        return data;
-    }
-
-    static addTotalExpense(expenseData) {
-        const data = this.loadData();
-        const expense = {
-            id: Date.now().toString(),
-            amount: parseFloat(expenseData.amount),
-            purpose: expenseData.purpose,
-            date: expenseData.date,
-            created: new Date().toISOString()
-        };
-        
-        data.expenses.push(expense);
-        
-        // 按比例分配支出到各个软件
-        const totalWithdrawn = data.phones.flatMap(phone => phone.apps)
-            .reduce((sum, app) => sum + (app.withdrawn || 0), 0);
-        
-        data.phones.forEach(phone => {
-            phone.apps.forEach(app => {
-                const appWithdrawn = app.withdrawn || 0;
-                if (appWithdrawn > 0 && totalWithdrawn > 0) {
-                    const ratio = appWithdrawn / totalWithdrawn;
-                    const appExpense = parseFloat((ratio * expenseData.amount).toFixed(2));
-                    
-                    if (!app.expenses) {
-                        app.expenses = [];
-                    }
-                    
-                    const appExpenseObj = {
-                        id: Date.now().toString() + Math.random(),
-                        amount: appExpense,
-                        purpose: expenseData.purpose,
-                        date: expenseData.date,
-                        created: new Date().toISOString()
-                    };
-                    
-                    app.expenses.push(appExpenseObj);
-                    app.remainingWithdrawn = parseFloat((app.remainingWithdrawn - appExpense).toFixed(2));
-                    app.lastUpdated = new Date().toISOString();
-                }
-            });
-        });
-        
-        this.saveData(data);
         return data;
     }
 
@@ -5026,7 +4877,6 @@ function showPage(pageName) {
     if (pageName === 'stats') renderStats();
     if (pageName === 'settings') renderSettings();
     if (pageName === 'withdraw-records') renderWithdrawRecords();
-    if (pageName === 'expense-records') renderExpenseRecords();
     if (pageName === 'installments') renderInstallments();
     
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
@@ -5226,22 +5076,17 @@ function renderDashboard() {
     const totalApps = data.phones.reduce((sum, phone) => sum + phone.apps.length, 0);
 
     // 计算总提现金额（仅已提现部分，不含余额）
-    const totalWithdrawnAmount = data.phones.reduce((sum, phone) => {
+    const totalWithdrawn = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => {
             return appSum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         }, 0);
     }, 0);
-    // 计算总已赚金额（余额 + 已提现）
-    const totalEarnedAmount = data.phones.reduce((sum, phone) => {
+    // 计算总余额（未提现的金额）
+    const totalBalance = data.phones.reduce((sum, phone) => {
         return sum + phone.apps.reduce((appSum, app) => {
-            return appSum + calculateAppEarned(app);
+            return appSum + (app.balance || 0);
         }, 0);
     }, 0);
-    const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
-    // 已还分期总额
-    const totalRepaid = data.installments ? data.installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0) : 0;
-    // 可用资金 = 总已赚金额 - 总支出 - 已还分期
-    const netEarning = totalEarnedAmount - totalExpenses - totalRepaid;
 
     // 统计有提现记录的软件数量
     const appsWithWithdrawals = data.phones.reduce((sum, phone) => {
@@ -5312,14 +5157,14 @@ function renderDashboard() {
                     <span class="kpi-tile__delta">${appsWithWithdrawals} 有提现</span>
                 </div>
                 <div class="kpi-tile kpi-tile--violet" onclick="showPage('stats')">
-                    <div class="kpi-tile__label">💰 可用资金</div>
-                    <div class="kpi-tile__value">¥${netEarning.toFixed(2)}</div>
-                    <span class="kpi-tile__delta">净收益</span>
+                    <div class="kpi-tile__label">💸 累计提现</div>
+                    <div class="kpi-tile__value">¥${totalWithdrawn.toFixed(2)}</div>
+                    <span class="kpi-tile__delta">已提现金额</span>
                 </div>
                 <div class="kpi-tile kpi-tile--amber" onclick="showPage('stats')">
-                    <div class="kpi-tile__label">✅ 有提现软件</div>
-                    <div class="kpi-tile__value">${appsWithWithdrawals}</div>
-                    <span class="kpi-tile__delta">查看明细 →</span>
+                    <div class="kpi-tile__label">💵 当前余额</div>
+                    <div class="kpi-tile__value">¥${totalBalance.toFixed(2)}</div>
+                    <span class="kpi-tile__delta">未提现金额</span>
                 </div>
             </div>
         `;
@@ -5330,9 +5175,6 @@ function renderDashboard() {
 
     // 渲染收入日历
     renderIncomeCalendar();
-
-    // 渲染软件收益排行（基于余额变化）
-    renderAppEarningsRanking();
 
     // 渲染软件赚取分析
     renderAppEarningAnalysis();
@@ -5382,13 +5224,17 @@ function renderNextPlay() {
             else if (daysUntilNextPlay <= 7) statusLevel = 3;
             else statusLevel = 4;
             
-            appList.push({
+            const yearDays = 365;
+            const yearTarget = minWithdraw * yearDays;
+        
+        appList.push({
                 id: app.id,
                 name: app.name,
                 phoneName: phone.name,
                 phoneId: phone.id,
                 totalEarned: totalEarned,
                 minWithdraw: minWithdraw,
+                yearTarget: yearTarget,
                 daysCanWait: daysCanWait,
                 remainingAmount: remainingAmount,
                 nextPlayDate: nextPlayDate,
@@ -5497,7 +5343,7 @@ function renderNextPlay() {
             statusColor = '#10b981';
         }
 
-        const progressPercent = Math.min(100, (app.remainingAmount / app.minWithdraw) * 100);
+        const yearProgressPercent = Math.min(100, (app.totalEarned / app.yearTarget) * 100);
         
         html += `
             <div class="next-play-item ${statusClass}" data-status="${app.statusLevel}" data-name="${app.name}" data-phone="${app.phoneName}">
@@ -5513,8 +5359,8 @@ function renderNextPlay() {
                             <span class="next-play-item__stat-value">¥${app.totalEarned.toFixed(2)}</span>
                         </div>
                         <div class="next-play-item__stat">
-                            <span class="next-play-item__stat-label">最小提现</span>
-                            <span class="next-play-item__stat-value">¥${app.minWithdraw.toFixed(2)}</span>
+                            <span class="next-play-item__stat-label">年目标</span>
+                            <span class="next-play-item__stat-value">¥${app.yearTarget.toFixed(2)}</span>
                         </div>
                         <div class="next-play-item__stat">
                             <span class="next-play-item__stat-label">当前余额</span>
@@ -5523,10 +5369,10 @@ function renderNextPlay() {
                     </div>
                     <div class="next-play-item__progress">
                         <div class="next-play-item__progress-bar">
-                            <div class="next-play-item__progress-fill" style="width: ${progressPercent}%; background: ${statusColor};"></div>
+                            <div class="next-play-item__progress-fill" style="width: ${yearProgressPercent}%; background: ${statusColor};"></div>
                         </div>
                         <span class="next-play-item__progress-text">
-                            剩余可用: ¥${app.remainingAmount.toFixed(2)} / ¥${app.minWithdraw.toFixed(2)}
+                            年进度: ¥${app.totalEarned.toFixed(2)} / ¥${app.yearTarget.toFixed(2)} (${yearProgressPercent.toFixed(1)}%)
                         </span>
                     </div>
                 </div>
@@ -6436,79 +6282,6 @@ function showAppDetailModal(appId) {
     showModal('软件详情', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
-}
-
-// 渲染软件收益排行（基于余额变化）
-function renderAppEarningsRanking() {
-    const card = document.getElementById('app-earnings-ranking-card');
-    const content = document.getElementById('app-earnings-ranking-content');
-    if (!card || !content) return;
-
-    const data = DataManager.loadData();
-    
-    // 收集所有有收益的软件
-    const appEarnings = [];
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            const stats = DataManager.getAppEarningsStats(app);
-            if (stats.total > 0 || app.dailyEarnings) {
-                appEarnings.push({
-                    phoneName: phone.name,
-                    appName: app.name,
-                    appId: app.id,
-                    phoneId: phone.id,
-                    ...stats
-                });
-            }
-        });
-    });
-
-    if (appEarnings.length === 0) {
-        card.style.display = 'none';
-        return;
-    }
-
-    card.style.display = 'block';
-
-    // 按今日收益排序
-    const sortedByToday = [...appEarnings].sort((a, b) => b.today - a.today);
-
-    let html = '';
-
-    // 今日收益排行 - 毛玻璃效果
-    if (sortedByToday.some(a => a.today > 0)) {
-        html += `
-            <div style="margin-bottom: 20px;">
-                <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-                    📅 今日收益排行
-                </div>
-        `;
-
-        sortedByToday.forEach((app, index) => {
-            if (app.today > 0) {
-                const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-                const rankColors = ['#fbbf24', '#94a3b8', '#b45309', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b'];
-                const borderColor = rankColors[index] || 'rgba(255,255,255,0.3)';
-                html += `
-                    <div style="position: relative; background: linear-gradient(135deg, rgba(17, 153, 142, 0.3) 0%, rgba(56, 239, 125, 0.3) 100%); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; border: 1px solid ${borderColor}; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);" onclick="showAppDetailModal('${app.appId}')">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 20px; width: 32px; text-align: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));">${medals[index] || (index + 1)}</span>
-                            <div style="flex: 1;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-weight: 600; color: #ffffff; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">${app.phoneName} - ${app.appName}</span>
-                                    <span style="font-weight: 800; color: #fbbf24; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">¥${app.today.toFixed(2)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-        });
-
-        html += `</div>`;
-    }
-
-    content.innerHTML = html || '<div style="text-align: center; padding: 20px; color: var(--text-secondary);">暂无收益数据，请编辑软件余额记录收益</div>';
 }
 
 // ==================== 提现日历功能 ====================
@@ -7519,9 +7292,8 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         // 立即更新首页总赚取金额
                         renderTotalEarnings();
                         
-                        // 立即更新年度目标和软件收益排行
+                        // 立即更新年度目标
                         renderYearlyGoal();
-                        renderAppEarningsRanking();
                         
                         // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
                         if (fromQuickEdit) {
@@ -7975,9 +7747,8 @@ function openQuickWithdrawModal(index) {
                     // 更新首页总赚取金额
                     renderTotalEarnings();
                     
-                    // 立即更新年度目标和软件收益排行
+                    // 立即更新年度目标
                     renderYearlyGoal();
-                    renderAppEarningsRanking();
                     
                     // 返回到软件选择页面
                     setTimeout(() => {
@@ -8100,20 +7871,15 @@ function renderStats() {
     const totalWithdrawn = allAppsWithPhone.reduce((sum, app) => {
         return sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     }, 0);
-    // 总已赚金额（余额 + 已提现）
-    const totalEarned = allAppsWithPhone.reduce((sum, app) => {
-        return sum + calculateAppEarned(app);
+    // 计算总余额（未提现的金额）
+    const totalBalance = allAppsWithPhone.reduce((sum, app) => {
+        return sum + (app.balance || 0);
     }, 0);
-    const totalExpenses = data.expenses ? data.expenses.reduce((sum, e) => sum + e.amount, 0) : 0;
-    // 可用资金 = 总已赚金额 - 总支出
-    const netEarning = totalEarned - totalExpenses;
     
     const statsTotalEarnedEl = document.getElementById('stats-total-earned');
     if (statsTotalEarnedEl) statsTotalEarnedEl.textContent = `¥${totalWithdrawn.toFixed(2)}`;
-    const statsTotalExpensesEl = document.getElementById('stats-total-expenses');
-    if (statsTotalExpensesEl) statsTotalExpensesEl.textContent = `¥${totalExpenses.toFixed(2)}`;
     const statsTotalBalanceEl = document.getElementById('stats-total-balance');
-    if (statsTotalBalanceEl) statsTotalBalanceEl.textContent = `¥${netEarning.toFixed(2)}`;
+    if (statsTotalBalanceEl) statsTotalBalanceEl.textContent = `¥${totalBalance.toFixed(2)}`;
     
     // 渲染各软件收益排行
     const container = document.getElementById('app-withdraw-list');
@@ -8166,65 +7932,6 @@ function renderStats() {
 // 渲染设置页面
 function renderSettings() {
     const data = DataManager.loadData();
-
-    // 计算待支出余额（总提现金额 - 总支出金额 - 已还分期）
-    // 总提现金额 = 所有软件的 withdrawn + historicalWithdrawn
-    let totalWithdrawnAmount = 0;
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            totalWithdrawnAmount += (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
-        });
-    });
-
-    // 计算总支出金额
-    let totalExpenses = 0;
-    if (data.expenses && data.expenses.length > 0) {
-        totalExpenses = data.expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    }
-
-    // 已还分期总额
-    const totalRepaid = data.installments ? data.installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0) : 0;
-
-    // 待支出金额 = 总提现金额 - 总支出金额 - 已还分期
-    const pendingExpenseBalance = totalWithdrawnAmount - totalExpenses - totalRepaid;
-    document.getElementById('total-withdrawn').value = pendingExpenseBalance.toFixed(2);
-}
-
-// 添加支出
-function addExpense() {
-    const amount = parseFloat(document.getElementById('expense-amount').value);
-    const purpose = document.getElementById('expense-purpose').value.trim();
-    const date = document.getElementById('expense-date').value;
-    const totalWithdrawn = parseFloat(document.getElementById('total-withdrawn').value);
-    
-    if (!amount || amount <= 0) {
-        showToast('请输入有效的支出金额');
-        return;
-    }
-    
-    if (!purpose) {
-        showToast('请输入支出用途');
-        return;
-    }
-    
-    if (!date) {
-        showToast('请选择支出日期');
-        return;
-    }
-    
-    if (amount > totalWithdrawn) {
-        showToast('支出金额不能超过总提现金额');
-        return;
-    }
-    
-    // 添加总支出记录
-    DataManager.addTotalExpense({ amount, purpose, date });
-    
-    // 重置表单
-    document.getElementById('expense-amount').value = '';
-    document.getElementById('expense-purpose').value = '';
-    
-    renderSettings();
 
 }
 
@@ -8308,102 +8015,6 @@ function renderWithdrawRecords() {
 }
 
 // 渲染支出记录
-function renderExpenseRecords() {
-    const data = DataManager.loadData();
-    const container = document.getElementById('expense-records-list');
-    
-    let expenses = data.expenses || [];
-    
-    // 为每条记录添加类别
-    expenses = expenses.map(e => ({
-        ...e,
-        category: getExpenseCategory(e.purpose)
-    }));
-    
-    // 计算总支出
-    const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
-    
-    // 按日期排序
-    expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    if (expenses.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无支出记录</div>';
-        return;
-    }
-    
-    // 添加总支出卡片 + 记录列表
-    container.innerHTML = `
-        <div class="expense-total-card" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border: 2px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: center;">
-            <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">💰 总支出</div>
-            <div style="font-size: 32px; font-weight: 700; color: #ef4444;">¥${totalExpense.toFixed(2)}</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">共 ${expenses.length} 笔支出记录</div>
-        </div>
-        
-        <div class="expense-records-list">
-            ${expenses.map(e => `
-                <div class="expense-record-item">
-                    <div class="expense-record-header">
-                        <span class="expense-tag">💰 ${e.category}</span>
-                        <span class="expense-date">${e.date}</span>
-                    </div>
-                    <div class="expense-divider"></div>
-                    <div class="expense-record-body">
-                        <div class="expense-info">
-                            <h4 class="expense-purpose">${e.purpose}</h4>
-                        </div>
-                        <div class="expense-amount">-¥${e.amount.toFixed(2)}</div>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
-
-// 获取支出类别
-function getExpenseCategory(purpose) {
-    if (!purpose) return '其他';
-    const p = purpose.toLowerCase();
-    
-    // 话费相关
-    if (p.includes('话费') || p.includes('充值') || p.includes('流量') || p.includes('宽带') || p.includes('移动') || p.includes('联通') || p.includes('电信')) {
-        return '话费';
-    }
-    // 餐饮相关
-    if (p.includes('餐') || p.includes('饭') || p.includes('吃') || p.includes('外卖') || p.includes('奶茶') || p.includes('咖啡') || p.includes('零食')) {
-        return '餐饮';
-    }
-    // 交通相关
-    if (p.includes('车') || p.includes('油') || p.includes('公交') || p.includes('地铁') || p.includes('打车') || p.includes('滴滴') || p.includes('交通')) {
-        return '交通';
-    }
-    // 购物相关
-    if (p.includes('买') || p.includes('购') || p.includes('淘宝') || p.includes('京东') || p.includes('拼多多') || p.includes('衣服') || p.includes('鞋')) {
-        return '购物';
-    }
-    // 娱乐相关
-    if (p.includes('游戏') || p.includes('会员') || p.includes('视频') || p.includes('电影') || p.includes('娱乐') || p.includes('ktv')) {
-        return '娱乐';
-    }
-    // 医疗相关
-    if (p.includes('药') || p.includes('医院') || p.includes('看病') || p.includes('医疗') || p.includes('体检')) {
-        return '医疗';
-    }
-    // 住房相关
-    if (p.includes('房') || p.includes('租') || p.includes('水电') || p.includes('物业') || p.includes('煤气')) {
-        return '住房';
-    }
-    // 学习相关
-    if (p.includes('书') || p.includes('课') || p.includes('学习') || p.includes('培训') || p.includes('考试')) {
-        return '学习';
-    }
-    // 宠物相关
-    if (p.includes('猫') || p.includes('狗') || p.includes('宠物') || p.includes('粮') || p.includes('疫苗')) {
-        return '宠物';
-    }
-    
-    return '其他';
-}
-
 // 渲染分期还款页面
 function renderInstallments() {
     const summary = DataManager.getInstallmentSummary();

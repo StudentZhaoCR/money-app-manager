@@ -70,23 +70,7 @@
                 </div>
             </div>
 
-            <!-- 软件收益排行 - 毛玻璃效果 -->
-            <div class="card mt-4" id="app-earnings-ranking-card" style="display: none; position: relative; background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%); border-radius: 20px; padding: 20px; overflow: hidden;">
-                <!-- 背景装饰圆形 -->
-                <div style="position: absolute; top: -40px; right: -40px; width: 100px; height: 100px; background: rgba(255,255,255,0.25); border-radius: 50%; filter: blur(25px);"></div>
-                <div style="position: absolute; bottom: -30px; left: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(20px);"></div>
 
-                <!-- 毛玻璃卡片内容 -->
-                <div style="position: relative; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.25); padding: 20px;">
-                    <div class="section-header" style="margin-bottom: 16px;">
-                        <div class="section-title" style="color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">💰 软件收益排行</div>
-                        <div class="section-divider" style="background: rgba(255,255,255,0.3);"></div>
-                    </div>
-                    <div id="app-earnings-ranking-content">
-                        <!-- 排行内容将由JS生成 -->
-                    </div>
-                </div>
-            </div>
 
         </div>
 
@@ -167,17 +151,10 @@
                         <div class="stats-card__value" id="stats-total-earned">¥0.00</div>
                     </div>
                 </div>
-                <div class="stats-card stats-card--danger">
-                    <div class="stats-card__icon">💳</div>
-                    <div class="stats-card__content">
-                        <div class="stats-card__label">支出金额</div>
-                        <div class="stats-card__value" id="stats-total-expenses">¥0.00</div>
-                    </div>
-                </div>
                 <div class="stats-card stats-card--success">
                     <div class="stats-card__icon">💵</div>
                     <div class="stats-card__content">
-                        <div class="stats-card__label">可用资金</div>
+                        <div class="stats-card__label">当前余额</div>
                         <div class="stats-card__value" id="stats-total-balance">¥0.00</div>
                     </div>
                 </div>
@@ -306,34 +283,6 @@
                     </div>
                 </div>
 
-                <!-- 支出管理 -->
-                <div class="settings-card card mb-4">
-                    <div class="settings-card-header">
-                        <span class="settings-icon">💰</span>
-                        <span class="settings-title">支出管理</span>
-                    </div>
-                    <div class="form-group mb-2">
-                        <label class="form-label" style="font-size: 12px;">可用资金 (元)</label>
-                        <input type="text" id="total-withdrawn" class="form-input" disabled style="font-size: 13px;">
-                    </div>
-                    <div class="form-group mb-2">
-                        <label class="form-label" style="font-size: 12px;">支出金额</label>
-                        <input type="number" id="expense-amount" class="form-input" placeholder="输入金额" step="0.01" style="font-size: 13px;">
-                    </div>
-                    <div class="form-group mb-2">
-                        <label class="form-label" style="font-size: 12px;">支出用途</label>
-                        <input type="text" id="expense-purpose" class="form-input" placeholder="输入用途" style="font-size: 13px;">
-                    </div>
-                    <div class="form-group mb-3">
-                        <label class="form-label" style="font-size: 12px;">支出日期</label>
-                        <input type="date" id="expense-date" class="form-input" style="font-size: 13px;">
-                    </div>
-                    <div class="flex gap-4">
-                        <button class="btn btn-primary flex-1" onclick="addExpense()">💾 保存支出</button>
-                        <button class="btn btn-secondary flex-1" onclick="showPage('expense-records')">📋 记录</button>
-                    </div>
-                </div>
-
                 <!-- 数据导出 -->
                 <div class="settings-card card mb-4">
                     <div class="settings-card-header">
@@ -371,16 +320,7 @@
             </div>
         </div>
 
-        <!-- 支出记录页面 -->
-        <div class="page" id="page-expense-records">
-            <div class="page-header">
-                <button class="btn btn-secondary" onclick="showPage('settings')">返回</button>
-                <div class="section-title">支出记录</div>
-            </div>
-            <div class="expense-records" id="expense-records-list">
-                <div class="empty-state">暂无支出记录</div>
-            </div>
-        </div>
+
 
         <!-- 每日赚取记录页面 -->
         <div class="page" id="page-daily-earnings">

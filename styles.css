@@ -2379,19 +2379,6 @@ body {
     color: var(--text-muted);
 }
 
-/* 支出记录样式 */
-.expense-record-item {
-    background: linear-gradient(135deg, #fff0f0 0%, #ffe8e8 100%);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow-card);
-    border: 3px solid var(--error-color);
-    transition: all var(--transition-normal);
-    position: relative;
-    overflow: hidden;
-}
-
 /* 分期还款样式 */
 .installment-list {
     margin-top: 20px;
@@ -2557,106 +2544,6 @@ body {
 .installment-item.normal {
     border-color: var(--primary-light);
     background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
-}
-
-.expense-record-item::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(255, 107, 107, 0.1) 0%, transparent 70%);
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-}
-
-.expense-record-item:hover::before {
-    opacity: 1;
-}
-
-.expense-record-item:hover {
-    border-color: var(--error-color);
-    transform: translateY(-3px) scale(1.01);
-    box-shadow: var(--shadow-hover);
-}
-
-.expense-record-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 2px dashed rgba(255, 107, 107, 0.3);
-}
-
-.expense-tag {
-    display: inline-block;
-    background: linear-gradient(135deg, var(--error-color), #dc2626);
-    color: white;
-    padding: 6px 14px;
-    border-radius: var(--radius-full);
-    font-size: 12px;
-    font-weight: 700;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
-    box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
-    font-family: var(--font-secondary);
-}
-
-.expense-date {
-    font-size: 13px;
-    color: var(--text-muted);
-    font-weight: 600;
-    font-family: var(--font-secondary);
-}
-
-.expense-divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
-    margin: 12px 0;
-    background-size: 20px 1px;
-    background-repeat: repeat-x;
-}
-
-.expense-record-body {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.expense-info {
-    flex: 1;
-}
-
-.expense-purpose {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--text-primary);
-    margin-bottom: 8px;
-    line-height: 1.4;
-    font-family: var(--font-display);
-    /* 增强可读性 */
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
-}
-
-.expense-source {
-    font-size: 14px;
-    color: var(--text-secondary);
-    font-weight: 600;
-    font-family: var(--font-secondary);
-}
-
-.expense-amount {
-    font-size: 28px;
-    font-weight: 900;
-    color: var(--error-color);
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-    transition: transform var(--transition-fast);
-    font-family: var(--font-display);
-}
-
-.expense-record-item:hover .expense-amount {
-    transform: scale(1.05);
 }
 
 /* 统计页面概览卡片 */
@@ -3198,24 +3085,6 @@ body {
     input[type="date"] {
         width: 100%;
         box-sizing: border-box;
-    }
-    
-    /* 支出表单适配 */
-    .expense-form .form-group {
-        margin-bottom: 16px;
-    }
-    
-    .expense-form .form-label {
-        font-size: 13px;
-    }
-    
-    .expense-form .flex {
-        flex-direction: column;
-        gap: 12px;
-    }
-    
-    .expense-form .flex .btn {
-        width: 100%;
     }
     
     /* 手机卡片适配 - 保持水平布局 */
@@ -4173,13 +4042,14 @@ body {
     
     /* 手机卡片小屏幕适配 */
     .phone-header-top {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
+        flex-wrap: nowrap;
     }
     
     .phone-header-actions {
-        width: 100%;
-        justify-content: space-between;
+        flex-shrink: 0;
+        justify-content: flex-end;
     }
     
     .phone-name-capsule {
@@ -4193,6 +4063,19 @@ body {
     
     .daily-value {
         font-size: 13px;
+    }
+    
+    /* 下一次玩页面手机端移除红色边框 */
+    .next-play-item {
+        border-left-width: 0;
+    }
+    
+    .next-play-item--urgent,
+    .next-play-item--warning,
+    .next-play-item--soon,
+    .next-play-item--relax {
+        background: transparent;
+        border-left: none;
     }
 }
 
@@ -5176,25 +5059,85 @@ body {
 .next-play-item__progress {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
 
 .next-play-item__progress-bar {
-    height: 6px;
-    background: var(--bg-cream);
+    height: 10px;
+    background: linear-gradient(90deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.05) 100%);
     border-radius: 9999px;
     overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.next-play-item__progress-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 20px,
+        rgba(255,255,255,0.05) 20px,
+        rgba(255,255,255,0.05) 40px
+    );
 }
 
 .next-play-item__progress-fill {
     height: 100%;
     border-radius: 9999px;
-    transition: width var(--transition-normal);
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.next-play-item__progress-fill::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(255,255,255,0.4) 0%,
+        rgba(255,255,255,0.1) 50%,
+        rgba(255,255,255,0.3) 100%
+    );
+    animation: progressShimmer 2s infinite;
+}
+
+.next-play-item__progress-fill::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.6) 0%, transparent 50%);
+    animation: progressPulse 3s infinite;
+}
+
+@keyframes progressShimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+@keyframes progressPulse {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.5; }
 }
 
 .next-play-item__progress-text {
     font-size: 11px;
     color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .next-play-item__status {
