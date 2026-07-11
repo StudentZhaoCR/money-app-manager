@@ -8112,53 +8112,14 @@ function renderStats() {
     const statsTotalBalanceEl = document.getElementById('stats-total-balance');
     if (statsTotalBalanceEl) statsTotalBalanceEl.textContent = `¥${totalBalance.toFixed(2)}`;
     
-    // 渲染各软件收益排行
-    const container = document.getElementById('app-withdraw-list');
-    if (allAppsWithPhone.length === 0) {
-        container.innerHTML = '<div class="empty-state">暂无软件数据</div>';
-        return;
-    }
-    
-    const sortedApps = [...allAppsWithPhone].sort((a, b) => {
-        const earnedA = (a.withdrawn || 0) + (a.balance || 0);
-        const earnedB = (b.withdrawn || 0) + (b.balance || 0);
-        return earnedB - earnedA;
-    });
-    
-    container.innerHTML = sortedApps.map((app, index) => {
-        const withdrawalCount = app.withdrawals ? app.withdrawals.length : 0;
-        const totalEarned = (app.withdrawn || 0) + (app.balance || 0);
-        
-        return `
-            <div class="stats-rank-item" data-app-id="${app.id}">
-                <div class="stats-rank-number">${index + 1}</div>
-                <div class="stats-rank-info">
-                    <div class="stats-rank-name">${app.name}</div>
-                    <div class="stats-rank-phone">📱 ${app.phoneName}</div>
-                </div>
-                <div class="stats-rank-stats">
-                    <div class="stats-rank-stat">
-                        <span class="stats-rank-stat-label">已赚</span>
-                        <span class="stats-rank-stat-value earned">¥${totalEarned.toFixed(2)}</span>
-                    </div>
-                    <div class="stats-rank-stat">
-                        <span class="stats-rank-stat-label">提现</span>
-                        <span class="stats-rank-stat-value withdrawn">¥${(app.withdrawn || 0).toFixed(2)}</span>
-                    </div>
-                    <div class="stats-rank-stat">
-                        <span class="stats-rank-stat-label">余额</span>
-                        <span class="stats-rank-stat-value balance">¥${(app.balance || 0).toFixed(2)}</span>
-                    </div>
-                </div>
-                <span class="stats-rank-status ${withdrawalCount > 0 ? 'has-record' : 'new'}">
-                    ${withdrawalCount > 0 ? '有记录' : '新软件'}
-                </span>
-            </div>
-        `;
-    }).join('');
-    
     // 渲染月收益记录
     renderMonthlyEarnings();
+    
+    // 渲染收益周报
+    renderWeeklyReport();
+    
+    // 渲染手机收益对比
+    renderPhoneComparison();
 }
 
 // 渲染月收益记录
@@ -8257,6 +8218,216 @@ function toggleMonthlyDetail(monthKey) {
         detail.style.display = 'none';
         arrow.textContent = '▼';
     }
+}
+
+// 渲染收益周报
+function renderWeeklyReport() {
+    const container = document.getElementById('weekly-report-content');
+    if (!container) return;
+
+    const allDailyEarnings = DataManager.getAllDailyEarnings();
+    
+    if (allDailyEarnings.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 12px;">📋</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无收益数据</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const earningsMap = {};
+    allDailyEarnings.forEach(({ date, amount }) => {
+        earningsMap[date] = amount;
+    });
+    
+    // 计算本周（周一到周日）
+    const now = new Date();
+    const dayOfWeek = now.getDay() || 7; // 周日=7
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek + 1);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    // 上周
+    const lastMonday = new Date(monday);
+    lastMonday.setDate(monday.getDate() - 7);
+    const lastSunday = new Date(monday);
+    lastSunday.setDate(monday.getDate() - 1);
+    
+    const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    
+    // 本周收益
+    let thisWeekTotal = 0;
+    let thisWeekDays = 0;
+    const thisWeekDaily = [];
+    for (let d = new Date(monday); d <= sunday; d.setDate(d.getDate() + 1)) {
+        const ds = formatDate(d);
+        const amt = earningsMap[ds] || 0;
+        thisWeekTotal += amt;
+        if (amt > 0) thisWeekDays++;
+        thisWeekDaily.push({ date: ds, amount: amt, isToday: ds === formatDate(now) });
+    }
+    
+    // 上周收益
+    let lastWeekTotal = 0;
+    for (let d = new Date(lastMonday); d <= lastSunday; d.setDate(d.getDate() + 1)) {
+        const ds = formatDate(d);
+        lastWeekTotal += earningsMap[ds] || 0;
+    }
+    
+    // 环比增长率
+    let growthRate = 0;
+    let growthText = '—';
+    let growthClass = 'neutral';
+    if (lastWeekTotal > 0) {
+        growthRate = ((thisWeekTotal - lastWeekTotal) / lastWeekTotal * 100);
+        growthText = (growthRate >= 0 ? '+' : '') + growthRate.toFixed(1) + '%';
+        growthClass = growthRate >= 0 ? 'up' : 'down';
+    } else if (thisWeekTotal > 0) {
+        growthText = '新增';
+        growthClass = 'up';
+    }
+    
+    const avgDaily = thisWeekDays > 0 ? (thisWeekTotal / thisWeekDays).toFixed(2) : '0.00';
+    const maxDaily = Math.max(...thisWeekDaily.map(d => d.amount), 1);
+    const weekRange = `${formatDate(monday).substring(5)} ~ ${formatDate(sunday).substring(5)}`;
+    
+    let html = `
+        <div style="padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <div>
+                    <div style="font-size: 13px; color: var(--text-secondary);">${weekRange}</div>
+                    <div style="font-size: 24px; font-weight: 700; color: var(--primary-color); margin-top: 4px;">¥${thisWeekTotal.toFixed(2)}</div>
+                </div>
+                <div class="weekly-growth ${growthClass}">
+                    ${growthClass === 'up' ? '📈' : growthClass === 'down' ? '📉' : '➖'} ${growthText}
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                <div style="background: var(--bg-primary); border-radius: 10px; padding: 12px;">
+                    <div style="font-size: 11px; color: var(--text-secondary);">日均收益</div>
+                    <div style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">¥${avgDaily}</div>
+                </div>
+                <div style="background: var(--bg-primary); border-radius: 10px; padding: 12px;">
+                    <div style="font-size: 11px; color: var(--text-secondary);">收益天数</div>
+                    <div style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${thisWeekDays} / 7天</div>
+                </div>
+            </div>
+            
+            <!-- 每日柱状图 -->
+            <div class="weekly-chart">
+                ${thisWeekDaily.map(d => {
+                    const dayLabel = ['一', '二', '三', '四', '五', '六', '日'][new Date(d.date).getDay() ? new Date(d.date).getDay() - 1 : 6];
+                    const barHeight = d.amount > 0 ? (d.amount / maxDaily * 100).toFixed(0) : 0;
+                    return `
+                        <div class="weekly-chart__item">
+                            <div class="weekly-chart__bar-wrapper">
+                                <div class="weekly-chart__bar ${d.isToday ? 'today' : ''}" style="height: ${barHeight}%">
+                                    ${d.amount > 0 ? `<span class="weekly-chart__value">¥${d.amount.toFixed(1)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="weekly-chart__label ${d.isToday ? 'today' : ''}">${dayLabel}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary);">
+                <span>上周收益: ¥${lastWeekTotal.toFixed(2)}</span>
+                <span>本周 vs 上周: ${growthText}</span>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// 渲染手机收益对比
+function renderPhoneComparison() {
+    const container = document.getElementById('phone-comparison-content');
+    if (!container) return;
+
+    const data = DataManager.loadData();
+    
+    if (!data.phones || data.phones.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 12px;">📲</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无手机数据</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const phoneStats = data.phones.map(phone => {
+        const apps = phone.apps || [];
+        const totalBalance = apps.reduce((sum, app) => sum + (app.balance || 0), 0);
+        const totalWithdrawn = apps.reduce((sum, app) => sum + (app.withdrawn || 0) + (app.historicalWithdrawn || 0), 0);
+        const totalEarned = totalBalance + totalWithdrawn;
+        const appCount = apps.length;
+        
+        return {
+            id: phone.id,
+            name: phone.name,
+            appCount,
+            totalBalance,
+            totalWithdrawn,
+            totalEarned
+        };
+    });
+    
+    phoneStats.sort((a, b) => b.totalEarned - a.totalEarned);
+    
+    const maxEarned = Math.max(...phoneStats.map(p => p.totalEarned), 1);
+    
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
+    
+    let html = `
+        <div style="padding: 16px;">
+            ${phoneStats.map((phone, index) => {
+                const color = colors[index % colors.length];
+                const barWidth = (phone.totalEarned / maxEarned * 100).toFixed(1);
+                const isTop = index === 0 && phone.totalEarned > 0;
+                
+                return `
+                    <div class="phone-comparison-item">
+                        <div class="phone-comparison-header">
+                            <div class="phone-comparison-name">
+                                <span class="phone-comparison-rank" style="background: ${color};">${index + 1}</span>
+                                ${phone.name}
+                                ${isTop ? '<span class="phone-comparison-crown">👑</span>' : ''}
+                            </div>
+                            <div class="phone-comparison-earned">¥${phone.totalEarned.toFixed(2)}</div>
+                        </div>
+                        
+                        <div class="phone-comparison-bar">
+                            <div class="phone-comparison-bar-fill" style="width: ${barWidth}%; background: linear-gradient(90deg, ${color}, ${color}aa);"></div>
+                        </div>
+                        
+                        <div class="phone-comparison-stats">
+                            <div class="phone-comparison-stat">
+                                <span class="phone-comparison-stat-label">软件数</span>
+                                <span class="phone-comparison-stat-value">${phone.appCount}</span>
+                            </div>
+                            <div class="phone-comparison-stat">
+                                <span class="phone-comparison-stat-label">当前余额</span>
+                                <span class="phone-comparison-stat-value" style="color: var(--primary-color);">¥${phone.totalBalance.toFixed(2)}</span>
+                            </div>
+                            <div class="phone-comparison-stat">
+                                <span class="phone-comparison-stat-label">累计提现</span>
+                                <span class="phone-comparison-stat-value" style="color: var(--success-color);">¥${phone.totalWithdrawn.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+    
+    container.innerHTML = html;
 }
 
 // 渲染设置页面
