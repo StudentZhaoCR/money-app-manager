@@ -2838,16 +2838,49 @@ body {
     }
     
     .yearly-goal-header {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        margin-bottom: 14px !important;
+    }
+    
+    .yearly-goal-header > div:first-child {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
         gap: 8px;
-        margin-bottom: 16px;
+    }
+    
+    .yearly-goal-icon {
+        width: 30px !important;
+        height: 30px !important;
+        font-size: 15px !important;
+        flex-shrink: 0;
+    }
+    
+    .yearly-goal-title {
+        font-size: 13px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .yearly-goal-mode {
+        font-size: 10px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
     .yearly-goal-days {
-        align-self: flex-end;
-        padding: 4px 12px;
-        font-size: 11px !important;
+        padding: 3px 10px !important;
+        flex-shrink: 0;
+        margin-left: 8px;
+    }
+    
+    .yearly-goal-days span {
+        font-size: 10px !important;
     }
 }
 
