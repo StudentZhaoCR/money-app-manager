@@ -4964,6 +4964,35 @@ body {
 .kpi-tile--amber  { background: linear-gradient(135deg, #fbbf24 0%, #fcd34d 100%); }
 .kpi-tile--amber::after  { bottom: -25px; right: 10px; }
 
+/* 软件到期提醒 */
+.expiring-app-item {
+    transition: all var(--transition-fast);
+}
+
+.expiring-app-item:hover {
+    background: var(--bg-cream);
+    border-color: var(--primary-color);
+    transform: translateX(4px);
+}
+
+/* 收益趋势图表 */
+.earnings-chart-container {
+    height: 180px;
+    position: relative;
+}
+
+/* 适配小屏 */
+@media (max-width: 380px) {
+    .hero-card__value { font-size: 32px; }
+    .kpi-tile__value { font-size: 22px; }
+}
+
+@media (max-width: 480px) {
+    .earnings-chart-container {
+        height: 150px;
+    }
+}
+
 /* 下一次玩页面样式 */
 .next-play-stats {
     display: grid;

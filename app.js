@@ -5182,6 +5182,12 @@ function renderDashboard() {
     // 渲染年度目标
     renderYearlyGoal();
 
+    // 渲染软件到期提醒
+    renderExpiringApps();
+
+    // 渲染收益趋势图表
+    renderEarningsChart();
+
     // 更新今日收益显示
     updateTodayEarnings();
 }
@@ -5456,6 +5462,231 @@ function buildSparklineSvg(values, width, height) {
         <path d="${linePath}" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.5" fill="#fff"/>
     `;
+}
+
+function renderExpiringApps() {
+    const container = document.getElementById('expiring-apps-content');
+    if (!container) return;
+
+    const data = DataManager.loadData();
+    const today = new Date();
+    
+    const expiringApps = [];
+    
+    data.phones.forEach(phone => {
+        (phone.apps || []).forEach(app => {
+            const totalEarned = calculateAppEarned(app);
+            const minWithdraw = app.minWithdraw || 0.3;
+            const daysCanWait = Math.floor(totalEarned / minWithdraw);
+            const daysUntilNextPlay = daysCanWait;
+            
+            if (daysUntilNextPlay <= 3 && daysUntilNextPlay >= 0) {
+                const nextPlayDate = new Date(today);
+                nextPlayDate.setDate(today.getDate() + daysUntilNextPlay);
+                
+                expiringApps.push({
+                    name: app.name,
+                    phoneName: phone.name,
+                    phoneId: phone.id,
+                    appId: app.id,
+                    daysUntilNextPlay: daysUntilNextPlay,
+                    balance: app.balance || 0,
+                    nextPlayDate: nextPlayDate
+                });
+            }
+        });
+    });
+    
+    expiringApps.sort((a, b) => a.daysUntilNextPlay - b.daysUntilNextPlay);
+    
+    if (expiringApps.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 20px;">
+                <div style="font-size: 36px; margin-bottom: 12px;">🎉</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无即将到期的软件</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">所有软件状态良好</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const urgentCount = expiringApps.filter(a => a.daysUntilNextPlay === 0).length;
+    const warningCount = expiringApps.filter(a => a.daysUntilNextPlay > 0 && a.daysUntilNextPlay <= 3).length;
+    
+    let html = `
+        <div style="padding: 12px;">
+            ${urgentCount > 0 ? `
+                <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border-left: 4px solid #ef4444; border-radius: 0 12px 12px 0; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #ef4444; margin-bottom: 8px;">🔥 需要立即玩 (${urgentCount}个)</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${expiringApps.filter(a => a.daysUntilNextPlay === 0).map(app => `
+                            <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary);">${app.phoneName}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${warningCount > 0 ? `
+                <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%); border-left: 4px solid #f59e0b; border-radius: 0 12px 12px 0; padding: 12px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #f59e0b; margin-bottom: 8px;">⏰ 3天内到期 (${warningCount}个)</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${expiringApps.filter(a => a.daysUntilNextPlay > 0 && a.daysUntilNextPlay <= 3).map(app => `
+                            <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary);">${app.phoneName} · ${app.daysUntilNextPlay}天后</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            <button class="btn btn-secondary mt-4" onclick="showPage('next-play')" style="width: 100%;">查看全部软件状态</button>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+function renderEarningsChart() {
+    const container = document.getElementById('earnings-chart-content');
+    if (!container) return;
+
+    const data = DataManager.loadData();
+    const allDailyEarnings = DataManager.getAllDailyEarnings();
+    
+    if (allDailyEarnings.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无收益数据</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">添加收益记录后即可查看趋势</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const sortedEarnings = allDailyEarnings.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const recentEarnings = sortedEarnings.slice(-14);
+    
+    const labels = recentEarnings.map(e => e.date.slice(5));
+    const values = recentEarnings.map(e => e.amount);
+    
+    const maxValue = Math.max(...values, 1);
+    
+    let html = `
+        <div style="padding: 16px;">
+            <div class="earnings-chart-container">
+                <canvas id="earnings-chart-canvas"></canvas>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 12px; padding: 0 4px;">
+                ${labels.map((label, index) => `
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-size: 10px; color: var(--text-muted);">${label}</div>
+                        <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); margin-top: 2px;">¥${values[index].toFixed(1)}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    setTimeout(() => {
+        initEarningsChart();
+    }, 100);
+}
+
+function initEarningsChart() {
+    const canvas = document.getElementById('earnings-chart-canvas');
+    if (!canvas) return;
+    
+    loadChartJs().then(Chart => {
+        const data = DataManager.loadData();
+        const allDailyEarnings = DataManager.getAllDailyEarnings();
+        const sortedEarnings = allDailyEarnings.sort((a, b) => new Date(a.date) - new Date(b.date));
+        const recentEarnings = sortedEarnings.slice(-14);
+        
+        const labels = recentEarnings.map(e => e.date.slice(5));
+        const values = recentEarnings.map(e => e.amount);
+        
+        const ctx = canvas.getContext('2d');
+        
+        if (window.earningsChartInstance) {
+            window.earningsChartInstance.destroy();
+        }
+        
+        window.earningsChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '每日收益',
+                    data: values,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#3b82f6',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return '¥' + context.parsed.y.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        },
+                        ticks: {
+                            color: 'var(--text-muted)',
+                            font: {
+                                size: 10
+                            },
+                            callback: function(value) {
+                                return '¥' + value.toFixed(1);
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+    }).catch(err => {
+        console.error('Failed to load Chart.js:', err);
+    });
 }
 
 // 打开记收入弹窗
