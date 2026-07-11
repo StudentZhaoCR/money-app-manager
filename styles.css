@@ -2766,6 +2766,174 @@ body {
     background: var(--bg-primary);
 }
 
+/* 月收益记录样式 */
+.monthly-earnings-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+}
+
+.monthly-earnings-item:last-child {
+    border-bottom: none;
+}
+
+.monthly-earnings-item:hover {
+    background: var(--bg-cream);
+}
+
+.monthly-earnings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.monthly-earnings-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.monthly-earnings-month {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monthly-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #3b82f6, #60a5fa);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.monthly-earnings-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.monthly-earnings-amount {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.monthly-earnings-total {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.monthly-earnings-arrow {
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.monthly-earnings-bar {
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 9999px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.monthly-earnings-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    border-radius: 9999px;
+    transition: width 0.5s ease;
+}
+
+.monthly-earnings-detail {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border-radius: 10px;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.monthly-earnings-detail-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+}
+
+.monthly-earnings-detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.monthly-earnings-detail-date {
+    color: var(--text-secondary);
+}
+
+.monthly-earnings-detail-amount {
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.monthly-earnings-detail-amount.positive {
+    color: var(--primary-color);
+}
+
+/* 暗黑模式适配 */
+[data-theme="dark"] .monthly-earnings-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .monthly-earnings-detail {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .monthly-earnings-detail-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .monthly-earnings-bar {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* 手机端适配 */
+@media (max-width: 480px) {
+    .monthly-earnings-meta {
+        gap: 10px;
+        font-size: 11px;
+    }
+    
+    .monthly-earnings-total {
+        font-size: 16px;
+    }
+    
+    .monthly-earnings-detail-list {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 6px;
+    }
+    
+    .monthly-earnings-detail-item {
+        font-size: 11px;
+        padding: 5px 8px;
+    }
+}
+
 /* 年度目标统计卡片响应式 */
 .yearly-goal-stats {
     display: grid;

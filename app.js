@@ -8156,9 +8156,108 @@ function renderStats() {
             </div>
         `;
     }).join('');
+    
+    // 渲染月收益记录
+    renderMonthlyEarnings();
 }
 
-// 提前预测功能已移除
+// 渲染月收益记录
+function renderMonthlyEarnings() {
+    const container = document.getElementById('monthly-earnings-list');
+    if (!container) return;
+
+    const allDailyEarnings = DataManager.getAllDailyEarnings();
+    
+    if (allDailyEarnings.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 12px;">📅</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无收益记录</div>
+            </div>
+        `;
+        return;
+    }
+    
+    // 按月分组
+    const monthlyData = {};
+    allDailyEarnings.forEach(({ date, amount }) => {
+        const monthKey = date.substring(0, 7); // YYYY-MM
+        if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {
+                total: 0,
+                days: 0,
+                dailyRecords: []
+            };
+        }
+        monthlyData[monthKey].total += amount;
+        if (amount > 0) {
+            monthlyData[monthKey].days++;
+        }
+        monthlyData[monthKey].dailyRecords.push({ date, amount });
+    });
+    
+    // 按月份倒序排列
+    const sortedMonths = Object.entries(monthlyData).sort((a, b) => b[0].localeCompare(a[0]));
+    
+    // 找到最大月收益用于柱状图比例
+    const maxMonthlyTotal = Math.max(...sortedMonths.map(([, data]) => data.total), 1);
+    
+    container.innerHTML = sortedMonths.map(([monthKey, data]) => {
+        const [year, month] = monthKey.split('-');
+        const monthLabel = `${year}年${parseInt(month)}月`;
+        const avgDaily = data.days > 0 ? (data.total / data.days).toFixed(2) : '0.00';
+        const barWidth = (data.total / maxMonthlyTotal * 100).toFixed(1);
+        const isCurrentMonth = monthKey === getCurrentDate().substring(0, 7);
+        
+        return `
+            <div class="monthly-earnings-item" data-month="${monthKey}">
+                <div class="monthly-earnings-header" onclick="toggleMonthlyDetail('${monthKey}')">
+                    <div class="monthly-earnings-info">
+                        <div class="monthly-earnings-month">
+                            ${monthLabel}
+                            ${isCurrentMonth ? '<span class="monthly-badge">本月</span>' : ''}
+                        </div>
+                        <div class="monthly-earnings-meta">
+                            <span>📝 ${data.days}天有收益</span>
+                            <span>📊 日均 ¥${avgDaily}</span>
+                        </div>
+                    </div>
+                    <div class="monthly-earnings-amount">
+                        <div class="monthly-earnings-total">¥${data.total.toFixed(2)}</div>
+                        <div class="monthly-earnings-arrow" id="arrow-${monthKey}">▼</div>
+                    </div>
+                </div>
+                <div class="monthly-earnings-bar">
+                    <div class="monthly-earnings-bar-fill" style="width: ${barWidth}%"></div>
+                </div>
+                <div class="monthly-earnings-detail" id="detail-${monthKey}" style="display: none;">
+                    <div class="monthly-earnings-detail-list">
+                        ${data.dailyRecords.slice().reverse().map(record => `
+                            <div class="monthly-earnings-detail-item">
+                                <span class="monthly-earnings-detail-date">${record.date.substring(5)}</span>
+                                <span class="monthly-earnings-detail-amount ${record.amount > 0 ? 'positive' : ''}">¥${record.amount.toFixed(2)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleMonthlyDetail(monthKey) {
+    const detail = document.getElementById(`detail-${monthKey}`);
+    const arrow = document.getElementById(`arrow-${monthKey}`);
+    if (!detail) return;
+    
+    if (detail.style.display === 'none') {
+        detail.style.display = 'block';
+        arrow.textContent = '▲';
+    } else {
+        detail.style.display = 'none';
+        arrow.textContent = '▼';
+    }
+}
 
 // 渲染设置页面
 function renderSettings() {
