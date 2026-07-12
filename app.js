@@ -4884,6 +4884,7 @@ function showPage(pageName) {
     if (pageName === 'settings') renderSettings();
     if (pageName === 'withdraw-records') renderWithdrawRecords();
     if (pageName === 'installments') renderInstallments();
+    if (pageName === 'withdraw-plan') renderWithdrawPlan();
     
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     if (pageName === 'app-details') renderAppDetailsPage();
