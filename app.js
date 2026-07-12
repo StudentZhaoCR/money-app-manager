@@ -964,6 +964,10 @@ class DataManager {
                     app.highWithdraw = 0;
                     needsMigration = true;
                 }
+                if (app.dailyEarningCap === undefined) {
+                    app.dailyEarningCap = 0;
+                    needsMigration = true;
+                }
                 // 为旧数据添加收益追踪字段
                 if (app.balanceHistory === undefined) {
                     app.balanceHistory = [];
@@ -1780,12 +1784,19 @@ class DataManager {
         const dailyTotals = {};
         const today = getCurrentDate();
         
-        // 收集所有日期的赚取金额（只包括今天及以前的历史记录）
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                if (app.dailyEarnings) {
+                if (app.balanceHistory && app.balanceHistory.length > 0) {
+                    app.balanceHistory.forEach(record => {
+                        if (record.date <= today && record.change > 0) {
+                            if (!dailyTotals[record.date]) {
+                                dailyTotals[record.date] = 0;
+                            }
+                            dailyTotals[record.date] += parseFloat(record.change) || 0;
+                        }
+                    });
+                } else if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        // 只记录今天及以前的日期（历史记录）
                         if (date <= today) {
                             if (!dailyTotals[date]) {
                                 dailyTotals[date] = 0;
@@ -1797,12 +1808,10 @@ class DataManager {
             });
         });
         
-        // 确保包含今天的日期（即使没有记录）
         if (!dailyTotals[today]) {
             dailyTotals[today] = 0;
         }
         
-        // 转换为数组并排序（日期从早到晚）
         const result = Object.entries(dailyTotals)
             .map(([date, amount]) => ({ date, amount }))
             .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -1823,7 +1832,16 @@ class DataManager {
             };
             
             phone.apps.forEach(app => {
-                if (app.dailyEarnings) {
+                if (app.balanceHistory && app.balanceHistory.length > 0) {
+                    app.balanceHistory.forEach(record => {
+                        if (record.date <= today && record.change > 0) {
+                            if (!phoneDailyEarnings[phone.id].dailyEarnings[record.date]) {
+                                phoneDailyEarnings[phone.id].dailyEarnings[record.date] = 0;
+                            }
+                            phoneDailyEarnings[phone.id].dailyEarnings[record.date] += parseFloat(record.change) || 0;
+                        }
+                    });
+                } else if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
                         if (date <= today) {
                             if (!phoneDailyEarnings[phone.id].dailyEarnings[date]) {
@@ -1848,9 +1866,15 @@ class DataManager {
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                if (app.dailyEarnings) {
+                if (app.balanceHistory && app.balanceHistory.length > 0) {
+                    app.balanceHistory.forEach(record => {
+                        if (record.date <= today && record.change > 0) {
+                            totalEarnings += parseFloat(record.change) || 0;
+                            daysWithEarnings.add(record.date);
+                        }
+                    });
+                } else if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        // 只计算今天及以前的记录（历史数据）
                         if (date <= today && amount > 0) {
                             totalEarnings += parseFloat(amount) || 0;
                             daysWithEarnings.add(date);
@@ -1877,7 +1901,6 @@ class DataManager {
         let totalEarnings = 0;
         let daysCount = 0;
         
-        // 计算最近7天
         for (let i = 0; i < 7; i++) {
             const date = new Date(now);
             date.setDate(date.getDate() - i);
@@ -1886,7 +1909,12 @@ class DataManager {
             let dayEarnings = 0;
             data.phones.forEach(phone => {
                 phone.apps.forEach(app => {
-                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
+                    if (app.balanceHistory && app.balanceHistory.length > 0) {
+                        const record = app.balanceHistory.find(r => r.date === dateStr);
+                        if (record && record.change > 0) {
+                            dayEarnings += parseFloat(record.change) || 0;
+                        }
+                    } else if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
                         dayEarnings += app.dailyEarnings[dateStr];
                     }
                 });
@@ -1911,14 +1939,22 @@ class DataManager {
         let maxEarnings = 0;
         const today = new Date().toISOString().split('T')[0];
         
-        // 收集所有日期的 earnings
         const dailyEarningsMap = new Map();
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                if (app.dailyEarnings) {
+                if (app.balanceHistory && app.balanceHistory.length > 0) {
+                    app.balanceHistory.forEach(record => {
+                        if (record.date <= today && record.change > 0) {
+                            const earnings = parseFloat(record.change) || 0;
+                            if (!dailyEarningsMap.has(record.date)) {
+                                dailyEarningsMap.set(record.date, 0);
+                            }
+                            dailyEarningsMap.set(record.date, dailyEarningsMap.get(record.date) + earnings);
+                        }
+                    });
+                } else if (app.dailyEarnings) {
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        // 只计算今天及以前的记录
                         if (date <= today && amount > 0) {
                             const earnings = parseFloat(amount) || 0;
                             if (!dailyEarningsMap.has(date)) {
@@ -2235,14 +2271,11 @@ class DataManager {
     static calculateAppPredictedCompletion(app) {
         if (!app) return null;
         
-        // 计算软件的年度目标（基于最小提现金额）
         const minWithdraw = app.minWithdraw || 0.3;
         const yearlyTarget = minWithdraw * 365;
         
-        // 计算已赚取金额
         const totalEarned = (app.withdrawn || 0) + (app.historicalWithdrawn || 0) + (app.balance || 0);
         
-        // 如果已经完成目标
         if (totalEarned >= yearlyTarget) {
             return {
                 date: new Date(),
@@ -2251,74 +2284,74 @@ class DataManager {
             };
         }
         
-        // 计算剩余金额
         const remainingAmount = yearlyTarget - totalEarned;
         
-        // 获取该软件最近30天的每日收益数据
-        const appDailyEarnings = app.dailyEarnings || {};
-        const allDailyEarnings = Object.entries(appDailyEarnings)
-            .map(([date, amount]) => ({ date, amount: parseFloat(amount) || 0 }))
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
-        
-        const recentEarnings = allDailyEarnings.slice(-30); // 最近30天
-        
-        // 计算加权平均每日收益
-        let weightedSum = 0;
-        let weightSum = 0;
-        
-        recentEarnings.forEach((day, index) => {
-            const daysAgo = recentEarnings.length - index - 1;
-            let weight = 1;
-            
-            // 加权规则：最近7天权重3，8-14天权重2，15-30天权重1
-            if (daysAgo <= 6) {
-                weight = 3;
-            } else if (daysAgo <= 13) {
-                weight = 2;
-            } else {
-                weight = 1;
-            }
-            
-            weightedSum += day.amount * weight;
-            weightSum += weight;
-        });
-        
-        // 计算加权平均
         let predictedDailyEarnings = 0;
-        if (weightSum > 0) {
-            predictedDailyEarnings = weightedSum / weightSum;
-        }
         
-        // 趋势分析：使用线性回归计算趋势
-        if (recentEarnings.length >= 7) {
-            // 准备数据
-            const xValues = recentEarnings.map((_, index) => index);
-            const yValues = recentEarnings.map(day => day.amount);
+        if (app.balanceHistory && app.balanceHistory.length >= 2) {
+            const sortedHistory = [...app.balanceHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const recentHistory = sortedHistory.slice(-30);
             
-            // 计算线性回归
-            const n = xValues.length;
-            const sumX = xValues.reduce((a, b) => a + b, 0);
-            const sumY = yValues.reduce((a, b) => a + b, 0);
-            const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
-            const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
-            
-            // 计算斜率
-            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-            
-            // 基于趋势调整预测
-            if (!isNaN(slope)) {
-                // 趋势调整因子：斜率的10%，但不超过50%
-                const trendFactor = Math.max(-0.5, Math.min(0.5, slope * 0.1));
-                predictedDailyEarnings *= (1 + trendFactor);
+            if (recentHistory.length >= 2) {
+                let totalEarnings = 0;
+                let totalDays = 0;
+                
+                for (let i = 1; i < recentHistory.length; i++) {
+                    const prev = recentHistory[i - 1];
+                    const curr = recentHistory[i];
+                    
+                    if (curr.change > 0) {
+                        const prevDate = new Date(prev.date);
+                        const currDate = new Date(curr.date);
+                        const daysBetween = Math.max(1, Math.ceil((currDate - prevDate) / (1000 * 60 * 60 * 24)));
+                        
+                        totalEarnings += curr.change;
+                        totalDays += daysBetween;
+                    }
+                }
+                
+                if (totalDays > 0) {
+                    predictedDailyEarnings = totalEarnings / totalDays;
+                }
             }
         }
         
-        // 如果没有数据，使用最小提现金额作为每日目标
+        if (predictedDailyEarnings <= 0 && app.dailyEarnings) {
+            const appDailyEarnings = app.dailyEarnings;
+            const allDailyEarnings = Object.entries(appDailyEarnings)
+                .map(([date, amount]) => ({ date, amount: parseFloat(amount) || 0 }))
+                .sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            const recentEarnings = allDailyEarnings.slice(-30);
+            
+            let weightedSum = 0;
+            let weightSum = 0;
+            
+            recentEarnings.forEach((day, index) => {
+                const daysAgo = recentEarnings.length - index - 1;
+                let weight = 1;
+                
+                if (daysAgo <= 6) {
+                    weight = 3;
+                } else if (daysAgo <= 13) {
+                    weight = 2;
+                } else {
+                    weight = 1;
+                }
+                
+                weightedSum += day.amount * weight;
+                weightSum += weight;
+            });
+            
+            if (weightSum > 0) {
+                predictedDailyEarnings = weightedSum / weightSum;
+            }
+        }
+        
         if (predictedDailyEarnings <= 0) {
             predictedDailyEarnings = minWithdraw;
         }
         
-        // 确保预测收益为正数
         predictedDailyEarnings = Math.max(0.1, predictedDailyEarnings);
         
         // 计算还需要多少天
@@ -2339,75 +2372,89 @@ class DataManager {
     }
     
     // 计算软件的预测每日收益（用于编辑余额时自动填入）
-    static calculatePredictedDailyEarnings(app) {
+    static calculatePredictedDailyEarnings(app, conservative = false) {
         if (!app) return 0;
         
-        // 获取该软件的每日收益数据
-        const appDailyEarnings = app.dailyEarnings || {};
-        const allDailyEarnings = Object.entries(appDailyEarnings)
-            .map(([date, amount]) => ({ date, amount: parseFloat(amount) || 0 }))
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
-        
-        // 如果没有历史数据，返回最小提现金额作为默认值
-        if (allDailyEarnings.length === 0) {
-            return app.minWithdraw || 0.3;
-        }
-        
-        // 获取最近30天的数据
-        const recentEarnings = allDailyEarnings.slice(-30);
-        
-        // 计算加权平均每日收益
-        let weightedSum = 0;
-        let weightSum = 0;
-        
-        recentEarnings.forEach((day, index) => {
-            const daysAgo = recentEarnings.length - index - 1;
-            let weight = 1;
-            
-            // 加权规则：最近7天权重3，8-14天权重2，15-30天权重1
-            if (daysAgo <= 6) {
-                weight = 3;
-            } else if (daysAgo <= 13) {
-                weight = 2;
-            } else {
-                weight = 1;
-            }
-            
-            weightedSum += day.amount * weight;
-            weightSum += weight;
-        });
-        
-        // 计算加权平均
         let predictedDailyEarnings = 0;
-        if (weightSum > 0) {
-            predictedDailyEarnings = weightedSum / weightSum;
-        }
+        let allDailyValues = [];
         
-        // 趋势分析：使用线性回归计算趋势
-        if (recentEarnings.length >= 7) {
-            const xValues = recentEarnings.map((_, index) => index);
-            const yValues = recentEarnings.map(day => day.amount);
+        if (app.balanceHistory && app.balanceHistory.length >= 2) {
+            const sortedHistory = [...app.balanceHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const recentHistory = sortedHistory.slice(-30);
             
-            const n = xValues.length;
-            const sumX = xValues.reduce((a, b) => a + b, 0);
-            const sumY = yValues.reduce((a, b) => a + b, 0);
-            const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
-            const sumX2 = xValues.reduce((sum, x) => sum + x * x, 0);
-            
-            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-            
-            if (!isNaN(slope)) {
-                const trendFactor = Math.max(-0.5, Math.min(0.5, slope * 0.1));
-                predictedDailyEarnings *= (1 + trendFactor);
+            if (recentHistory.length >= 2) {
+                for (let i = 1; i < recentHistory.length; i++) {
+                    const prev = recentHistory[i - 1];
+                    const curr = recentHistory[i];
+                    
+                    if (curr.change > 0) {
+                        const prevDate = new Date(prev.date);
+                        const currDate = new Date(curr.date);
+                        const daysBetween = Math.max(1, Math.ceil((currDate - prevDate) / (1000 * 60 * 60 * 24)));
+                        
+                        const dailyValue = curr.change / daysBetween;
+                        allDailyValues.push(dailyValue);
+                    }
+                }
             }
         }
         
-        // 如果没有数据或计算结果为0，使用最小提现金额
+        if (allDailyValues.length === 0 && app.dailyEarnings) {
+            const allDailyEarnings = Object.entries(app.dailyEarnings)
+                .map(([date, amount]) => parseFloat(amount) || 0)
+                .filter(amount => amount > 0);
+            
+            allDailyValues = allDailyValues.concat(allDailyEarnings);
+        }
+        
+        if (allDailyValues.length > 0) {
+            if (conservative) {
+                const sorted = [...allDailyValues].sort((a, b) => a - b);
+                
+                if (sorted.length >= 7) {
+                    const last7 = sorted.slice(-7);
+                    predictedDailyEarnings = Math.min(...last7);
+                } else if (sorted.length >= 3) {
+                    predictedDailyEarnings = sorted[Math.floor(sorted.length * 0.25)];
+                } else {
+                    predictedDailyEarnings = Math.min(...sorted);
+                }
+            } else {
+                const recentValues = allDailyValues.slice(-30);
+                
+                let weightedSum = 0;
+                let weightSum = 0;
+                
+                recentValues.forEach((value, index) => {
+                    const daysAgo = recentValues.length - index - 1;
+                    let weight = 1;
+                    
+                    if (daysAgo <= 6) {
+                        weight = 3;
+                    } else if (daysAgo <= 13) {
+                        weight = 2;
+                    } else {
+                        weight = 1;
+                    }
+                    
+                    weightedSum += value * weight;
+                    weightSum += weight;
+                });
+                
+                if (weightSum > 0) {
+                    predictedDailyEarnings = weightedSum / weightSum;
+                }
+            }
+        }
+        
         if (predictedDailyEarnings <= 0) {
             predictedDailyEarnings = app.minWithdraw || 0.3;
         }
         
-        // 确保预测收益为正数，保留2位小数
+        if (app.dailyEarningCap && app.dailyEarningCap > 0) {
+            predictedDailyEarnings = Math.min(predictedDailyEarnings, app.dailyEarningCap);
+        }
+        
         return Math.max(0.01, Math.round(predictedDailyEarnings * 100) / 100);
     }
 
@@ -2673,6 +2720,7 @@ class DataManager {
                 balance: appData.balance || 0,
                 minWithdraw: parseFloat(appData.minWithdraw),
                 highWithdraw: parseFloat(appData.highWithdraw) || 0,
+                dailyEarningCap: parseFloat(appData.dailyEarningCap) || 0,
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -2698,18 +2746,19 @@ class DataManager {
                 
                 const oldBalance = app.balance || 0;
                 const newBalance = appData.balance || 0;
+                const lastUpdatedStr = app.lastUpdated || null;
                 
                 app.name = appData.name;
                 app.balance = newBalance;
                 app.minWithdraw = parseFloat(appData.minWithdraw);
                 app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
+                app.dailyEarningCap = parseFloat(appData.dailyEarningCap) || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
                 
                 // 记录余额变化（只记录增加的情况，提现不算）
                 let todayTotalEarnings = 0;
                 if (newBalance > oldBalance) {
-                    // 检查是否是第一次添加软件且有余额（没有历史记录且余额大于0）
                     const isFirstAddWithBalance = !app.balanceHistory || app.balanceHistory.length === 0 && oldBalance === 0 && newBalance > 0;
                     
                     if (!app.balanceHistory) {
@@ -2722,34 +2771,79 @@ class DataManager {
                     
                     console.log('记录余额变化:', { oldBalance, newBalance, change, today, isFirstAddWithBalance });
                     
-                    // 检查今天是否已有记录
-                    const todayRecord = app.balanceHistory.find(h => h.date === today);
-                    if (todayRecord) {
-                        // 累加今天的收益
-                        todayRecord.change += change;
-                        todayRecord.balance = newBalance;
-                    } else {
-                        // 添加新记录
+                    if (!app.dailyEarnings) {
+                        app.dailyEarnings = {};
+                    }
+                    
+                    if (isFirstAddWithBalance) {
                         app.balanceHistory.push({
                             date: today,
                             balance: newBalance,
                             change: change,
-                            note: isFirstAddWithBalance ? '初始余额' : '手动编辑'
+                            note: '初始余额'
                         });
+                    } else {
+                        let daysToDistribute = [];
+                        
+                        if (lastUpdatedStr) {
+                            const lastUpdateDate = new Date(lastUpdatedStr);
+                            const lastUpdateDay = `${lastUpdateDate.getFullYear()}-${String(lastUpdateDate.getMonth() + 1).padStart(2, '0')}-${String(lastUpdateDate.getDate()).padStart(2, '0')}`;
+                            
+                            if (lastUpdateDay !== today) {
+                                const startDate = new Date(lastUpdateDate);
+                                startDate.setDate(startDate.getDate() + 1);
+                                const endDate = new Date(now);
+                                
+                                while (startDate <= endDate) {
+                                    const dateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+                                    daysToDistribute.push(dateStr);
+                                    startDate.setDate(startDate.getDate() + 1);
+                                }
+                            }
+                        }
+                        
+                        if (daysToDistribute.length === 0) {
+                            daysToDistribute = [today];
+                        }
+                        
+                        const dailyAmount = change / daysToDistribute.length;
+                        let remainingChange = change;
+                        let accumulatedBalance = oldBalance;
+                        
+                        daysToDistribute.forEach((dateStr, index) => {
+                            let dayAmount = dailyAmount;
+                            if (index === daysToDistribute.length - 1) {
+                                dayAmount = remainingChange;
+                            }
+                            dayAmount = Math.round(dayAmount * 100) / 100;
+                            remainingChange -= dayAmount;
+                            accumulatedBalance += dayAmount;
+                            accumulatedBalance = Math.round(accumulatedBalance * 100) / 100;
+                            
+                            app.dailyEarnings[dateStr] = (app.dailyEarnings[dateStr] || 0) + dayAmount;
+                            
+                            const existingRecord = app.balanceHistory.find(h => h.date === dateStr);
+                            if (existingRecord) {
+                                existingRecord.change += dayAmount;
+                                existingRecord.balance = accumulatedBalance;
+                            } else {
+                                app.balanceHistory.push({
+                                    date: dateStr,
+                                    balance: accumulatedBalance,
+                                    change: dayAmount,
+                                    note: '自动分配'
+                                });
+                            }
+                        });
+                        
+                        app.balanceHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
                     }
                     
-                    // 只有当不是第一次添加且有余额时，才更新每日收益统计
                     if (!isFirstAddWithBalance) {
-                        // 更新每日收益统计
-                        if (!app.dailyEarnings) {
-                            app.dailyEarnings = {};
-                        }
-                        app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
-                        todayTotalEarnings = app.dailyEarnings[today];
+                        todayTotalEarnings = app.dailyEarnings[today] || 0;
                         
                         console.log('更新 dailyEarnings:', app.dailyEarnings);
                         
-                        // 计算今日所有软件的总收益
                         let allAppsTodayEarnings = 0;
                         data.phones.forEach(p => {
                             p.apps.forEach(a => {
@@ -2759,14 +2853,11 @@ class DataManager {
                             });
                         });
                         
-                        // 检查是否达到日目标（基于总收益）
-                        // 使用与首页相同的目标计算逻辑：年度目标金额 ÷ 剩余天数
                         const yearlyDailyTarget = this.calculateYearlyDailyTarget();
                         const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
                         
                         console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTargetAmount });
                         
-                        // 不设置标记，避免重复显示提示
                         console.log('今日总收益:', allAppsTodayEarnings);
                         if (dailyTargetAmount > 0) {
                             console.log('日目标:', dailyTargetAmount);
@@ -2791,6 +2882,52 @@ class DataManager {
     
     // 获取软件的收益统计
     static getAppEarningsStats(app) {
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        
+        if (app.balanceHistory && app.balanceHistory.length >= 2) {
+            const sortedHistory = [...app.balanceHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            let todayEarning = 0;
+            let last7Days = 0;
+            let last30Days = 0;
+            let total = 0;
+            let daysWithData7 = 0;
+            let daysWithData30 = 0;
+            
+            sortedHistory.forEach(record => {
+                if (record.change > 0) {
+                    total += record.change;
+                    
+                    const dateObj = new Date(record.date);
+                    const todayObj = new Date(today);
+                    const diffDays = Math.floor((todayObj - dateObj) / (1000 * 60 * 60 * 24));
+                    
+                    if (record.date === today) {
+                        todayEarning = record.change;
+                    }
+                    
+                    if (diffDays >= 0 && diffDays < 7) {
+                        last7Days += record.change;
+                        daysWithData7++;
+                    }
+                    if (diffDays >= 0 && diffDays < 30) {
+                        last30Days += record.change;
+                        daysWithData30++;
+                    }
+                }
+            });
+            
+            return {
+                today: todayEarning,
+                last7Days: last7Days,
+                last30Days: last30Days,
+                avg7Days: daysWithData7 > 0 ? last7Days / daysWithData7 : 0,
+                avg30Days: daysWithData30 > 0 ? last30Days / daysWithData30 : 0,
+                total: total
+            };
+        }
+        
         if (!app.dailyEarnings) {
             return {
                 today: 0,
@@ -2802,14 +2939,10 @@ class DataManager {
             };
         }
         
-        const now = new Date();
-        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const dates = Object.keys(app.dailyEarnings).sort();
         
-        // 今日收益
         const todayEarning = parseFloat(app.dailyEarnings[today]) || 0;
         
-        // 计算7天和30天收益
         let last7Days = 0;
         let last30Days = 0;
         let total = 0;
@@ -2818,7 +2951,6 @@ class DataManager {
             const amount = parseFloat(app.dailyEarnings[date]) || 0;
             total += amount;
             
-            // 检查是否在7天内
             const dateObj = new Date(date);
             const todayObj = new Date(today);
             const diffDays = Math.floor((todayObj - dateObj) / (1000 * 60 * 60 * 24));
@@ -2831,7 +2963,6 @@ class DataManager {
             }
         });
         
-        // 计算平均值
         const daysWithData7 = dates.filter(d => {
             const dateObj = new Date(d);
             const todayObj = new Date(today);
@@ -7331,6 +7462,11 @@ function openAddAppModal(phoneId) {
             <input type="number" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
             <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
         </div>
+        <div class="form-group">
+            <label class="form-label">每日收益上限 (元)</label>
+            <input type="number" id="app-daily-earning-cap" class="form-input" placeholder="0.00" step="0.01" value="0" min="0">
+            <div class="form-hint">该软件每天最多能赚多少，0表示无上限</div>
+        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
         {
@@ -7341,6 +7477,7 @@ function openAddAppModal(phoneId) {
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
+                const dailyEarningCap = parseFloat(document.getElementById('app-daily-earning-cap').value) || 0;
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -7357,7 +7494,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, dailyEarningCap });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -7439,6 +7576,11 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
         </div>
         <div class="form-group">
+            <label class="form-label">每日收益上限 (元)</label>
+            <input type="number" id="edit-app-daily-earning-cap" class="form-input" value="${(app.dailyEarningCap || 0).toFixed(2)}" step="0.01" min="0">
+            <div class="form-hint">该软件每天最多能赚多少，0表示无上限</div>
+        </div>
+        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <div style="position: relative;">
                 <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
@@ -7470,6 +7612,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 const newBalance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
+                const dailyEarningCap = parseFloat(document.getElementById('edit-app-daily-earning-cap').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
@@ -7497,14 +7640,13 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             
                             // 先保存余额
                             const result = DataManager.editApp(phoneId, appId, {
-                                name,
-                                balance: newBalance,
-                                minWithdraw,
-                                highWithdraw,
-                                historicalWithdrawn
-                            });
-                            
-                            // 恢复按钮状态
+                            name,
+                            balance: newBalance,
+                            minWithdraw,
+                            highWithdraw,
+                            dailyEarningCap,
+                            historicalWithdrawn
+                        });
                             if (saveBtn) {
                                 saveBtn.disabled = false;
                                 saveBtn.textContent = '保存';
@@ -7534,6 +7676,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
+                            dailyEarningCap,
                             historicalWithdrawn
                         });
                         
@@ -8553,24 +8696,40 @@ function renderWithdrawReadyList(apps) {
 
 function calculateDailyRecommendations(allApps) {
     const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
-        .map(app => ({
-            ...app,
-            daysToTarget: app.targetWithdraw > 0 ? Math.ceil(app.remaining / app.avgDailyEarnings) : 0
-        }))
-        .sort((a, b) => a.daysToTarget - b.daysToTarget);
+        .map(app => {
+            const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
+            const daysToTarget = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
+            const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
+            
+            let priority = progress;
+            
+            if (daysToTarget === 0) {
+                priority += 200;
+            } else if (daysToTarget === 1) {
+                priority += 150;
+            } else if (daysToTarget === 2) {
+                priority += 100;
+            } else if (daysToTarget === 3) {
+                priority += 60;
+            } else if (daysToTarget === 4) {
+                priority += 30;
+            } else if (daysToTarget === 5) {
+                priority += 10;
+            }
+            
+            priority += conservativeEarnings * 20;
+            
+            return {
+                ...app,
+                daysToTarget,
+                progress,
+                priority,
+                conservativeEarnings
+            };
+        })
+        .sort((a, b) => b.priority - a.priority);
     
-    const todayRecommends = [];
-    const usedPhones = new Set();
-    
-    needPlayApps.forEach(app => {
-        if (usedPhones.has(app.phoneId)) return;
-        if (todayRecommends.length >= 3) return;
-        
-        todayRecommends.push(app);
-        usedPhones.add(app.phoneId);
-    });
-    
-    return todayRecommends;
+    return needPlayApps;
 }
 
 function renderDailyRecommendations(apps) {
@@ -8588,9 +8747,29 @@ function renderDailyRecommendations(apps) {
         return;
     }
     
+    const maxPriority = Math.max(...apps.map(a => a.priority));
+    
     container.innerHTML = apps.map((app, index) => {
         const daysToTarget = app.daysToTarget;
         const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
+        
+        let urgencyLevel = '';
+        let urgencyColor = '';
+        if (daysToTarget <= 1) {
+            urgencyLevel = '🔥 紧急';
+            urgencyColor = '#ef4444';
+        } else if (daysToTarget <= 3) {
+            urgencyLevel = '⚡ 优先';
+            urgencyColor = '#f97316';
+        } else if (daysToTarget <= 5) {
+            urgencyLevel = '📈 推进';
+            urgencyColor = '#3b82f6';
+        } else {
+            urgencyLevel = '🌱 培养';
+            urgencyColor = '#10b981';
+        }
+        
+        const priorityPercent = (app.priority / maxPriority) * 100;
         
         return `
             <div class="daily-recommend-item">
@@ -8600,6 +8779,7 @@ function renderDailyRecommendations(apps) {
                     <div class="daily-recommend-meta">
                         <span>📱 ${app.phoneName}</span>
                         <span>⏰ ${daysToTarget}天后达到高档</span>
+                        <span style="color: ${urgencyColor}; font-weight: 600;">${urgencyLevel}</span>
                     </div>
                 </div>
                 <div class="daily-recommend-status">
@@ -8609,9 +8789,14 @@ function renderDailyRecommendations(apps) {
                 <div class="daily-recommend-bar">
                     <div class="daily-recommend-bar-fill" style="width: ${progress.toFixed(1)}%;"></div>
                 </div>
-                <div class="daily-recommend-action">
-                    <button class="btn btn-primary btn-sm" onclick="openEditAppModal('${app.phoneId}', '${app.id}')">编辑</button>
-                    <button class="btn btn-secondary btn-sm" onclick="showAppDetailModal('${app.id}')">详情</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                    <div style="font-size: 11px; color: var(--text-muted);">
+                        💡 预计每天收益 ¥${app.avgDailyEarnings.toFixed(2)}
+                    </div>
+                    <div class="daily-recommend-action">
+                        <button class="btn btn-primary btn-sm" onclick="openEditAppModal('${app.phoneId}', '${app.id}')">编辑</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showAppDetailModal('${app.id}')">详情</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -8623,13 +8808,27 @@ function calculateFuturePlan(allApps) {
     const today = new Date();
     
     const appsNeedingPlay = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
-        .map(app => ({
-            ...app,
-            daysToTarget: app.targetWithdraw > 0 ? Math.ceil(app.remaining / app.avgDailyEarnings) : 0
-        }))
+        .map(app => {
+            const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
+            const optimisticEarnings = DataManager.calculatePredictedDailyEarnings(app, false);
+            
+            return {
+                ...app,
+                conservativeEarnings,
+                optimisticEarnings,
+                daysToTargetConservative: app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0,
+                daysToTargetOptimistic: app.targetWithdraw > 0 ? Math.ceil(app.remaining / optimisticEarnings) : 0,
+                daysToTarget: app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0,
+                progress: app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0
+            };
+        })
         .sort((a, b) => a.daysToTarget - b.daysToTarget);
     
+    const withdrawReadyApps = allApps.filter(app => app.canWithdraw);
+    
     const usedApps = new Set();
+    const scheduledWithdrawDays = new Map();
+    const scheduledBackupApps = new Map();
     
     for (let day = 0; day < 14; day++) {
         const date = new Date(today);
@@ -8641,35 +8840,150 @@ function calculateFuturePlan(allApps) {
             date: dateStr,
             weekday,
             withdrawApps: [],
+            backupApps: [],
             playApps: [],
+            confidence: 'low',
             dayIndex: day
         };
         
         if (day === 0) {
-            appsNeedingPlay.forEach(app => {
-                if (app.canWithdraw) {
-                    dayPlan.withdrawApps.push(app);
-                    usedApps.add(app.id);
-                }
+            withdrawReadyApps.forEach(app => {
+                dayPlan.withdrawApps.push(app);
+                usedApps.add(app.id);
+                scheduledWithdrawDays.set(app.id, day);
             });
         }
         
-        appsNeedingPlay.forEach(app => {
-            if (usedApps.has(app.id)) return;
-            if (day >= app.daysToTarget && dayPlan.withdrawApps.length === 0) {
-                dayPlan.withdrawApps.push(app);
-                usedApps.add(app.id);
+        if (dayPlan.withdrawApps.length === 0) {
+            const availableApps = appsNeedingPlay.filter(app => 
+                !usedApps.has(app.id) && 
+                !scheduledWithdrawDays.has(app.id) &&
+                day >= app.daysToTargetConservative
+            ).sort((a, b) => a.daysToTargetConservative - b.daysToTargetConservative);
+            
+            if (availableApps.length > 0) {
+                dayPlan.withdrawApps.push(availableApps[0]);
+                usedApps.add(availableApps[0].id);
+                scheduledWithdrawDays.set(availableApps[0].id, day);
+                
+                if (availableApps.length > 1) {
+                    const backup = availableApps.find(app => 
+                        !dayPlan.withdrawApps.find(a => a.phoneId === app.phoneId)
+                    );
+                    if (backup) {
+                        dayPlan.backupApps.push(backup);
+                        scheduledBackupApps.set(backup.id, day);
+                    }
+                }
             }
-        });
+        }
+        
+        if (dayPlan.withdrawApps.length === 0) {
+            const upcomingApps = appsNeedingPlay.filter(app => 
+                !usedApps.has(app.id) && 
+                !scheduledWithdrawDays.has(app.id) &&
+                app.daysToTargetConservative > day &&
+                app.daysToTargetConservative <= day + 5
+            ).sort((a, b) => a.daysToTargetConservative - b.daysToTargetConservative);
+            
+            if (upcomingApps.length > 0) {
+                const bestApp = upcomingApps[0];
+                const daysNeeded = bestApp.daysToTargetConservative;
+                const daysLeft = daysNeeded - day;
+                
+                usedApps.add(bestApp.id);
+                scheduledWithdrawDays.set(bestApp.id, daysNeeded);
+                
+                for (let d = day; d <= daysNeeded && d < 14; d++) {
+                    if (!plan[d]) {
+                        const dDate = new Date(today);
+                        dDate.setDate(today.getDate() + d);
+                        plan[d] = {
+                            date: `${dDate.getMonth() + 1}/${dDate.getDate()}`,
+                            weekday: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dDate.getDay()],
+                            withdrawApps: [],
+                            backupApps: [],
+                            playApps: [],
+                            confidence: 'low',
+                            dayIndex: d
+                        };
+                    }
+                    if (d === daysNeeded) {
+                        plan[d].withdrawApps.push(bestApp);
+                    } else {
+                        if (!plan[d].playApps.find(a => a.id === bestApp.id)) {
+                            plan[d].playApps.push(bestApp);
+                        }
+                    }
+                }
+                
+                dayPlan.withdrawApps.push({
+                    ...bestApp,
+                    name: `${bestApp.name} (预计${daysLeft}天后)`
+                });
+            }
+        }
+        
+        const currentUsedPhones = new Set([...dayPlan.withdrawApps, ...dayPlan.playApps].map(a => a.phoneId));
         
         appsNeedingPlay.forEach(app => {
             if (usedApps.has(app.id)) return;
-            if (dayPlan.playApps.length < 2 && app.daysToTarget > day) {
-                dayPlan.playApps.push(app);
+            
+            if (scheduledWithdrawDays.has(app.id)) {
+                const scheduledDay = scheduledWithdrawDays.get(app.id);
+                if (day < scheduledDay && day >= scheduledDay - 3) {
+                    if (!currentUsedPhones.has(app.phoneId)) {
+                        dayPlan.playApps.push(app);
+                        currentUsedPhones.add(app.phoneId);
+                    }
+                }
+            } else if (scheduledBackupApps.has(app.id)) {
+                const backupDay = scheduledBackupApps.get(app.id);
+                if (day < backupDay && day >= backupDay - 3) {
+                    if (!currentUsedPhones.has(app.phoneId)) {
+                        dayPlan.playApps.push(app);
+                        currentUsedPhones.add(app.phoneId);
+                    }
+                }
+            } else {
+                if (!currentUsedPhones.has(app.phoneId) && dayPlan.playApps.length < 4) {
+                    dayPlan.playApps.push(app);
+                    currentUsedPhones.add(app.phoneId);
+                }
             }
         });
         
-        plan.push(dayPlan);
+        if (dayPlan.withdrawApps.length > 0) {
+            if (dayPlan.backupApps.length > 0) {
+                dayPlan.confidence = 'high';
+            } else if (dayPlan.withdrawApps[0].canWithdraw) {
+                dayPlan.confidence = 'high';
+            } else if (dayPlan.withdrawApps[0].daysToTargetOptimistic <= day) {
+                dayPlan.confidence = 'medium';
+            } else {
+                dayPlan.confidence = 'low';
+            }
+        } else {
+            dayPlan.confidence = 'low';
+        }
+        
+        plan[day] = dayPlan;
+    }
+    
+    for (let day = 0; day < 14; day++) {
+        if (!plan[day]) {
+            const date = new Date(today);
+            date.setDate(today.getDate() + day);
+            plan[day] = {
+                date: `${date.getMonth() + 1}/${date.getDate()}`,
+                weekday: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()],
+                withdrawApps: [],
+                backupApps: [],
+                playApps: [],
+                confidence: 'low',
+                dayIndex: day
+            };
+        }
     }
     
     return plan;
@@ -8679,20 +8993,33 @@ function renderFuturePlan(plan) {
     const container = document.getElementById('future-plan-list');
     if (!container) return;
     
+    const getConfidenceBadge = (confidence) => {
+        const badges = {
+            high: '<span class="confidence-badge high">🟢 高</span>',
+            medium: '<span class="confidence-badge medium">🟡 中</span>',
+            low: '<span class="confidence-badge low">🔴 低</span>'
+        };
+        return badges[confidence] || badges.low;
+    };
+    
     container.innerHTML = plan.map(dayPlan => {
         const hasWithdraw = dayPlan.withdrawApps.length > 0;
         const hasPlay = dayPlan.playApps.length > 0;
+        const hasBackup = dayPlan.backupApps.length > 0;
         
         return `
-            <div class="future-plan-item ${hasWithdraw ? 'has-withdraw' : ''}">
+            <div class="future-plan-item ${hasWithdraw ? 'has-withdraw' : ''} ${dayPlan.confidence}">
                 <div class="future-plan-header">
                     <div class="future-plan-date">
                         <div class="future-plan-date-main">${dayPlan.date}</div>
                         <div class="future-plan-date-weekday">${dayPlan.weekday}</div>
                     </div>
-                    ${hasWithdraw ? `
-                        <div class="future-plan-badge">💰 可提现</div>
-                    ` : ''}
+                    <div class="future-plan-status">
+                        ${hasWithdraw ? `
+                            <span class="future-plan-badge">💰 可提现</span>
+                        ` : ''}
+                        ${getConfidenceBadge(dayPlan.confidence)}
+                    </div>
                 </div>
                 ${hasWithdraw ? `
                     <div class="future-plan-withdraw">
@@ -8702,6 +9029,16 @@ function renderFuturePlan(plan) {
                                 <span style="color: var(--success-color);">¥${app.targetWithdraw.toFixed(2)}</span>
                             </div>
                         `).join('')}
+                        ${hasBackup ? `
+                            <div class="future-plan-backup">
+                                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">备用:</div>
+                                ${dayPlan.backupApps.map(app => `
+                                    <div class="future-plan-backup-item">
+                                        <span>${app.name}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
                 ${hasPlay ? `

@@ -3186,6 +3186,34 @@ body {
     border-radius: 12px;
 }
 
+.future-plan-status {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.confidence-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 8px;
+}
+
+.confidence-badge.high {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.confidence-badge.medium {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.confidence-badge.low {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
 .future-plan-withdraw {
     display: flex;
     flex-wrap: wrap;
@@ -3213,6 +3241,30 @@ body {
     font-size: 12px;
     padding: 4px 0;
     color: var(--text-secondary);
+}
+
+.future-plan-backup {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.future-plan-backup-item {
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 2px 0;
+}
+
+.future-plan-item.high {
+    border-left: 3px solid #10b981;
+}
+
+.future-plan-item.medium {
+    border-left: 3px solid #f59e0b;
+}
+
+.future-plan-item.low {
+    border-left: 3px solid #ef4444;
 }
 
 /* 暗黑模式适配 */
