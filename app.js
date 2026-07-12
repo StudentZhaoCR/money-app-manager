@@ -960,6 +960,10 @@ class DataManager {
                     app.minWithdraw = 0;
                     needsMigration = true;
                 }
+                if (app.highWithdraw === undefined) {
+                    app.highWithdraw = 0;
+                    needsMigration = true;
+                }
                 // 为旧数据添加收益追踪字段
                 if (app.balanceHistory === undefined) {
                     app.balanceHistory = [];
@@ -2666,8 +2670,9 @@ class DataManager {
             const app = {
                 id: uniqueId,
                 name: appData.name,
-                balance: appData.balance || 0,  // 当前余额
-                minWithdraw: parseFloat(appData.minWithdraw),  // 最低提现门槛
+                balance: appData.balance || 0,
+                minWithdraw: parseFloat(appData.minWithdraw),
+                highWithdraw: parseFloat(appData.highWithdraw) || 0,
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -2695,8 +2700,9 @@ class DataManager {
                 const newBalance = appData.balance || 0;
                 
                 app.name = appData.name;
-                app.balance = newBalance;  // 更新余额
-                app.minWithdraw = parseFloat(appData.minWithdraw);  // 更新提现门槛
+                app.balance = newBalance;
+                app.minWithdraw = parseFloat(appData.minWithdraw);
+                app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
                 
@@ -7319,6 +7325,11 @@ function openAddAppModal(phoneId) {
             <input type="number" id="app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
             <div class="form-hint">达到此金额才能提现，必须大于0</div>
         </div>
+        <div class="form-group">
+            <label class="form-label">高档提现额度 (元)</label>
+            <input type="number" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
+            <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
+        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
         {
@@ -7328,6 +7339,7 @@ function openAddAppModal(phoneId) {
                 const input = document.getElementById('app-names').value.trim();
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
+                const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -7344,7 +7356,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -7421,6 +7433,11 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             <div class="form-hint">达到此金额才能提现（0表示无门槛）</div>
         </div>
         <div class="form-group">
+            <label class="form-label">高档提现额度 (元)</label>
+            <input type="number" id="edit-app-high-withdraw" class="form-input" value="${(app.highWithdraw || 0).toFixed(2)}" step="0.01">
+            <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
+        </div>
+        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <div style="position: relative;">
                 <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
@@ -7451,6 +7468,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 const name = document.getElementById('edit-app-name').value.trim();
                 const newBalance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
+                const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
@@ -7481,6 +7499,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                                 name,
                                 balance: newBalance,
                                 minWithdraw,
+                                highWithdraw,
                                 historicalWithdrawn
                             });
                             
@@ -7513,6 +7532,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             name,
                             balance: newBalance,
                             minWithdraw,
+                            highWithdraw,
                             historicalWithdrawn
                         });
                         
@@ -7669,6 +7689,11 @@ function openBatchAddAppsModal() {
             <div class="form-hint">批量添加时所有软件的默认提现门槛，必须大于0</div>
         </div>
         <div class="form-group">
+            <label class="form-label">高档提现额度 (元)</label>
+            <input type="number" id="batch-app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
+            <div class="form-hint">批量添加时所有软件的默认高档提现额度</div>
+        </div>
+        <div class="form-group">
             <div class="form-hint" style="background: var(--bg-cream); padding: 12px; border-radius: 8px;">
                 <strong>提示：</strong>将为 <strong>${phoneCount}</strong> 部手机各添加这些软件
             </div>
@@ -7682,6 +7707,7 @@ function openBatchAddAppsModal() {
                 const input = document.getElementById('batch-app-names').value.trim();
                 const balance = parseFloat(document.getElementById('batch-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value);
+                const highWithdraw = parseFloat(document.getElementById('batch-app-high-withdraw').value) || 0;
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -7705,7 +7731,7 @@ function openBatchAddAppsModal() {
                 currentData.phones.forEach(phone => {
                     names.forEach(name => {
                         try {
-                            DataManager.addApp(phone.id, { name, balance, minWithdraw });
+                            DataManager.addApp(phone.id, { name, balance, minWithdraw, highWithdraw });
                             totalAddedCount++;
                         } catch (error) {
                             showToast(error.message);
@@ -8428,6 +8454,269 @@ function renderPhoneComparison() {
     `;
     
     container.innerHTML = html;
+}
+
+// 渲染提现规划页面
+function renderWithdrawPlan() {
+    const data = DataManager.loadData();
+    const allApps = [];
+    
+    data.phones.forEach(phone => {
+        (phone.apps || []).forEach(app => {
+            const minWithdraw = app.minWithdraw || 0;
+            const highWithdraw = app.highWithdraw || minWithdraw;
+            const targetWithdraw = highWithdraw > 0 ? highWithdraw : minWithdraw;
+            const balance = app.balance || 0;
+            const canWithdraw = balance >= targetWithdraw;
+            const progress = targetWithdraw > 0 ? (balance / targetWithdraw) * 100 : 0;
+            const remaining = Math.max(0, targetWithdraw - balance);
+            
+            const avgDailyEarnings = DataManager.calculatePredictedDailyEarnings(app);
+            
+            allApps.push({
+                ...app,
+                phoneName: phone.name,
+                phoneId: phone.id,
+                targetWithdraw,
+                canWithdraw,
+                progress,
+                remaining,
+                avgDailyEarnings
+            });
+        });
+    });
+    
+    // 可提现软件 - 按余额从小到大排序
+    const withdrawReadyApps = allApps.filter(app => app.canWithdraw)
+        .sort((a, b) => a.balance - b.balance);
+    
+    // 需要玩的软件
+    const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
+        .sort((a, b) => a.remaining - b.remaining);
+    
+    // 计算今日推荐
+    const todayRecommendations = calculateDailyRecommendations(allApps);
+    
+    // 计算未来规划
+    const futurePlan = calculateFuturePlan(allApps);
+    
+    renderWithdrawReadyList(withdrawReadyApps);
+    renderDailyRecommendations(todayRecommendations);
+    renderFuturePlan(futurePlan);
+}
+
+function renderWithdrawReadyList(apps) {
+    const container = document.getElementById('withdraw-ready-list');
+    if (!container) return;
+    
+    if (apps.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 12px;">⏳</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无可高档提现的软件</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">继续努力，很快就能提现了！</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = apps.map(app => {
+        const minWithdraw = app.minWithdraw || 0;
+        const highWithdraw = app.highWithdraw || 0;
+        
+        return `
+            <div class="withdraw-ready-item">
+                <div class="withdraw-ready-header">
+                    <div class="withdraw-ready-info">
+                        <div class="withdraw-ready-name">${app.name}</div>
+                        <div class="withdraw-ready-phone">📱 ${app.phoneName}</div>
+                    </div>
+                    <div class="withdraw-ready-balance">
+                        <div>¥${app.balance.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">目标: ¥${app.targetWithdraw.toFixed(2)}</div>
+                    </div>
+                </div>
+                <div class="withdraw-ready-bar">
+                    <div class="withdraw-ready-bar-fill" style="width: 100%; background: linear-gradient(90deg, #10b981, #34d399);"></div>
+                </div>
+                <div class="withdraw-ready-actions">
+                    <span class="withdraw-ready-threshold">
+                        ${highWithdraw > 0 ? '高档¥' + highWithdraw.toFixed(2) : '标准¥' + minWithdraw.toFixed(2)}
+                    </span>
+                    <button class="btn btn-success" onclick="openWithdrawModal('${app.phoneId}', '${app.id}')">提现</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function calculateDailyRecommendations(allApps) {
+    const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
+        .map(app => ({
+            ...app,
+            daysToTarget: app.targetWithdraw > 0 ? Math.ceil(app.remaining / app.avgDailyEarnings) : 0
+        }))
+        .sort((a, b) => a.daysToTarget - b.daysToTarget);
+    
+    const todayRecommends = [];
+    const usedPhones = new Set();
+    
+    needPlayApps.forEach(app => {
+        if (usedPhones.has(app.phoneId)) return;
+        if (todayRecommends.length >= 3) return;
+        
+        todayRecommends.push(app);
+        usedPhones.add(app.phoneId);
+    });
+    
+    return todayRecommends;
+}
+
+function renderDailyRecommendations(apps) {
+    const container = document.getElementById('daily-recommend-list');
+    if (!container) return;
+    
+    if (apps.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 12px;">🎉</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">今日无推荐软件</div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">所有软件都已达到高档提现额度</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = apps.map((app, index) => {
+        const daysToTarget = app.daysToTarget;
+        const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
+        
+        return `
+            <div class="daily-recommend-item">
+                <div class="daily-recommend-rank">${index + 1}</div>
+                <div class="daily-recommend-info">
+                    <div class="daily-recommend-name">${app.name}</div>
+                    <div class="daily-recommend-meta">
+                        <span>📱 ${app.phoneName}</span>
+                        <span>⏰ ${daysToTarget}天后达到高档</span>
+                    </div>
+                </div>
+                <div class="daily-recommend-status">
+                    <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${app.balance.toFixed(2)}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">还差 ¥${app.remaining.toFixed(2)}</div>
+                </div>
+                <div class="daily-recommend-bar">
+                    <div class="daily-recommend-bar-fill" style="width: ${progress.toFixed(1)}%;"></div>
+                </div>
+                <div class="daily-recommend-action">
+                    <button class="btn btn-primary btn-sm" onclick="openEditAppModal('${app.phoneId}', '${app.id}')">编辑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showAppDetailModal('${app.id}')">详情</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function calculateFuturePlan(allApps) {
+    const plan = [];
+    const today = new Date();
+    
+    const appsNeedingPlay = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
+        .map(app => ({
+            ...app,
+            daysToTarget: app.targetWithdraw > 0 ? Math.ceil(app.remaining / app.avgDailyEarnings) : 0
+        }))
+        .sort((a, b) => a.daysToTarget - b.daysToTarget);
+    
+    const usedApps = new Set();
+    
+    for (let day = 0; day < 14; day++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + day);
+        const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+        const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
+        
+        const dayPlan = {
+            date: dateStr,
+            weekday,
+            withdrawApps: [],
+            playApps: [],
+            dayIndex: day
+        };
+        
+        if (day === 0) {
+            appsNeedingPlay.forEach(app => {
+                if (app.canWithdraw) {
+                    dayPlan.withdrawApps.push(app);
+                    usedApps.add(app.id);
+                }
+            });
+        }
+        
+        appsNeedingPlay.forEach(app => {
+            if (usedApps.has(app.id)) return;
+            if (day >= app.daysToTarget && dayPlan.withdrawApps.length === 0) {
+                dayPlan.withdrawApps.push(app);
+                usedApps.add(app.id);
+            }
+        });
+        
+        appsNeedingPlay.forEach(app => {
+            if (usedApps.has(app.id)) return;
+            if (dayPlan.playApps.length < 2 && app.daysToTarget > day) {
+                dayPlan.playApps.push(app);
+            }
+        });
+        
+        plan.push(dayPlan);
+    }
+    
+    return plan;
+}
+
+function renderFuturePlan(plan) {
+    const container = document.getElementById('future-plan-list');
+    if (!container) return;
+    
+    container.innerHTML = plan.map(dayPlan => {
+        const hasWithdraw = dayPlan.withdrawApps.length > 0;
+        const hasPlay = dayPlan.playApps.length > 0;
+        
+        return `
+            <div class="future-plan-item ${hasWithdraw ? 'has-withdraw' : ''}">
+                <div class="future-plan-header">
+                    <div class="future-plan-date">
+                        <div class="future-plan-date-main">${dayPlan.date}</div>
+                        <div class="future-plan-date-weekday">${dayPlan.weekday}</div>
+                    </div>
+                    ${hasWithdraw ? `
+                        <div class="future-plan-badge">💰 可提现</div>
+                    ` : ''}
+                </div>
+                ${hasWithdraw ? `
+                    <div class="future-plan-withdraw">
+                        ${dayPlan.withdrawApps.map(app => `
+                            <div class="future-plan-withdraw-item">
+                                <span>${app.name}</span>
+                                <span style="color: var(--success-color);">¥${app.targetWithdraw.toFixed(2)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+                ${hasPlay ? `
+                    <div class="future-plan-play">
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">推荐玩:</div>
+                        ${dayPlan.playApps.map(app => `
+                            <div class="future-plan-play-item">
+                                <span>${app.name}</span>
+                                <span>还差 ¥${app.remaining.toFixed(2)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
 }
 
 // 渲染设置页面

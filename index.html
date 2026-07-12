@@ -160,6 +160,7 @@
         <!-- 统计分析页面 -->
         <!-- 统计页面 - 毛玻璃效果 -->
         <div class="page" id="page-stats">
+            <!-- 统计页面内容 -->
             <div class="date-container">
                 <span class="current-date" id="stats-current-date"></span>
             </div>
@@ -216,7 +217,50 @@
             </div>
         </div>
 
+        <!-- 提现规划页面 -->
+        <div class="page" id="page-withdraw-plan">
+            <div class="date-container">
+                <span class="current-date" id="withdraw-plan-current-date"></span>
+            </div>
 
+            <div class="section-header">
+                <h2 class="section-title">💰 提现规划</h2>
+                <p class="section-hint">智能规划每日提现，确保每天都有软件达到高档额度</p>
+            </div>
+
+            <!-- 可提现软件列表 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">✅ 可高档提现</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="withdraw-ready-list">
+                    <!-- 内容由JS动态生成 -->
+                </div>
+            </div>
+
+            <!-- 今日推荐玩软件 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">🎯 今日推荐</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="daily-recommend-list">
+                    <!-- 内容由JS动态生成 -->
+                </div>
+            </div>
+
+            <!-- 未来规划 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📅 未来提现规划</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="future-plan-list">
+                    <!-- 内容由JS动态生成 -->
+                </div>
+            </div>
+        </div>
 
         <!-- 设置页面 -->
         <div class="page" id="page-settings">
@@ -441,6 +485,10 @@
         <div class="tab-item" data-page="stats">
             <span class="tab-icon">📈</span>
             <span class="tab-text">统计</span>
+        </div>
+        <div class="tab-item" data-page="withdraw-plan">
+            <span class="tab-icon">💰</span>
+            <span class="tab-text">提现</span>
         </div>
 
         <div class="tab-item" data-page="settings">
