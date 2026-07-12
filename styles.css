@@ -3140,6 +3140,22 @@ body {
     justify-content: flex-end;
 }
 
+.daily-recommend-gap-tag {
+    display: inline-block;
+    font-size: 11px;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+    padding: 3px 10px;
+    border-radius: 6px;
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+.daily-recommend-item.has-gap-target {
+    background: rgba(245, 158, 11, 0.03);
+    border-left: 3px solid #f59e0b;
+}
+
 .future-plan-item {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border-color);

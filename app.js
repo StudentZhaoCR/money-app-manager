@@ -8695,25 +8695,59 @@ function renderWithdrawReadyList(apps) {
 }
 
 function calculateDailyRecommendations(allApps) {
+    const futurePlan = calculateFuturePlan(allApps);
+    
+    const gapDays = [];
+    for (let day = 0; day < futurePlan.length; day++) {
+        if (futurePlan[day].withdrawApps.length === 0) {
+            gapDays.push({
+                dayIndex: day,
+                date: futurePlan[day].date,
+                weekday: futurePlan[day].weekday
+            });
+        }
+    }
+    
     const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
         .map(app => {
             const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
-            const daysToTarget = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
+            const optimisticEarnings = DataManager.calculatePredictedDailyEarnings(app, false);
+            const daysToTargetConservative = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
+            const daysToTargetOptimistic = app.targetWithdraw > 0 ? Math.ceil(app.remaining / optimisticEarnings) : 0;
             const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
+            
+            let bestGapDay = null;
+            let bestMatchScore = 0;
+            
+            gapDays.forEach(gap => {
+                const daysUntilGap = gap.dayIndex;
+                
+                if (daysToTargetConservative <= daysUntilGap + 1) {
+                    const score = 100 - daysUntilGap * 10 + (daysUntilGap - daysToTargetConservative) * 5;
+                    if (score > bestMatchScore) {
+                        bestMatchScore = score;
+                        bestGapDay = gap;
+                    }
+                }
+            });
             
             let priority = progress;
             
-            if (daysToTarget === 0) {
+            if (bestGapDay) {
+                priority += (14 - bestGapDay.dayIndex) * 30;
+            }
+            
+            if (daysToTargetConservative === 0) {
                 priority += 200;
-            } else if (daysToTarget === 1) {
+            } else if (daysToTargetConservative === 1) {
                 priority += 150;
-            } else if (daysToTarget === 2) {
+            } else if (daysToTargetConservative === 2) {
                 priority += 100;
-            } else if (daysToTarget === 3) {
+            } else if (daysToTargetConservative === 3) {
                 priority += 60;
-            } else if (daysToTarget === 4) {
+            } else if (daysToTargetConservative === 4) {
                 priority += 30;
-            } else if (daysToTarget === 5) {
+            } else if (daysToTargetConservative === 5) {
                 priority += 10;
             }
             
@@ -8721,15 +8755,48 @@ function calculateDailyRecommendations(allApps) {
             
             return {
                 ...app,
-                daysToTarget,
+                daysToTarget: daysToTargetConservative,
+                daysToTargetOptimistic,
                 progress,
                 priority,
-                conservativeEarnings
+                conservativeEarnings,
+                targetGapDay: bestGapDay
             };
         })
         .sort((a, b) => b.priority - a.priority);
     
-    return needPlayApps;
+    const recommendedApps = [];
+    const usedPhones = new Set();
+    const maxRecommendations = 8;
+    
+    gapDays.forEach(gap => {
+        if (recommendedApps.length >= maxRecommendations) return;
+        
+        const candidates = needPlayApps.filter(app => 
+            app.targetGapDay?.dayIndex === gap.dayIndex &&
+            !usedPhones.has(app.phoneId) &&
+            !recommendedApps.find(a => a.id === app.id)
+        );
+        
+        candidates.slice(0, 2).forEach(app => {
+            if (recommendedApps.length >= maxRecommendations) return;
+            recommendedApps.push({ ...app, targetGapDay: gap });
+            usedPhones.add(app.phoneId);
+        });
+    });
+    
+    if (recommendedApps.length < maxRecommendations) {
+        needPlayApps.forEach(app => {
+            if (recommendedApps.length >= maxRecommendations) return;
+            if (usedPhones.has(app.phoneId)) return;
+            if (recommendedApps.find(a => a.id === app.id)) return;
+            
+            recommendedApps.push(app);
+            usedPhones.add(app.phoneId);
+        });
+    }
+    
+    return recommendedApps;
 }
 
 function renderDailyRecommendations(apps) {
@@ -8747,9 +8814,28 @@ function renderDailyRecommendations(apps) {
         return;
     }
     
+    const hasGapApps = apps.some(app => app.targetGapDay);
+    
+    if (hasGapApps) {
+        const gapHeader = `
+            <div style="margin-bottom: 12px; padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px;">
+                <div style="font-size: 12px; color: #f59e0b; font-weight: 600;">🎯 缺口填补计划</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">以下软件是为了确保未来某天有高档提现而推荐，优先玩它们！</div>
+            </div>
+        `;
+        container.innerHTML = gapHeader;
+    } else {
+        container.innerHTML = '';
+    }
+    
     const maxPriority = Math.max(...apps.map(a => a.priority));
     
-    container.innerHTML = apps.map((app, index) => {
+    const gapApps = apps.filter(app => app.targetGapDay);
+    const otherApps = apps.filter(app => !app.targetGapDay);
+    
+    const allApps = [...gapApps, ...otherApps];
+    
+    container.innerHTML += allApps.map((app, index) => {
         const daysToTarget = app.daysToTarget;
         const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
         
@@ -8771,11 +8857,18 @@ function renderDailyRecommendations(apps) {
         
         const priorityPercent = (app.priority / maxPriority) * 100;
         
+        const gapTag = app.targetGapDay ? `
+            <div class="daily-recommend-gap-tag">
+                🎯 为${app.targetGapDay.date}(${app.targetGapDay.weekday})达标
+            </div>
+        ` : '';
+        
         return `
-            <div class="daily-recommend-item">
+            <div class="daily-recommend-item ${app.targetGapDay ? 'has-gap-target' : ''}">
                 <div class="daily-recommend-rank">${index + 1}</div>
                 <div class="daily-recommend-info">
                     <div class="daily-recommend-name">${app.name}</div>
+                    ${gapTag}
                     <div class="daily-recommend-meta">
                         <span>📱 ${app.phoneName}</span>
                         <span>⏰ ${daysToTarget}天后达到高档</span>
@@ -9006,7 +9099,10 @@ function renderFuturePlan(plan) {
                     <div class="future-plan-withdraw">
                         ${dayPlan.withdrawApps.map(app => `
                             <div class="future-plan-withdraw-item">
-                                <span>${app.name}</span>
+                                <div>
+                                    <span>${app.name}</span>
+                                    <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">📱 ${app.phoneName}</span>
+                                </div>
                                 <span style="color: var(--success-color);">¥${app.targetWithdraw.toFixed(2)}</span>
                             </div>
                         `).join('')}
@@ -9016,6 +9112,7 @@ function renderFuturePlan(plan) {
                                 ${dayPlan.backupApps.map(app => `
                                     <div class="future-plan-backup-item">
                                         <span>${app.name}</span>
+                                        <span style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">📱 ${app.phoneName}</span>
                                     </div>
                                 `).join('')}
                             </div>
@@ -9027,7 +9124,10 @@ function renderFuturePlan(plan) {
                         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">推荐玩:</div>
                         ${dayPlan.playApps.map(app => `
                             <div class="future-plan-play-item">
-                                <span>${app.name}</span>
+                                <div>
+                                    <span>${app.name}</span>
+                                    <span style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">📱 ${app.phoneName}</span>
+                                </div>
                                 <span>还差 ¥${app.remaining.toFixed(2)}</span>
                             </div>
                         `).join('')}
