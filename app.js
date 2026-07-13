@@ -8711,9 +8711,7 @@ function calculateDailyRecommendations(allApps) {
     const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
         .map(app => {
             const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
-            const optimisticEarnings = DataManager.calculatePredictedDailyEarnings(app, false);
             const daysToTargetConservative = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
-            const daysToTargetOptimistic = app.targetWithdraw > 0 ? Math.ceil(app.remaining / optimisticEarnings) : 0;
             const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
             
             let bestGapDay = null;
@@ -8756,7 +8754,6 @@ function calculateDailyRecommendations(allApps) {
             return {
                 ...app,
                 daysToTarget: daysToTargetConservative,
-                daysToTargetOptimistic,
                 progress,
                 priority,
                 conservativeEarnings,
@@ -8765,38 +8762,7 @@ function calculateDailyRecommendations(allApps) {
         })
         .sort((a, b) => b.priority - a.priority);
     
-    const recommendedApps = [];
-    const usedPhones = new Set();
-    const maxRecommendations = 8;
-    
-    gapDays.forEach(gap => {
-        if (recommendedApps.length >= maxRecommendations) return;
-        
-        const candidates = needPlayApps.filter(app => 
-            app.targetGapDay?.dayIndex === gap.dayIndex &&
-            !usedPhones.has(app.phoneId) &&
-            !recommendedApps.find(a => a.id === app.id)
-        );
-        
-        candidates.slice(0, 2).forEach(app => {
-            if (recommendedApps.length >= maxRecommendations) return;
-            recommendedApps.push({ ...app, targetGapDay: gap });
-            usedPhones.add(app.phoneId);
-        });
-    });
-    
-    if (recommendedApps.length < maxRecommendations) {
-        needPlayApps.forEach(app => {
-            if (recommendedApps.length >= maxRecommendations) return;
-            if (usedPhones.has(app.phoneId)) return;
-            if (recommendedApps.find(a => a.id === app.id)) return;
-            
-            recommendedApps.push(app);
-            usedPhones.add(app.phoneId);
-        });
-    }
-    
-    return recommendedApps;
+    return needPlayApps.slice(0, 10);
 }
 
 function renderDailyRecommendations(apps) {
@@ -8901,24 +8867,21 @@ function calculateFuturePlan(allApps) {
     const today = new Date();
     const planDays = 14;
     
+    const withdrawReadyApps = allApps.filter(app => app.canWithdraw);
     const appsNeedingPlay = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
         .map(app => {
             const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
-            const optimisticEarnings = DataManager.calculatePredictedDailyEarnings(app, false);
+            const daysToTargetConservative = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
+            const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
             
             return {
                 ...app,
                 conservativeEarnings,
-                optimisticEarnings,
-                daysToTargetConservative: app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0,
-                daysToTargetOptimistic: app.targetWithdraw > 0 ? Math.ceil(app.remaining / optimisticEarnings) : 0,
-                daysToTarget: app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0,
-                progress: app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0
+                daysToTarget: daysToTargetConservative,
+                progress
             };
         })
         .sort((a, b) => a.daysToTarget - b.daysToTarget);
-    
-    const withdrawReadyApps = allApps.filter(app => app.canWithdraw);
     
     for (let day = 0; day < planDays; day++) {
         const date = new Date(today);
@@ -8927,8 +8890,7 @@ function calculateFuturePlan(allApps) {
             date: `${date.getMonth() + 1}/${date.getDate()}`,
             weekday: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()],
             withdrawApps: [],
-            backupApps: [],
-            playApps: [],
+            playPlanApps: [],
             confidence: 'low',
             dayIndex: day
         };
@@ -8938,123 +8900,91 @@ function calculateFuturePlan(allApps) {
     const scheduledWithdrawDays = new Map();
     
     const readyAppsCopy = [...withdrawReadyApps];
-    const playAppsCopy = [...appsNeedingPlay];
     
     for (let day = 0; day < planDays; day++) {
-        if (plan[day].withdrawApps.length > 0) continue;
-        
         if (readyAppsCopy.length > 0) {
             const app = readyAppsCopy.shift();
             plan[day].withdrawApps.push(app);
             usedApps.add(app.id);
             scheduledWithdrawDays.set(app.id, day);
-            
-            const backup = readyAppsCopy.find(a => a.phoneId !== app.phoneId);
-            if (backup) {
-                plan[day].backupApps.push(backup);
-            }
         }
     }
     
+    const gapDays = [];
     for (let day = 0; day < planDays; day++) {
-        if (plan[day].withdrawApps.length > 0) continue;
-        
-        const availableApps = playAppsCopy.filter(app => 
+        if (plan[day].withdrawApps.length === 0) {
+            gapDays.push(day);
+        }
+    }
+    
+    gapDays.forEach(gapDay => {
+        const candidates = appsNeedingPlay.filter(app => 
             !usedApps.has(app.id) && 
             !scheduledWithdrawDays.has(app.id) &&
-            day >= app.daysToTargetConservative
-        ).sort((a, b) => a.daysToTargetConservative - b.daysToTargetConservative);
+            app.daysToTarget <= gapDay
+        ).sort((a, b) => a.daysToTarget - b.daysToTarget);
         
-        if (availableApps.length > 0) {
-            const app = availableApps[0];
-            plan[day].withdrawApps.push(app);
+        if (candidates.length > 0) {
+            const app = candidates[0];
+            plan[gapDay].withdrawApps.push(app);
             usedApps.add(app.id);
-            scheduledWithdrawDays.set(app.id, day);
+            scheduledWithdrawDays.set(app.id, gapDay);
             
-            const backup = availableApps.find(a => a.phoneId !== app.phoneId && a.id !== app.id);
-            if (backup) {
-                plan[day].backupApps.push(backup);
+            for (let d = Math.max(0, gapDay - app.daysToTarget); d < gapDay; d++) {
+                if (!plan[d].playPlanApps.find(a => a.id === app.id)) {
+                    plan[d].playPlanApps.push(app);
+                }
             }
+        }
+    });
+    
+    const remainingGapDays = [];
+    for (let day = 0; day < planDays; day++) {
+        if (plan[day].withdrawApps.length === 0) {
+            remainingGapDays.push(day);
         }
     }
     
-    for (let day = 0; day < planDays; day++) {
-        if (plan[day].withdrawApps.length > 0) continue;
-        
-        const upcomingApps = playAppsCopy.filter(app => 
+    remainingGapDays.forEach(gapDay => {
+        const candidates = appsNeedingPlay.filter(app => 
             !usedApps.has(app.id) && 
-            !scheduledWithdrawDays.has(app.id) &&
-            app.daysToTargetConservative > day
-        ).sort((a, b) => a.daysToTargetConservative - b.daysToTargetConservative);
+            !scheduledWithdrawDays.has(app.id)
+        ).sort((a, b) => a.daysToTarget - b.daysToTarget);
         
-        if (upcomingApps.length > 0) {
-            const bestApp = upcomingApps[0];
-            const daysNeeded = bestApp.daysToTargetConservative;
+        if (candidates.length > 0) {
+            const app = candidates[0];
+            const daysNeeded = app.daysToTarget;
+            const targetDay = Math.min(gapDay + daysNeeded, planDays - 1);
             
-            if (daysNeeded <= planDays - 1) {
-                plan[daysNeeded].withdrawApps.push(bestApp);
-                usedApps.add(bestApp.id);
-                scheduledWithdrawDays.set(bestApp.id, daysNeeded);
-                
-                for (let d = Math.max(0, daysNeeded - 3); d < daysNeeded; d++) {
-                    if (!plan[d].playApps.find(a => a.id === bestApp.id)) {
-                        plan[d].playApps.push(bestApp);
-                    }
+            if (!plan[targetDay].withdrawApps.find(a => a.id === app.id)) {
+                plan[targetDay].withdrawApps.push(app);
+                usedApps.add(app.id);
+                scheduledWithdrawDays.set(app.id, targetDay);
+            }
+            
+            for (let d = Math.max(0, targetDay - daysNeeded); d < targetDay; d++) {
+                if (!plan[d].playPlanApps.find(a => a.id === app.id)) {
+                    plan[d].playPlanApps.push(app);
                 }
-                
-                plan[day].withdrawApps.push({
-                    ...bestApp,
-                    name: `${bestApp.name} (预计${daysNeeded - day}天后)`
-                });
             }
         }
-    }
+    });
     
     for (let day = 0; day < planDays; day++) {
-        const currentUsedPhones = new Set([...plan[day].withdrawApps, ...plan[day].playApps].map(a => a.phoneId));
+        const currentUsedPhones = new Set([...plan[day].withdrawApps, ...plan[day].playPlanApps].map(a => a.phoneId));
         
-        playAppsCopy.forEach(app => {
-            if (usedApps.has(app.id)) return;
-            
-            if (scheduledWithdrawDays.has(app.id)) {
-                const scheduledDay = scheduledWithdrawDays.get(app.id);
-                if (day < scheduledDay && day >= scheduledDay - 3) {
-                    if (!currentUsedPhones.has(app.phoneId) && plan[day].playApps.length < 4) {
-                        plan[day].playApps.push(app);
-                        currentUsedPhones.add(app.phoneId);
-                    }
-                }
-            } else {
-                if (!currentUsedPhones.has(app.phoneId) && plan[day].playApps.length < 4) {
-                    plan[day].playApps.push(app);
-                    currentUsedPhones.add(app.phoneId);
-                }
-            }
-        });
-        
-        const backupCandidates = playAppsCopy.filter(app => 
+        const availablePlayApps = appsNeedingPlay.filter(app => 
             !usedApps.has(app.id) && 
-            !scheduledWithdrawDays.has(app.id) &&
             !currentUsedPhones.has(app.phoneId) &&
-            plan[day].playApps.length < 5
+            plan[day].playPlanApps.length < 5
         );
         
-        backupCandidates.slice(0, 5 - plan[day].playApps.length).forEach(app => {
-            plan[day].playApps.push(app);
+        availablePlayApps.slice(0, 5 - plan[day].playPlanApps.length).forEach(app => {
+            plan[day].playPlanApps.push(app);
         });
-    }
-    
-    for (let day = 0; day < planDays; day++) {
+        
         if (plan[day].withdrawApps.length > 0) {
-            if (plan[day].backupApps.length > 0) {
-                plan[day].confidence = 'high';
-            } else if (plan[day].withdrawApps[0].canWithdraw) {
-                plan[day].confidence = 'high';
-            } else if (plan[day].withdrawApps[0].daysToTargetOptimistic <= day) {
-                plan[day].confidence = 'medium';
-            } else {
-                plan[day].confidence = 'low';
-            }
+            plan[day].confidence = plan[day].withdrawApps[0].canWithdraw ? 'high' : 'medium';
         } else {
             plan[day].confidence = 'low';
         }
@@ -9078,8 +9008,7 @@ function renderFuturePlan(plan) {
     
     container.innerHTML = plan.map(dayPlan => {
         const hasWithdraw = dayPlan.withdrawApps.length > 0;
-        const hasPlay = dayPlan.playApps.length > 0;
-        const hasBackup = dayPlan.backupApps.length > 0;
+        const hasPlayPlan = dayPlan.playPlanApps.length > 0;
         
         return `
             <div class="future-plan-item ${hasWithdraw ? 'has-withdraw' : ''} ${dayPlan.confidence}">
@@ -9106,23 +9035,12 @@ function renderFuturePlan(plan) {
                                 <span style="color: var(--success-color);">¥${app.targetWithdraw.toFixed(2)}</span>
                             </div>
                         `).join('')}
-                        ${hasBackup ? `
-                            <div class="future-plan-backup">
-                                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">备用:</div>
-                                ${dayPlan.backupApps.map(app => `
-                                    <div class="future-plan-backup-item">
-                                        <span>${app.name}</span>
-                                        <span style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">📱 ${app.phoneName}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
                     </div>
                 ` : ''}
-                ${hasPlay ? `
+                ${hasPlayPlan ? `
                     <div class="future-plan-play">
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">推荐玩:</div>
-                        ${dayPlan.playApps.map(app => `
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">🎮 推荐玩:</div>
+                        ${dayPlan.playPlanApps.map(app => `
                             <div class="future-plan-play-item">
                                 <div>
                                     <span>${app.name}</span>
