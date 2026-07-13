@@ -6058,10 +6058,119 @@ body {
 }
 
 .batch-edit-input .form-input {
-    width: 100px;
+    width: 80px;
     padding: 6px 10px;
     font-size: 13px;
 }
+
+.batch-edit-header-row {
+    background: rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+}
+
+.batch-edit-header-row .batch-edit-name {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.mt-2 {
+    margin-top: 16px;
+}
+
+/* 清零预警样式 */
+.clear-warning-section {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.clear-warning-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.clear-warning-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid;
+}
+
+.clear-warning-info {
+    flex: 1;
+}
+
+.clear-warning-status {
+    text-align: right;
+}
+
+/* 清零预警页面样式 */
+.clear-warning-stats {
+    margin-top: 12px;
+}
+
+.clear-warning-app-item {
+    display: flex;
+    align-items: center;
+    padding: 14px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.clear-warning-app-rank {
+    width: 28px;
+    height: 28px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-right: 14px;
+}
+
+.clear-warning-app-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.clear-warning-app-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.clear-warning-app-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.clear-warning-app-phone {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.clear-warning-app-status {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.clear-warning-app-actions {
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+
 .glass-panel--warning { background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); }
 .glass-panel--violet  { background: linear-gradient(135deg, #7c6bcf 0%, #9c89ff 100%); }
 .glass-panel .section-title { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.12); }

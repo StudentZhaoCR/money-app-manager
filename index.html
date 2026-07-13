@@ -263,6 +263,38 @@
             </div>
         </div>
 
+        <!-- 清零预警页面 -->
+        <div class="page" id="page-clear-warning">
+            <div class="date-container">
+                <span class="current-date" id="clear-warning-current-date"></span>
+            </div>
+
+            <div class="section-header">
+                <h2 class="section-title">⚠️ 余额清零预警</h2>
+                <p class="section-hint">所有软件清零状态一览，按剩余天数从短到长排序</p>
+            </div>
+
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📊 预警统计</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="clear-warning-stats" id="clear-warning-stats">
+                    <!-- 统计信息由JS动态生成 -->
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📋 软件清零列表</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div id="clear-warning-app-list">
+                    <!-- 内容由JS动态生成 -->
+                </div>
+            </div>
+        </div>
+
         <!-- 设置页面 -->
         <div class="page" id="page-settings">
             <div class="date-container">
@@ -490,6 +522,10 @@
         <div class="tab-item" data-page="withdraw-plan">
             <span class="tab-icon">💰</span>
             <span class="tab-text">提现</span>
+        </div>
+        <div class="tab-item" data-page="clear-warning">
+            <span class="tab-icon">⚠️</span>
+            <span class="tab-text">预警</span>
         </div>
 
         <div class="tab-item" data-page="settings">

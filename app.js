@@ -964,6 +964,14 @@ class DataManager {
                     app.highWithdraw = 0;
                     needsMigration = true;
                 }
+                if (app.clearPeriod === undefined) {
+                    app.clearPeriod = 0;
+                    needsMigration = true;
+                }
+                if (app.lastLoginDate === undefined) {
+                    app.lastLoginDate = new Date().toISOString().split('T')[0];
+                    needsMigration = true;
+                }
                 // 为旧数据添加收益追踪字段
                 if (app.balanceHistory === undefined) {
                     app.balanceHistory = [];
@@ -2712,6 +2720,8 @@ class DataManager {
                 balance: appData.balance || 0,
                 minWithdraw: parseFloat(appData.minWithdraw),
                 highWithdraw: parseFloat(appData.highWithdraw) || 0,
+                clearPeriod: parseInt(appData.clearPeriod) || 0,
+                lastLoginDate: new Date().toISOString().split('T')[0],
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -2743,8 +2753,13 @@ class DataManager {
                 app.balance = newBalance;
                 app.minWithdraw = parseFloat(appData.minWithdraw);
                 app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
+                app.clearPeriod = parseInt(appData.clearPeriod) || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
+                
+                if (newBalance !== oldBalance) {
+                    app.lastLoginDate = new Date().toISOString().split('T')[0];
+                }
                 
                 // 记录余额变化（只记录增加的情况，提现不算）
                 let todayTotalEarnings = 0;
@@ -5006,6 +5021,7 @@ function showPage(pageName) {
     if (pageName === 'withdraw-records') renderWithdrawRecords();
     if (pageName === 'installments') renderInstallments();
     if (pageName === 'withdraw-plan') renderWithdrawPlan();
+    if (pageName === 'clear-warning') renderClearWarning();
     
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     if (pageName === 'app-details') renderAppDetailsPage();
@@ -7452,6 +7468,11 @@ function openAddAppModal(phoneId) {
             <input type="number" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
             <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
         </div>
+        <div class="form-group">
+            <label class="form-label">清零周期 (天)</label>
+            <input type="number" id="app-clear-period" class="form-input" placeholder="0" step="1" value="0" min="0">
+            <div class="form-hint">超过此天数未登录将清空余额，0表示无清零规则</div>
+        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
         {
@@ -7462,6 +7483,7 @@ function openAddAppModal(phoneId) {
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
+                const clearPeriod = parseInt(document.getElementById('app-clear-period').value) || 0;
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -7478,7 +7500,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, clearPeriod });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -7560,6 +7582,11 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
         </div>
         <div class="form-group">
+            <label class="form-label">清零周期 (天)</label>
+            <input type="number" id="edit-app-clear-period" class="form-input" value="${(app.clearPeriod || 0)}" step="1" min="0">
+            <div class="form-hint">超过此天数未登录将清空余额，0表示无清零规则</div>
+        </div>
+        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <div style="position: relative;">
                 <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
@@ -7591,6 +7618,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 const newBalance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
+                const clearPeriod = parseInt(document.getElementById('edit-app-clear-period').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
@@ -7622,6 +7650,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
+                            clearPeriod,
                             historicalWithdrawn
                         });
                             if (saveBtn) {
@@ -7653,6 +7682,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
+                            clearPeriod,
                             historicalWithdrawn
                         });
                         
@@ -7875,41 +7905,75 @@ function openBatchEditHighWithdrawModal() {
         return;
     }
     
-    let appsHtml = '';
-    let appIndex = 0;
+    const appNameMap = new Map();
     
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
-            appsHtml += `
-                <div class="batch-edit-row" data-phone-id="${phone.id}" data-app-id="${app.id}">
-                    <div class="batch-edit-info">
-                        <div class="batch-edit-name">${app.name}</div>
-                        <div class="batch-edit-phone">📱 ${phone.name}</div>
-                    </div>
-                    <div class="batch-edit-input">
-                        <input type="number" 
-                               id="batch-high-withdraw-${appIndex}" 
-                               class="form-input batch-high-withdraw-input"
-                               value="${(app.highWithdraw || app.minWithdraw).toFixed(2)}" 
-                               step="0.01" 
-                               min="0"
-                               data-original="${(app.highWithdraw || app.minWithdraw).toFixed(2)}">
-                    </div>
-                </div>
-            `;
-            appIndex++;
+            if (!appNameMap.has(app.name)) {
+                appNameMap.set(app.name, []);
+            }
+            appNameMap.get(app.name).push({ phoneId: phone.id, appId: app.id, phoneName: phone.name, ...app });
         });
     });
     
-    showModal('批量编辑高档额度', `
+    let appsHtml = '';
+    let appIndex = 0;
+    
+    appNameMap.forEach((apps, name) => {
+        const firstApp = apps[0];
+        appsHtml += `
+            <div class="batch-edit-row" data-app-name="${name}">
+                <div class="batch-edit-info">
+                    <div class="batch-edit-name">${name}</div>
+                    <div class="batch-edit-phone">📱 ${apps.length}部手机</div>
+                </div>
+                <div class="batch-edit-input">
+                    <input type="number" 
+                           id="batch-high-withdraw-${appIndex}" 
+                           class="form-input batch-high-withdraw-input"
+                           value="${(firstApp.highWithdraw || firstApp.minWithdraw).toFixed(2)}" 
+                           step="0.01" 
+                           min="0">
+                </div>
+                <div class="batch-edit-input">
+                    <input type="number" 
+                           id="batch-clear-period-${appIndex}" 
+                           class="form-input batch-clear-period-input"
+                           value="${(firstApp.clearPeriod || 0)}" 
+                           step="1" 
+                           min="0"
+                           placeholder="0">
+                </div>
+            </div>
+        `;
+        appIndex++;
+    });
+    
+    showModal('批量编辑软件设置', `
         <div class="batch-edit-header">
             <div class="batch-edit-quick">
-                <label class="form-label">全部设置为 (元)</label>
+                <label class="form-label">全部设置高档额度为 (元)</label>
                 <input type="number" id="batch-set-all-high-withdraw" class="form-input" placeholder="0.00" step="0.01" min="0">
                 <button class="btn btn-secondary btn-sm" onclick="batchSetAllHighWithdraw()">应用到全部</button>
             </div>
+            <div class="batch-edit-quick mt-2">
+                <label class="form-label">全部设置清零周期为 (天)</label>
+                <input type="number" id="batch-set-all-clear-period" class="form-input" placeholder="0" step="1" min="0">
+                <button class="btn btn-secondary btn-sm" onclick="batchSetAllClearPeriod()">应用到全部</button>
+            </div>
         </div>
         <div class="batch-edit-list">
+            <div class="batch-edit-row batch-edit-header-row">
+                <div class="batch-edit-info">
+                    <div class="batch-edit-name">软件名称</div>
+                </div>
+                <div class="batch-edit-input">
+                    <div style="font-size: 12px; color: var(--text-secondary);">高档额度</div>
+                </div>
+                <div class="batch-edit-input">
+                    <div style="font-size: 12px; color: var(--text-secondary);">清零周期</div>
+                </div>
+            </div>
             ${appsHtml}
         </div>
     `, [
@@ -7918,37 +7982,41 @@ function openBatchEditHighWithdrawModal() {
             text: '保存',
             class: 'btn-primary',
             action: () => {
-                const data = DataManager.loadData();
                 let appIndex = 0;
                 let changedCount = 0;
                 
-                data.phones.forEach(phone => {
-                    phone.apps.forEach(app => {
-                        const input = document.getElementById(`batch-high-withdraw-${appIndex}`);
-                        if (input) {
-                            const newValue = parseFloat(input.value) || 0;
-                            const oldValue = app.highWithdraw || 0;
-                            
-                            if (newValue !== oldValue) {
-                                try {
-                                    DataManager.editApp(phone.id, app.id, {
-                                        name: app.name,
-                                        balance: app.balance,
-                                        minWithdraw: app.minWithdraw,
-                                        highWithdraw: newValue,
-                                        historicalWithdrawn: app.historicalWithdrawn || 0
-                                    });
-                                    changedCount++;
-                                } catch (error) {
-                                    showToast(error.message);
-                                }
+                appNameMap.forEach((apps, name) => {
+                    const highWithdrawInput = document.getElementById(`batch-high-withdraw-${appIndex}`);
+                    const clearPeriodInput = document.getElementById(`batch-clear-period-${appIndex}`);
+                    
+                    const newHighWithdraw = parseFloat(highWithdrawInput.value) || 0;
+                    const newClearPeriod = parseInt(clearPeriodInput.value) || 0;
+                    
+                    apps.forEach(app => {
+                        const oldHighWithdraw = app.highWithdraw || 0;
+                        const oldClearPeriod = app.clearPeriod || 0;
+                        
+                        if (newHighWithdraw !== oldHighWithdraw || newClearPeriod !== oldClearPeriod) {
+                            try {
+                                DataManager.editApp(app.phoneId, app.appId, {
+                                    name: app.name,
+                                    balance: app.balance,
+                                    minWithdraw: app.minWithdraw,
+                                    highWithdraw: newHighWithdraw,
+                                    clearPeriod: newClearPeriod,
+                                    historicalWithdrawn: app.historicalWithdrawn || 0
+                                });
+                                changedCount++;
+                            } catch (error) {
+                                showToast(error.message);
                             }
                         }
-                        appIndex++;
                     });
+                    
+                    appIndex++;
                 });
                 
-                showToast(`成功修改 ${changedCount} 个软件的高档额度！`);
+                showToast(`成功修改 ${changedCount} 个软件的设置！`);
                 renderPhones();
                 closeModal();
             }
@@ -7961,6 +8029,15 @@ function batchSetAllHighWithdraw() {
     if (!value) return;
     
     document.querySelectorAll('.batch-high-withdraw-input').forEach(input => {
+        input.value = value;
+    });
+}
+
+function batchSetAllClearPeriod() {
+    const value = document.getElementById('batch-set-all-clear-period').value;
+    if (!value) return;
+    
+    document.querySelectorAll('.batch-clear-period-input').forEach(input => {
         input.value = value;
     });
 }
@@ -9125,6 +9202,192 @@ function renderFuturePlan(plan) {
                         `).join('')}
                     </div>
                 ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function renderClearWarning() {
+    const data = DataManager.loadData();
+    const today = new Date();
+    
+    const currentDateEl = document.getElementById('clear-warning-current-date');
+    if (currentDateEl) {
+        currentDateEl.textContent = today.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+        });
+    }
+    
+    const apps = [];
+    
+    data.phones.forEach(phone => {
+        (phone.apps || []).forEach(app => {
+            const clearPeriod = app.clearPeriod || 0;
+            
+            if (clearPeriod > 0 && app.lastLoginDate) {
+                const lastLogin = new Date(app.lastLoginDate);
+                const diffTime = Math.abs(today - lastLogin);
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                const daysUntilClear = clearPeriod - diffDays;
+                const progress = Math.min(100, (diffDays / clearPeriod) * 100);
+                
+                let status = 'safe';
+                let statusText = '';
+                let statusColor = '';
+                
+                if (daysUntilClear <= 0) {
+                    status = 'overdue';
+                    statusText = '⚠️ 已过期';
+                    statusColor = '#ef4444';
+                } else if (daysUntilClear === 1) {
+                    status = 'urgent';
+                    statusText = '🔥 明天清零';
+                    statusColor = '#ef4444';
+                } else if (daysUntilClear === 2) {
+                    status = 'warning';
+                    statusText = '⚠️ 后天清零';
+                    statusColor = '#f59e0b';
+                } else if (daysUntilClear <= 3) {
+                    status = 'soon';
+                    statusText = `⏳ ${daysUntilClear}天后清零`;
+                    statusColor = '#f59e0b';
+                } else {
+                    status = 'safe';
+                    statusText = `✅ ${daysUntilClear}天后清零`;
+                    statusColor = '#10b981';
+                }
+                
+                apps.push({
+                    ...app,
+                    phoneName: phone.name,
+                    phoneId: phone.id,
+                    clearPeriod,
+                    lastLoginDate: app.lastLoginDate,
+                    diffDays,
+                    daysUntilClear,
+                    progress,
+                    status,
+                    statusText,
+                    statusColor
+                });
+            } else {
+                apps.push({
+                    ...app,
+                    phoneName: phone.name,
+                    phoneId: phone.id,
+                    clearPeriod: 0,
+                    lastLoginDate: app.lastLoginDate || '',
+                    diffDays: 0,
+                    daysUntilClear: null,
+                    progress: 0,
+                    status: 'no-period',
+                    statusText: '🔒 未设置清零周期',
+                    statusColor: '#6b7280'
+                });
+            }
+        });
+    });
+    
+    apps.sort((a, b) => {
+        if (a.daysUntilClear === null && b.daysUntilClear === null) return 0;
+        if (a.daysUntilClear === null) return 1;
+        if (b.daysUntilClear === null) return -1;
+        return a.daysUntilClear - b.daysUntilClear;
+    });
+    
+    const statsContainer = document.getElementById('clear-warning-stats');
+    const appListContainer = document.getElementById('clear-warning-app-list');
+    
+    const urgentCount = apps.filter(a => a.status === 'urgent').length;
+    const warningCount = apps.filter(a => a.status === 'warning').length;
+    const soonCount = apps.filter(a => a.status === 'soon').length;
+    const safeCount = apps.filter(a => a.status === 'safe' && a.daysUntilClear !== null).length;
+    const noPeriodCount = apps.filter(a => a.status === 'no-period').length;
+    const overdueCount = apps.filter(a => a.status === 'overdue').length;
+    
+    statsContainer.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+            <div style="background: rgba(239,68,68,0.1); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: #ef4444;">${urgentCount}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">明天清零</div>
+            </div>
+            <div style="background: rgba(245,158,11,0.1); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: #f59e0b;">${warningCount + soonCount}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">3天内清零</div>
+            </div>
+            <div style="background: rgba(16,185,129,0.1); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: #10b981;">${safeCount}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">状态正常</div>
+            </div>
+            <div style="background: rgba(107,114,128,0.1); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: #6b7280;">${noPeriodCount}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">未设置周期</div>
+            </div>
+            <div style="background: rgba(239,68,68,0.1); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: #dc2626;">${overdueCount}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">已过期</div>
+            </div>
+            <div style="background: rgba(99,102,241,0.1); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: #6366f1;">${apps.length}</div>
+                <div style="font-size: 11px; color: var(--text-secondary);">总软件数</div>
+            </div>
+        </div>
+    `;
+    
+    if (apps.length === 0) {
+        appListContainer.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state__icon">📱</div>
+                <div class="empty-state__title">暂无软件数据</div>
+                <div class="empty-state__hint">添加手机和软件后即可查看清零预警</div>
+            </div>
+        `;
+        return;
+    }
+    
+    appListContainer.innerHTML = apps.map((app, index) => {
+        const isUrgent = app.status === 'urgent' || app.status === 'overdue';
+        const bgColor = isUrgent ? 'rgba(239,68,68,0.08)' : 
+                       (app.status === 'warning' || app.status === 'soon') ? 'rgba(245,158,11,0.08)' :
+                       (app.status === 'no-period') ? 'rgba(107,114,128,0.08)' : 'rgba(16,185,129,0.08)';
+        
+        return `
+            <div class="clear-warning-app-item" style="background: ${bgColor};">
+                <div class="clear-warning-app-rank">${index + 1}</div>
+                <div class="clear-warning-app-content">
+                    <div class="clear-warning-app-header">
+                        <span class="clear-warning-app-name">${app.name}</span>
+                        <span class="clear-warning-app-phone">📱 ${app.phoneName}</span>
+                    </div>
+                    <div class="clear-warning-app-status" style="color: ${app.statusColor};">
+                        ${app.statusText}
+                    </div>
+                    ${app.clearPeriod > 0 && app.daysUntilClear !== null ? `
+                        <div class="clear-warning-app-info">
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                清零周期: ${app.clearPeriod}天 | 已${app.diffDays}天未登录
+                            </div>
+                            <div style="margin-top: 8px;">
+                                <div style="height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
+                                    <div style="height: 100%; width: ${app.progress}%; background: ${app.statusColor}; border-radius: 3px;"></div>
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                                    清零进度: ${app.progress.toFixed(0)}%
+                                </div>
+                            </div>
+                        </div>
+                    ` : `
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            建议: 在编辑软件时设置清零周期
+                        </div>
+                    `}
+                </div>
+                <div class="clear-warning-app-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="openEditAppModal('${app.phoneId}', '${app.id}')">编辑</button>
+                </div>
             </div>
         `;
     }).join('');
