@@ -964,10 +964,6 @@ class DataManager {
                     app.highWithdraw = 0;
                     needsMigration = true;
                 }
-                if (app.dailyEarningCap === undefined) {
-                    app.dailyEarningCap = 0;
-                    needsMigration = true;
-                }
                 // 为旧数据添加收益追踪字段
                 if (app.balanceHistory === undefined) {
                     app.balanceHistory = [];
@@ -2451,10 +2447,6 @@ class DataManager {
             predictedDailyEarnings = app.minWithdraw || 0.3;
         }
         
-        if (app.dailyEarningCap && app.dailyEarningCap > 0) {
-            predictedDailyEarnings = Math.min(predictedDailyEarnings, app.dailyEarningCap);
-        }
-        
         return Math.max(0.01, Math.round(predictedDailyEarnings * 100) / 100);
     }
 
@@ -2720,7 +2712,6 @@ class DataManager {
                 balance: appData.balance || 0,
                 minWithdraw: parseFloat(appData.minWithdraw),
                 highWithdraw: parseFloat(appData.highWithdraw) || 0,
-                dailyEarningCap: parseFloat(appData.dailyEarningCap) || 0,
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
@@ -2752,7 +2743,6 @@ class DataManager {
                 app.balance = newBalance;
                 app.minWithdraw = parseFloat(appData.minWithdraw);
                 app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
-                app.dailyEarningCap = parseFloat(appData.dailyEarningCap) || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
                 
@@ -7462,11 +7452,6 @@ function openAddAppModal(phoneId) {
             <input type="number" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
             <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
         </div>
-        <div class="form-group">
-            <label class="form-label">每日收益上限 (元)</label>
-            <input type="number" id="app-daily-earning-cap" class="form-input" placeholder="0.00" step="0.01" value="0" min="0">
-            <div class="form-hint">该软件每天最多能赚多少，0表示无上限</div>
-        </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
         {
@@ -7477,7 +7462,6 @@ function openAddAppModal(phoneId) {
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
-                const dailyEarningCap = parseFloat(document.getElementById('app-daily-earning-cap').value) || 0;
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -7494,7 +7478,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, dailyEarningCap });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -7576,11 +7560,6 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
         </div>
         <div class="form-group">
-            <label class="form-label">每日收益上限 (元)</label>
-            <input type="number" id="edit-app-daily-earning-cap" class="form-input" value="${(app.dailyEarningCap || 0).toFixed(2)}" step="0.01" min="0">
-            <div class="form-hint">该软件每天最多能赚多少，0表示无上限</div>
-        </div>
-        <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <div style="position: relative;">
                 <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
@@ -7612,7 +7591,6 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 const newBalance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
-                const dailyEarningCap = parseFloat(document.getElementById('edit-app-daily-earning-cap').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
 
                 if (name) {
@@ -7644,7 +7622,6 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
-                            dailyEarningCap,
                             historicalWithdrawn
                         });
                             if (saveBtn) {
@@ -7676,7 +7653,6 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
-                            dailyEarningCap,
                             historicalWithdrawn
                         });
                         
@@ -7889,6 +7865,104 @@ function openBatchAddAppsModal() {
             }
         }
     ]);
+}
+
+function openBatchEditHighWithdrawModal() {
+    const data = DataManager.loadData();
+    
+    if (data.phones.length === 0 || data.phones.every(phone => phone.apps.length === 0)) {
+        showToast('暂无软件可编辑');
+        return;
+    }
+    
+    let appsHtml = '';
+    let appIndex = 0;
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            appsHtml += `
+                <div class="batch-edit-row" data-phone-id="${phone.id}" data-app-id="${app.id}">
+                    <div class="batch-edit-info">
+                        <div class="batch-edit-name">${app.name}</div>
+                        <div class="batch-edit-phone">📱 ${phone.name}</div>
+                    </div>
+                    <div class="batch-edit-input">
+                        <input type="number" 
+                               id="batch-high-withdraw-${appIndex}" 
+                               class="form-input batch-high-withdraw-input"
+                               value="${(app.highWithdraw || app.minWithdraw).toFixed(2)}" 
+                               step="0.01" 
+                               min="0"
+                               data-original="${(app.highWithdraw || app.minWithdraw).toFixed(2)}">
+                    </div>
+                </div>
+            `;
+            appIndex++;
+        });
+    });
+    
+    showModal('批量编辑高档额度', `
+        <div class="batch-edit-header">
+            <div class="batch-edit-quick">
+                <label class="form-label">全部设置为 (元)</label>
+                <input type="number" id="batch-set-all-high-withdraw" class="form-input" placeholder="0.00" step="0.01" min="0">
+                <button class="btn btn-secondary btn-sm" onclick="batchSetAllHighWithdraw()">应用到全部</button>
+            </div>
+        </div>
+        <div class="batch-edit-list">
+            ${appsHtml}
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '保存',
+            class: 'btn-primary',
+            action: () => {
+                const data = DataManager.loadData();
+                let appIndex = 0;
+                let changedCount = 0;
+                
+                data.phones.forEach(phone => {
+                    phone.apps.forEach(app => {
+                        const input = document.getElementById(`batch-high-withdraw-${appIndex}`);
+                        if (input) {
+                            const newValue = parseFloat(input.value) || 0;
+                            const oldValue = app.highWithdraw || 0;
+                            
+                            if (newValue !== oldValue) {
+                                try {
+                                    DataManager.editApp(phone.id, app.id, {
+                                        name: app.name,
+                                        balance: app.balance,
+                                        minWithdraw: app.minWithdraw,
+                                        highWithdraw: newValue,
+                                        historicalWithdrawn: app.historicalWithdrawn || 0
+                                    });
+                                    changedCount++;
+                                } catch (error) {
+                                    showToast(error.message);
+                                }
+                            }
+                        }
+                        appIndex++;
+                    });
+                });
+                
+                showToast(`成功修改 ${changedCount} 个软件的高档额度！`);
+                renderPhones();
+                closeModal();
+            }
+        }
+    ]);
+}
+
+function batchSetAllHighWithdraw() {
+    const value = document.getElementById('batch-set-all-high-withdraw').value;
+    if (!value) return;
+    
+    document.querySelectorAll('.batch-high-withdraw-input').forEach(input => {
+        input.value = value;
+    });
 }
 
 // 删除软件
