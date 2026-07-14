@@ -5610,7 +5610,8 @@ function buildSparklineSvg(values, width, height) {
 
 function renderExpiringApps() {
     const container = document.getElementById('expiring-apps-content');
-    if (!container) return;
+    const card = document.getElementById('expiring-apps-card');
+    if (!container || !card) return;
 
     const data = DataManager.loadData();
     const today = new Date();
@@ -5644,15 +5645,11 @@ function renderExpiringApps() {
     expiringApps.sort((a, b) => a.daysUntilNextPlay - b.daysUntilNextPlay);
     
     if (expiringApps.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state" style="padding: 20px;">
-                <div style="font-size: 36px; margin-bottom: 12px;">🎉</div>
-                <div style="font-size: 14px; color: var(--text-secondary);">暂无即将到期的软件</div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">所有软件状态良好</div>
-            </div>
-        `;
+        card.style.display = 'none';
         return;
     }
+    
+    card.style.display = 'block';
     
     const urgentCount = expiringApps.filter(a => a.daysUntilNextPlay === 0).length;
     const warningCount = expiringApps.filter(a => a.daysUntilNextPlay > 0 && a.daysUntilNextPlay <= 3).length;
@@ -6619,19 +6616,51 @@ function showAppDetailModal(appId) {
                 </div>
             </div>
             
+            <!-- 收益统计 -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;">
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 10px; text-align: center;">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--text-primary);">
+                        ${calculateAverageDailyEarnings(targetApp).toFixed(2)}
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-secondary);">平均日收益</div>
+                </div>
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 10px; text-align: center;">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--success-color);">
+                        ${calculateMaxDailyEarnings(targetApp).toFixed(2)}
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-secondary);">最高日收益</div>
+                </div>
+                <div style="background: var(--bg-cream); border-radius: 8px; padding: 10px; text-align: center;">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--primary-color);">
+                        ${targetApp.balanceHistory ? targetApp.balanceHistory.length : 0}
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-secondary);">记录天数</div>
+                </div>
+            </div>
+            
             <!-- 每日赚取记录 -->
-            ${targetApp.dailyEarnings && Object.keys(targetApp.dailyEarnings).length > 0 ? `
+            ${targetApp.balanceHistory && targetApp.balanceHistory.length > 0 ? `
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">📈 每日赚取记录</div>
-                    <div style="max-height: 150px; overflow-y: auto;" id="daily-earnings-scroll-${targetApp.id}">
-                        ${Object.entries(targetApp.dailyEarnings)
-                            .sort((a, b) => new Date(b[0]) - new Date(a[0]))
-                            .map(([date, amount]) => {
-                                const isToday = date === new Date().toISOString().split('T')[0];
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary);">📋 每日收益明细</div>
+                    <div style="max-height: 200px; overflow-y: auto;" id="daily-earnings-scroll-${targetApp.id}">
+                        ${targetApp.balanceHistory
+                            .slice()
+                            .sort((a, b) => new Date(b.date) - new Date(a.date))
+                            .map(record => {
+                                const isToday = record.date === new Date().toISOString().split('T')[0];
+                                const isPositive = record.change > 0;
                                 return `
-                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-color); ${isToday ? 'background: rgba(56, 239, 125, 0.1);' : ''}">
-                                        <span style="font-size: 12px; color: var(--text-secondary);">${date} ${isToday ? '(今天)' : ''}</span>
-                                        <span style="font-size: 12px; font-weight: 600; color: var(--success-color);">+¥${parseFloat(amount).toFixed(2)}</span>
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-color); ${isToday ? 'background: rgba(56, 239, 125, 0.1);' : ''}">
+                                        <div>
+                                            <span style="font-size: 12px; color: var(--text-secondary);">${record.date} ${isToday ? '(今天)' : ''}</span>
+                                            ${record.note ? `<span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${record.note}</span>` : ''}
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <span style="font-size: 12px; font-weight: 600; color: ${isPositive ? '#10b981' : '#ef4444'};">
+                                                ${isPositive ? '+' : ''}¥${record.change.toFixed(2)}
+                                            </span>
+                                            <span style="font-size: 10px; color: var(--text-muted); display: block;">余额 ¥${record.balance.toFixed(2)}</span>
+                                        </div>
                                     </div>
                                 `;
                             }).join('')}
@@ -6657,6 +6686,29 @@ function showAppDetailModal(appId) {
     showModal('软件详情', html, [
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ]);
+}
+
+function calculateAverageDailyEarnings(app) {
+    if (!app || !app.balanceHistory || app.balanceHistory.length === 0) return 0;
+    
+    const positiveChanges = app.balanceHistory
+        .filter(record => record.change > 0)
+        .map(record => record.change);
+    
+    if (positiveChanges.length === 0) return 0;
+    
+    const sum = positiveChanges.reduce((a, b) => a + b, 0);
+    return sum / positiveChanges.length;
+}
+
+function calculateMaxDailyEarnings(app) {
+    if (!app || !app.balanceHistory || app.balanceHistory.length === 0) return 0;
+    
+    const max = app.balanceHistory.reduce((max, record) => {
+        return record.change > 0 && record.change > max ? record.change : max;
+    }, 0);
+    
+    return max;
 }
 
 // ==================== 提现日历功能 ====================
@@ -8441,6 +8493,9 @@ function renderStats() {
     
     // 渲染手机收益对比
     renderPhoneComparison();
+    
+    // 渲染软件收益排行榜
+    renderAppEarningsRanking();
 }
 
 // 渲染月收益记录
@@ -8751,6 +8806,92 @@ function renderPhoneComparison() {
     container.innerHTML = html;
 }
 
+function renderAppEarningsRanking() {
+    const container = document.getElementById('app-earnings-ranking');
+    if (!container) return;
+
+    const data = DataManager.loadData();
+    const appEarnings = [];
+
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            const totalEarned = (app.withdrawn || 0) + (app.historicalWithdrawn || 0) + (app.balance || 0);
+            const avgDaily = app.dailyEarnings ? calculateAppAverageEarnings(app) : 0;
+            
+            appEarnings.push({
+                name: app.name,
+                phoneName: phone.name,
+                totalEarned,
+                balance: app.balance || 0,
+                withdrawn: (app.withdrawn || 0) + (app.historicalWithdrawn || 0),
+                avgDaily,
+                appId: app.id,
+                phoneId: phone.id
+            });
+        });
+    });
+
+    appEarnings.sort((a, b) => b.totalEarned - a.totalEarned);
+    const topApps = appEarnings.slice(0, 10);
+
+    if (topApps.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 12px;">🏆</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">暂无软件收益数据</div>
+            </div>
+        `;
+        return;
+    }
+
+    const maxEarnings = Math.max(...topApps.map(a => a.totalEarned), 1);
+
+    let html = `
+        <div style="padding: 12px;">
+            ${topApps.map((app, index) => {
+                const barWidth = (app.totalEarned / maxEarnings * 100).toFixed(1);
+                const isTop3 = index < 3;
+                const rankColors = ['#fbbf24', '#9ca3af', '#f59e0b'];
+                const rankColor = isTop3 ? rankColors[index] : '#6b7280';
+                
+                return `
+                    <div class="app-ranking-item" onclick="showAppDetailModal('${app.appId}')">
+                        <div class="app-ranking-rank" style="background: ${rankColor};">${index + 1}</div>
+                        <div class="app-ranking-info">
+                            <div class="app-ranking-name">${app.name}</div>
+                            <div class="app-ranking-meta">
+                                <span>📱 ${app.phoneName}</span>
+                                ${app.avgDaily > 0 ? `<span>📊 日均 ¥${app.avgDaily.toFixed(2)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="app-ranking-amount">
+                            <div style="font-size: 14px; font-weight: 700; color: var(--primary-color);">¥${app.totalEarned.toFixed(2)}</div>
+                            <div style="font-size: 10px; color: var(--text-secondary);">余额 ¥${app.balance.toFixed(2)}</div>
+                        </div>
+                        <div class="app-ranking-bar">
+                            <div class="app-ranking-bar-fill" style="width: ${barWidth}%; background: linear-gradient(90deg, ${rankColor}, ${rankColor}88);"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function calculateAppAverageEarnings(app) {
+    if (!app.dailyEarnings) return 0;
+    
+    const earnings = Object.values(app.dailyEarnings)
+        .map(v => parseFloat(v) || 0)
+        .filter(v => v > 0);
+    
+    if (earnings.length === 0) return 0;
+    
+    return earnings.reduce((a, b) => a + b, 0) / earnings.length;
+}
+
 // 渲染提现规划页面
 function renderWithdrawPlan() {
     const data = DataManager.loadData();
@@ -8965,9 +9106,11 @@ function renderDailyRecommendations(apps) {
             <div style="margin-bottom: 12px; padding: 12px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1)); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2);">
                 <div style="font-size: 13px; color: #f59e0b; font-weight: 700;">🎯 连续提现保障计划</div>
                 <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.6;">
-                    为确保已达标软件提现完后每天都有高档额度可提，今天需优先玩以下软件：
+                    当前已达标软件提现后，<b style="color: #ef4444;">${gapDayList}</b> 将没有软件可提现，需要今天开始培养以下软件来填补缺口：
                 </div>
-                ${gapDayList ? `<div style="font-size: 11px; color: #f59e0b; margin-top: 6px; font-weight: 600;">📅 需填补日期：${gapDayList}</div>` : ''}
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                    💡 意思是：如果今天不玩这些软件，那几天就提不了高档额度了
+                </div>
             </div>
         `;
     }
@@ -8979,9 +9122,9 @@ function renderDailyRecommendations(apps) {
     const gapApps = apps.filter(app => app.targetGapDay).sort((a, b) => b.priority - a.priority);
     const otherApps = apps.filter(app => !app.targetGapDay).sort((a, b) => b.priority - a.priority);
     
-    const allApps = [...gapApps, ...otherApps];
+    const sortedApps = [...gapApps, ...otherApps];
     
-    container.innerHTML += allApps.map((app, index) => {
+    container.innerHTML += sortedApps.map((app, index) => {
         const daysToTarget = app.daysToTarget;
         const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
         
@@ -9003,7 +9146,7 @@ function renderDailyRecommendations(apps) {
         
         const gapTag = app.targetGapDay ? `
             <div class="daily-recommend-gap-tag">
-                🎯 为${app.targetGapDay.date}(${app.targetGapDay.weekday})达标
+                🎯 计划${app.targetGapDay.date}(${app.targetGapDay.weekday})达标
             </div>
         ` : '';
         
@@ -9013,27 +9156,40 @@ function renderDailyRecommendations(apps) {
         
         return `
             <div class="daily-recommend-item ${app.targetGapDay ? 'has-gap-target' : ''}">
-                <div class="daily-recommend-rank">${index + 1}</div>
-                <div class="daily-recommend-info">
-                    <div class="daily-recommend-name">${app.name}${recultivatedTag}</div>
-                    ${gapTag}
-                    <div class="daily-recommend-meta">
-                        <span>📱 ${app.phoneName}</span>
-                        <span>⏰ ${daysToTarget}天后达到高档</span>
-                        <span style="color: ${urgencyColor}; font-weight: 600;">${urgencyLevel}</span>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <div class="daily-recommend-name">${app.name}${recultivatedTag}</div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                            <div class="daily-recommend-rank">${index + 1}</div>
+                            ${gapTag}
+                            <span>📱 ${app.phoneName}</span>
+                            <span style="color: ${urgencyColor}; font-weight: 600;">${urgencyLevel}</span>
+                        </div>
                     </div>
-                </div>
-                <div class="daily-recommend-status">
-                    <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${app.balance.toFixed(2)}</div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">还差 ¥${app.remaining.toFixed(2)}</div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 18px; font-weight: 700; color: var(--primary-color);">¥${app.balance.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: var(--text-secondary);">还差 ¥${app.remaining.toFixed(2)}</div>
+                    </div>
                 </div>
                 <div class="daily-recommend-bar">
                     <div class="daily-recommend-bar-fill" style="width: ${progress.toFixed(1)}%;"></div>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <div style="font-size: 11px; color: var(--text-muted);">
-                        💡 预计每天收益 ¥${app.avgDailyEarnings.toFixed(2)}
+                <div style="margin-top: 8px; padding: 8px 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border-left: 3px solid #3b82f6;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">⏰ 预计达标时间</div>
+                            <div style="font-size: 13px; font-weight: 600; color: #3b82f6;">${daysToTarget}天后达到高档额度</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">📈 保守日收益</div>
+                            <div style="font-size: 13px; font-weight: 600; color: #10b981;">¥${app.avgDailyEarnings.toFixed(2)}</div>
+                        </div>
                     </div>
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; line-height: 1.4;">
+                        💡 按当前收益速度，预计${daysToTarget}天后余额达到高档提现额度 ¥${app.targetWithdraw.toFixed(2)}
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
                     <div class="daily-recommend-action">
                         <button class="btn btn-primary btn-sm" onclick="openEditAppModal('${app.phoneId}', '${app.id}')">编辑</button>
                         <button class="btn btn-secondary btn-sm" onclick="showAppDetailModal('${app.id}')">详情</button>

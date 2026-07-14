@@ -2825,6 +2825,78 @@ body {
     background: rgba(255, 255, 255, 0.08);
 }
 
+.app-ranking-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--border-color);
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.app-ranking-item:last-child {
+    border-bottom: none;
+}
+
+.app-ranking-item:hover {
+    background: var(--bg-cream);
+}
+
+.app-ranking-rank {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+}
+
+.app-ranking-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.app-ranking-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-ranking-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.app-ranking-amount {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.app-ranking-bar {
+    height: 4px;
+    background: var(--bg-primary);
+    border-radius: 9999px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.app-ranking-bar-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.5s ease;
+}
+
 /* 手机端适配 */
 @media (max-width: 480px) {
     .weekly-chart {
@@ -2850,6 +2922,25 @@ body {
     
     .phone-comparison-earned {
         font-size: 14px;
+    }
+    
+    .app-ranking-item {
+        padding: 10px 6px;
+        gap: 8px;
+    }
+    
+    .app-ranking-rank {
+        width: 20px;
+        height: 20px;
+        font-size: 11px;
+    }
+    
+    .app-ranking-name {
+        font-size: 13px;
+    }
+    
+    .app-ranking-meta {
+        flex-wrap: wrap;
     }
 }
 
@@ -3087,23 +3178,22 @@ body {
 }
 
 .daily-recommend-rank {
-    position: absolute;
-    left: 16px;
-    top: 14px;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
+    position: relative;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
     background: linear-gradient(135deg, #3b82f6, #60a5fa);
     color: white;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .daily-recommend-info {
-    padding-left: 36px;
+    flex: 1;
 }
 
 .daily-recommend-name {
