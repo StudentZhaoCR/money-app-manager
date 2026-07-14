@@ -8781,21 +8781,9 @@ function renderWithdrawPlan() {
         });
     });
     
-    // 可提现软件 - 按余额从小到大排序
-    const withdrawReadyApps = allApps.filter(app => app.canWithdraw)
-        .sort((a, b) => a.balance - b.balance);
-    
-    // 需要玩的软件
-    const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
-        .sort((a, b) => a.remaining - b.remaining);
-    
-    // 计算今日推荐
+    const futurePlan = calculateFuturePlan(allApps);
     const todayRecommendations = calculateDailyRecommendations(allApps);
     
-    // 计算未来规划
-    const futurePlan = calculateFuturePlan(allApps);
-    
-    renderWithdrawReadyList(withdrawReadyApps);
     renderDailyRecommendations(todayRecommendations);
     renderFuturePlan(futurePlan);
 }
@@ -8848,6 +8836,7 @@ function renderWithdrawReadyList(apps) {
 function calculateDailyRecommendations(allApps) {
     const futurePlan = calculateFuturePlan(allApps);
     
+    // 找出所有缺口天（没有可提现软件的天）
     const gapDays = [];
     for (let day = 0; day < futurePlan.length; day++) {
         if (futurePlan[day].withdrawApps.length === 0) {
@@ -8859,61 +8848,91 @@ function calculateDailyRecommendations(allApps) {
         }
     }
     
-    const needPlayApps = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
-        .map(app => {
+    const recommendations = [];
+    const usedAppIds = new Set();
+    
+    // 第一优先级：今天需要玩的软件（来自未来规划第0天的playPlanApps）
+    // 这些软件是为了填补未来的缺口天
+    futurePlan[0].playPlanApps.forEach(app => {
+        // 找出这个软件被安排在哪个缺口天提现
+        let targetGapDay = null;
+        for (let day = 1; day < futurePlan.length; day++) {
+            const withdrawApp = futurePlan[day].withdrawApps.find(a => a.id === app.id);
+            if (withdrawApp) {
+                targetGapDay = {
+                    dayIndex: day,
+                    date: futurePlan[day].date,
+                    weekday: futurePlan[day].weekday
+                };
+                break;
+            }
+        }
+        
+        const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
+        const daysToTarget = app.targetWithdraw > 0 && conservativeEarnings > 0 
+            ? Math.ceil(app.remaining / conservativeEarnings) : 0;
+        const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
+        
+        // 优先级：缺口天越近优先级越高
+        let priority = progress;
+        if (targetGapDay) {
+            priority += (14 - targetGapDay.dayIndex) * 30;
+        }
+        
+        if (daysToTarget === 0) priority += 200;
+        else if (daysToTarget === 1) priority += 150;
+        else if (daysToTarget === 2) priority += 100;
+        else if (daysToTarget === 3) priority += 60;
+        else if (daysToTarget === 4) priority += 30;
+        else if (daysToTarget === 5) priority += 10;
+        
+        priority += conservativeEarnings * 20;
+        
+        recommendations.push({
+            ...app,
+            daysToTarget,
+            progress,
+            priority,
+            conservativeEarnings,
+            targetGapDay,
+            isPlanned: true
+        });
+        usedAppIds.add(app.id);
+    });
+    
+    // 第二优先级：其他需要玩的软件（未在规划中但接近达标）
+    allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0 && !usedAppIds.has(app.id))
+        .forEach(app => {
             const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
-            const daysToTargetConservative = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
+            const daysToTarget = app.targetWithdraw > 0 && conservativeEarnings > 0 
+                ? Math.ceil(app.remaining / conservativeEarnings) : 0;
             const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
-            
-            let bestGapDay = null;
-            let bestMatchScore = 0;
-            
-            gapDays.forEach(gap => {
-                const daysUntilGap = gap.dayIndex;
-                
-                if (daysToTargetConservative <= daysUntilGap + 1) {
-                    const score = 100 - daysUntilGap * 10 + (daysUntilGap - daysToTargetConservative) * 5;
-                    if (score > bestMatchScore) {
-                        bestMatchScore = score;
-                        bestGapDay = gap;
-                    }
-                }
-            });
             
             let priority = progress;
             
-            if (bestGapDay) {
-                priority += (14 - bestGapDay.dayIndex) * 30;
-            }
-            
-            if (daysToTargetConservative === 0) {
-                priority += 200;
-            } else if (daysToTargetConservative === 1) {
-                priority += 150;
-            } else if (daysToTargetConservative === 2) {
-                priority += 100;
-            } else if (daysToTargetConservative === 3) {
-                priority += 60;
-            } else if (daysToTargetConservative === 4) {
-                priority += 30;
-            } else if (daysToTargetConservative === 5) {
-                priority += 10;
-            }
+            if (daysToTarget === 0) priority += 200;
+            else if (daysToTarget === 1) priority += 150;
+            else if (daysToTarget === 2) priority += 100;
+            else if (daysToTarget === 3) priority += 60;
+            else if (daysToTarget === 4) priority += 30;
+            else if (daysToTarget === 5) priority += 10;
             
             priority += conservativeEarnings * 20;
             
-            return {
+            recommendations.push({
                 ...app,
-                daysToTarget: daysToTargetConservative,
+                daysToTarget,
                 progress,
                 priority,
                 conservativeEarnings,
-                targetGapDay: bestGapDay
-            };
-        })
-        .sort((a, b) => b.priority - a.priority);
+                targetGapDay: null,
+                isPlanned: false
+            });
+        });
     
-    return needPlayApps.slice(0, 10);
+    recommendations.sort((a, b) => b.priority - a.priority);
+    
+    return recommendations.slice(0, 10);
 }
 
 function renderDailyRecommendations(apps) {
@@ -8931,24 +8950,34 @@ function renderDailyRecommendations(apps) {
         return;
     }
     
-    const hasGapApps = apps.some(app => app.targetGapDay);
+    const plannedApps = apps.filter(app => app.isPlanned);
+    const unplannedApps = apps.filter(app => !app.isPlanned);
     
-    if (hasGapApps) {
-        const gapHeader = `
-            <div style="margin-bottom: 12px; padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px;">
-                <div style="font-size: 12px; color: #f59e0b; font-weight: 600;">🎯 缺口填补计划</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">以下软件是为了确保未来某天有高档提现而推荐，优先玩它们！</div>
+    let headerHtml = '';
+    
+    if (plannedApps.length > 0) {
+        const gapDayList = plannedApps
+            .filter(app => app.targetGapDay)
+            .map(app => `${app.targetGapDay.date}(${app.targetGapDay.weekday})`)
+            .join('、');
+        
+        headerHtml = `
+            <div style="margin-bottom: 12px; padding: 12px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1)); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                <div style="font-size: 13px; color: #f59e0b; font-weight: 700;">🎯 连续提现保障计划</div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.6;">
+                    为确保已达标软件提现完后每天都有高档额度可提，今天需优先玩以下软件：
+                </div>
+                ${gapDayList ? `<div style="font-size: 11px; color: #f59e0b; margin-top: 6px; font-weight: 600;">📅 需填补日期：${gapDayList}</div>` : ''}
             </div>
         `;
-        container.innerHTML = gapHeader;
-    } else {
-        container.innerHTML = '';
     }
+    
+    container.innerHTML = headerHtml;
     
     const maxPriority = Math.max(...apps.map(a => a.priority));
     
-    const gapApps = apps.filter(app => app.targetGapDay);
-    const otherApps = apps.filter(app => !app.targetGapDay);
+    const gapApps = apps.filter(app => app.targetGapDay).sort((a, b) => b.priority - a.priority);
+    const otherApps = apps.filter(app => !app.targetGapDay).sort((a, b) => b.priority - a.priority);
     
     const allApps = [...gapApps, ...otherApps];
     
@@ -8972,19 +9001,21 @@ function renderDailyRecommendations(apps) {
             urgencyColor = '#10b981';
         }
         
-        const priorityPercent = (app.priority / maxPriority) * 100;
-        
         const gapTag = app.targetGapDay ? `
             <div class="daily-recommend-gap-tag">
                 🎯 为${app.targetGapDay.date}(${app.targetGapDay.weekday})达标
             </div>
         ` : '';
         
+        const recultivatedTag = app.isRecultivated ? `
+            <span style="font-size: 10px; color: #8b5cf6; background: rgba(139, 92, 246, 0.1); padding: 2px 6px; border-radius: 4px; margin-left: 4px;">♻️ 重新培养</span>
+        ` : '';
+        
         return `
             <div class="daily-recommend-item ${app.targetGapDay ? 'has-gap-target' : ''}">
                 <div class="daily-recommend-rank">${index + 1}</div>
                 <div class="daily-recommend-info">
-                    <div class="daily-recommend-name">${app.name}</div>
+                    <div class="daily-recommend-name">${app.name}${recultivatedTag}</div>
                     ${gapTag}
                     <div class="daily-recommend-meta">
                         <span>📱 ${app.phoneName}</span>
@@ -9018,22 +9049,6 @@ function calculateFuturePlan(allApps) {
     const today = new Date();
     const planDays = 14;
     
-    const withdrawReadyApps = allApps.filter(app => app.canWithdraw);
-    const appsNeedingPlay = allApps.filter(app => !app.canWithdraw && app.avgDailyEarnings > 0)
-        .map(app => {
-            const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
-            const daysToTargetConservative = app.targetWithdraw > 0 ? Math.ceil(app.remaining / conservativeEarnings) : 0;
-            const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
-            
-            return {
-                ...app,
-                conservativeEarnings,
-                daysToTarget: daysToTargetConservative,
-                progress
-            };
-        })
-        .sort((a, b) => a.daysToTarget - b.daysToTarget);
-    
     for (let day = 0; day < planDays; day++) {
         const date = new Date(today);
         date.setDate(today.getDate() + day);
@@ -9047,85 +9062,154 @@ function calculateFuturePlan(allApps) {
         };
     }
     
-    const usedApps = new Set();
-    const scheduledWithdrawDays = new Map();
+    // 步骤1：已达标软件按余额从小到大分配到前N天（每天提现一个）
+    const withdrawReadyApps = allApps.filter(app => app.canWithdraw)
+        .sort((a, b) => a.balance - b.balance);
     
-    const readyAppsCopy = [...withdrawReadyApps];
+    const withdrawnDayMap = new Map();
+    const scheduledAppDays = new Map();
     
-    for (let day = 0; day < planDays; day++) {
-        if (readyAppsCopy.length > 0) {
-            const app = readyAppsCopy.shift();
-            plan[day].withdrawApps.push(app);
-            usedApps.add(app.id);
-            scheduledWithdrawDays.set(app.id, day);
-        }
+    for (let day = 0; day < Math.min(withdrawReadyApps.length, planDays); day++) {
+        const app = withdrawReadyApps[day];
+        plan[day].withdrawApps.push(app);
+        withdrawnDayMap.set(app.id, day);
+        scheduledAppDays.set(app.id, day);
     }
     
-    const gapDays = [];
-    for (let day = 0; day < planDays; day++) {
-        if (plan[day].withdrawApps.length === 0) {
-            gapDays.push(day);
-        }
-    }
+    // 步骤2：构建可培养软件列表（包括已提现的软件，可重新培养）
+    const cultivatableApps = allApps
+        .filter(app => app.avgDailyEarnings > 0)
+        .map(app => {
+            const conservativeEarnings = DataManager.calculatePredictedDailyEarnings(app, true);
+            const daysToTarget = app.targetWithdraw > 0 && conservativeEarnings > 0 
+                ? Math.ceil(app.remaining / conservativeEarnings) : 999;
+            const progress = app.targetWithdraw > 0 ? (app.balance / app.targetWithdraw) * 100 : 0;
+            return {
+                ...app,
+                conservativeEarnings,
+                daysToTarget,
+                progress
+            };
+        });
     
-    gapDays.forEach(gapDay => {
-        const candidates = appsNeedingPlay.filter(app => 
-            !usedApps.has(app.id) && 
-            !scheduledWithdrawDays.has(app.id) &&
-            app.daysToTarget <= gapDay
-        ).sort((a, b) => a.daysToTarget - b.daysToTarget);
+    // 步骤3：为每个缺口天分配软件
+    // 关键：已提现的软件可以从提现后第二天开始重新培养
+    const usedAppIds = new Set();
+    
+    for (let day = 0; day < planDays; day++) {
+        if (plan[day].withdrawApps.length > 0) continue;
         
-        if (candidates.length > 0) {
-            const app = candidates[0];
-            plan[gapDay].withdrawApps.push(app);
-            usedApps.add(app.id);
-            scheduledWithdrawDays.set(app.id, gapDay);
+        let bestApp = null;
+        let bestScore = -1;
+        
+        cultivatableApps.forEach(app => {
+            if (usedAppIds.has(app.id)) return;
+            if (scheduledAppDays.has(app.id)) return;
             
-            for (let d = Math.max(0, gapDay - app.daysToTarget); d < gapDay; d++) {
-                if (!plan[d].playPlanApps.find(a => a.id === app.id)) {
-                    plan[d].playPlanApps.push(app);
+            // 计算软件可以开始玩的时间和需要的剩余金额
+            let startDay = 0;
+            let effectiveRemaining = app.remaining;
+            
+            if (withdrawnDayMap.has(app.id)) {
+                // 已提现的软件，从提现后第二天开始重新培养，余额归零
+                startDay = withdrawnDayMap.get(app.id) + 1;
+                effectiveRemaining = app.targetWithdraw;
+            }
+            
+            if (startDay > day) return;
+            if (app.conservativeEarnings <= 0) return;
+            
+            const availableDays = day - startDay;
+            const effectiveDaysToTarget = Math.ceil(effectiveRemaining / app.conservativeEarnings);
+            
+            if (effectiveDaysToTarget <= availableDays) {
+                const score = 100 - effectiveDaysToTarget * 5 + (app.conservativeEarnings * 10);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestApp = {
+                        ...app,
+                        effectiveRemaining,
+                        effectiveStartDay: startDay,
+                        effectiveDaysToTarget,
+                        isRecultivated: withdrawnDayMap.has(app.id)
+                    };
+                }
+            }
+        });
+        
+        if (bestApp) {
+            plan[day].withdrawApps.push(bestApp);
+            usedAppIds.add(bestApp.id);
+            scheduledAppDays.set(bestApp.id, day);
+            
+            // 安排提现前的培养计划
+            for (let d = bestApp.effectiveStartDay; d < day; d++) {
+                if (!plan[d].playPlanApps.find(a => a.id === bestApp.id)) {
+                    plan[d].playPlanApps.push(bestApp);
                 }
             }
         }
-    });
-    
-    const remainingGapDays = [];
-    for (let day = 0; day < planDays; day++) {
-        if (plan[day].withdrawApps.length === 0) {
-            remainingGapDays.push(day);
-        }
     }
     
-    remainingGapDays.forEach(gapDay => {
-        const candidates = appsNeedingPlay.filter(app => 
-            !usedApps.has(app.id) && 
-            !scheduledWithdrawDays.has(app.id)
-        ).sort((a, b) => a.daysToTarget - b.daysToTarget);
+    // 步骤4：对仍未填补的缺口天，安排最近的可用软件
+    for (let day = 0; day < planDays; day++) {
+        if (plan[day].withdrawApps.length > 0) continue;
         
-        if (candidates.length > 0) {
-            const app = candidates[0];
-            const daysNeeded = app.daysToTarget;
-            const targetDay = Math.min(gapDay + daysNeeded, planDays - 1);
+        let bestApp = null;
+        let bestDaysToTarget = 999;
+        
+        cultivatableApps.forEach(app => {
+            if (usedAppIds.has(app.id)) return;
+            if (scheduledAppDays.has(app.id)) return;
             
-            if (!plan[targetDay].withdrawApps.find(a => a.id === app.id)) {
-                plan[targetDay].withdrawApps.push(app);
-                usedApps.add(app.id);
-                scheduledWithdrawDays.set(app.id, targetDay);
+            let startDay = 0;
+            let effectiveRemaining = app.remaining;
+            
+            if (withdrawnDayMap.has(app.id)) {
+                startDay = withdrawnDayMap.get(app.id) + 1;
+                effectiveRemaining = app.targetWithdraw;
             }
             
-            for (let d = Math.max(0, targetDay - daysNeeded); d < targetDay; d++) {
-                if (!plan[d].playPlanApps.find(a => a.id === app.id)) {
-                    plan[d].playPlanApps.push(app);
+            if (startDay > day) return;
+            if (app.conservativeEarnings <= 0) return;
+            
+            const effectiveDaysToTarget = Math.ceil(effectiveRemaining / app.conservativeEarnings);
+            
+            if (effectiveDaysToTarget < bestDaysToTarget) {
+                bestDaysToTarget = effectiveDaysToTarget;
+                bestApp = {
+                    ...app,
+                    effectiveRemaining,
+                    effectiveStartDay: startDay,
+                    effectiveDaysToTarget,
+                    isRecultivated: withdrawnDayMap.has(app.id)
+                };
+            }
+        });
+        
+        if (bestApp) {
+            const targetDay = Math.min(day + bestApp.effectiveDaysToTarget, planDays - 1);
+            if (targetDay < planDays && plan[targetDay].withdrawApps.length === 0) {
+                plan[targetDay].withdrawApps.push(bestApp);
+                usedAppIds.add(bestApp.id);
+                scheduledAppDays.set(bestApp.id, targetDay);
+                
+                for (let d = bestApp.effectiveStartDay; d < targetDay; d++) {
+                    if (!plan[d].playPlanApps.find(a => a.id === bestApp.id)) {
+                        plan[d].playPlanApps.push(bestApp);
+                    }
                 }
             }
         }
-    });
+    }
     
+    // 步骤5：为每天补充推荐玩的软件
     for (let day = 0; day < planDays; day++) {
         const currentUsedPhones = new Set([...plan[day].withdrawApps, ...plan[day].playPlanApps].map(a => a.phoneId));
         
-        const availablePlayApps = appsNeedingPlay.filter(app => 
-            !usedApps.has(app.id) && 
+        const availablePlayApps = cultivatableApps.filter(app => 
+            !usedAppIds.has(app.id) && 
+            !scheduledAppDays.has(app.id) &&
             !currentUsedPhones.has(app.phoneId) &&
             plan[day].playPlanApps.length < 5
         );
