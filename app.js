@@ -114,11 +114,20 @@ function startVoiceInput() {
         return;
     }
     
+    if (window.location.protocol === 'file:') {
+        showToast('语音识别需要在服务器环境下运行（如localhost或HTTPS），请使用本地服务器打开', 'error');
+        return;
+    }
+    
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = 'zh-CN';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    
+    let timeoutId = null;
+    let isCompleted = false;
     
     closeModal();
     
@@ -131,13 +140,25 @@ function startVoiceInput() {
                 <div style="width: 12px; height: 12px; border-radius: 50%; background: #ef4444; animation: pulse 1s infinite;"></div>
                 <div style="font-size: 12px; color: #ef4444; margin-top: 8px;">正在听...</div>
             </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 16px;">请说完后稍等片刻，系统会自动识别</div>
         </div>
     `, [
-        { text: '取消', class: 'btn-secondary', action: function() { recognition.stop(); closeModal(); } }
+        { text: '取消', class: 'btn-secondary', action: function() { 
+            isCompleted = true;
+            clearTimeout(timeoutId);
+            recognition.stop(); 
+            closeModal(); 
+        } }
     ]);
     
-    recognition.onresult = function(event) {
+    const cleanup = function() {
+        isCompleted = true;
+        clearTimeout(timeoutId);
         recognition.stop();
+    };
+    
+    recognition.onresult = function(event) {
+        cleanup();
         closeModal();
         
         const text = event.results[0][0].transcript;
@@ -165,19 +186,85 @@ function startVoiceInput() {
     };
     
     recognition.onerror = function(event) {
-        recognition.stop();
+        cleanup();
         closeModal();
-        showToast('语音识别失败：' + event.error, 'error');
+        
+        let errorMsg = '语音识别失败';
+        switch (event.error) {
+            case 'not-allowed':
+                errorMsg = '请允许麦克风权限后重试';
+                break;
+            case 'no-speech':
+                errorMsg = '未检测到语音，请重试';
+                break;
+            case 'audio-capture':
+                errorMsg = '未找到麦克风设备';
+                break;
+            case 'network':
+                errorMsg = '网络错误，请检查网络连接';
+                break;
+            default:
+                errorMsg = '语音识别失败：' + event.error;
+        }
+        showToast(errorMsg, 'error');
     };
     
     recognition.onend = function() {
-        const indicator = document.getElementById('voice-listening-indicator');
-        if (indicator) {
-            indicator.innerHTML = '<div style="font-size: 12px; color: var(--text-secondary);">已停止监听</div>';
+        if (!isCompleted) {
+            const indicator = document.getElementById('voice-listening-indicator');
+            if (indicator) {
+                indicator.innerHTML = '<div style="font-size: 12px; color: var(--text-secondary);">已停止监听</div>';
+            }
         }
     };
     
-    recognition.start();
+    timeoutId = setTimeout(function() {
+        if (!isCompleted) {
+            cleanup();
+            closeModal();
+            showToast('语音识别超时，请重试', 'error');
+        }
+    }, 15000);
+    
+    try {
+        recognition.start();
+    } catch (error) {
+        cleanup();
+        closeModal();
+        showToast('无法启动语音识别：' + error.message, 'error');
+    }
+}
+
+function parseTextInput() {
+    const inputEl = document.getElementById('quick-text-input');
+    if (!inputEl) return;
+    
+    const text = inputEl.value.trim();
+    if (!text) {
+        showToast('请输入内容', 'error');
+        return;
+    }
+    
+    const parsed = parseVoiceInput(text);
+    if (!parsed) {
+        showToast('格式错误，请按照"手机名称，软件名称，余额"的格式输入', 'error');
+        return;
+    }
+    
+    const balance = parseBalance(parsed.balance);
+    if (balance === null || isNaN(balance) || balance < 0) {
+        showToast('无法识别余额，请重新输入', 'error');
+        return;
+    }
+    
+    const match = findMatchingApp(parsed.phoneName, parsed.appName);
+    if (!match) {
+        showToast(`未找到匹配的手机"${parsed.phoneName}"和软件"${parsed.appName}"`, 'error');
+        return;
+    }
+    
+    closeModal();
+    showVoiceEditConfirm(match, parsed, balance);
 }
 
 function showVoiceEditConfirm(match, parsed, balance) {
@@ -8391,10 +8478,17 @@ function openQuickEditModal() {
         <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
             选择要编辑的软件（同名软件合并显示）
         </div>
-        <button onclick="startVoiceInput()" style="width: 100%; padding: 12px; margin-bottom: 16px; background: linear-gradient(135deg, #f59e0b, #fbbf24); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" 
+        <button onclick="startVoiceInput()" style="width: 100%; padding: 12px; margin-bottom: 8px; background: linear-gradient(135deg, #f59e0b, #fbbf24); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" 
                 onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
             🎤 语音输入余额
         </button>
+        <div style="margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">⌨️ 或直接输入：手机名称，软件名称，余额</div>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="quick-text-input" class="form-input" placeholder="例如：小米手机，抖音，35.5" style="flex: 1;">
+                <button onclick="parseTextInput()" class="btn btn-secondary" style="white-space: nowrap;">解析</button>
+            </div>
+        </div>
         <div id="quick-edit-app-list" style="max-height: 50vh; overflow-y: auto;">
             ${appListHtml}
         </div>
