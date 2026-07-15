@@ -2764,7 +2764,7 @@ class DataManager {
                 // 记录余额变化（只记录增加的情况，提现不算）
                 let todayTotalEarnings = 0;
                 if (newBalance > oldBalance) {
-                    const isFirstAddWithBalance = !app.balanceHistory || app.balanceHistory.length === 0 && oldBalance === 0 && newBalance > 0;
+                    const isFirstAddWithBalance = (!app.balanceHistory || app.balanceHistory.length === 0) && oldBalance === 0 && newBalance > 0;
                     
                     if (!app.balanceHistory) {
                         app.balanceHistory = [];
@@ -2787,6 +2787,7 @@ class DataManager {
                             change: change,
                             note: '初始余额'
                         });
+                        app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
                     } else {
                         let daysToDistribute = [];
                         
@@ -12082,10 +12083,10 @@ function showDailyEarningDetail(date) {
     
     let html = `
         <div style="max-height: 60vh; overflow-y: auto;">
-            <div style="text-align: center; margin-bottom: 16px; padding: 16px; background: ${isAchieved ? '#f0fdf4' : '#fef2f2'}; border-radius: 12px; border: 1px solid ${isAchieved ? '#86efac' : '#fecaca'};">
-                <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px;">${isToday ? '今天' : date}</div>
-                <div style="font-size: 28px; font-weight: bold; color: ${isAchieved ? '#166534' : '#991b1b'};">¥${totalAmount.toFixed(2)}</div>
-                <div style="font-size: 12px; color: ${isAchieved ? '#166534' : '#991b1b'}; margin-top: 4px;">
+            <div style="text-align: center; margin-bottom: 16px; padding: 16px; background: ${isAchieved ? '#fef9c3' : '#fffbeb'}; border-radius: 12px; border: 1px solid ${isAchieved ? '#fde047' : '#fcd34d'};">
+                <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">${isToday ? '今天' : date}</div>
+                <div style="font-size: 28px; font-weight: bold; color: ${isAchieved ? '#854d0e' : '#92400e'};">¥${totalAmount.toFixed(2)}</div>
+                <div style="font-size: 12px; color: ${isAchieved ? '#92400e' : '#a16207'}; margin-top: 4px;">
                     ${isAchieved ? '✅ 已达标' : '⏳ 未达标'}
                     ${dailyTargetAmount > 0 ? `· 目标: ¥${dailyTargetAmount.toFixed(2)}` : ''}
                 </div>
