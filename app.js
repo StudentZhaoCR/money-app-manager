@@ -9,6 +9,241 @@ const SETTINGS_KEY = 'moneyApp_settings';
 const DOWNLOADED_GAMES_KEY = 'moneyApp_downloadedGames';
 const GAME_DRAW_HISTORY_KEY = 'moneyApp_gameDrawHistory';
 
+// 语音输入功能
+function chineseToNumber(chineseNum) {
+    const digitMap = { '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+    const unitMap = { '十': 10, '百': 100, '千': 1000, '万': 10000 };
+    let result = 0;
+    let temp = 0;
+    let decimalPart = 0;
+    let decimalScale = 0;
+    
+    const parts = chineseNum.split('点');
+    const integerPart = parts[0];
+    const hasDecimal = parts.length > 1;
+    
+    for (let char of integerPart) {
+        if (char === '两') char = '二';
+        if (digitMap[char] !== undefined) {
+            temp = temp * 10 + digitMap[char];
+        } else if (unitMap[char] !== undefined) {
+            if (temp === 0) temp = 1;
+            result += temp * unitMap[char];
+            temp = 0;
+        }
+    }
+    result += temp;
+    
+    if (hasDecimal) {
+        for (let char of parts[1]) {
+            if (char === '两') char = '二';
+            if (digitMap[char] !== undefined) {
+                decimalPart = decimalPart * 10 + digitMap[char];
+                decimalScale++;
+            }
+        }
+        if (decimalScale > 0) {
+            result += decimalPart / Math.pow(10, decimalScale);
+        }
+    }
+    
+    return result;
+}
+
+function parseVoiceInput(text) {
+    text = text.trim().replace(/[，,]/g, ',').replace(/[。.!！？?]/g, '');
+    
+    const parts = text.split(',').map(p => p.trim()).filter(p => p.length > 0);
+    
+    if (parts.length !== 3) {
+        const altParts = text.split(/[,，、\s]+/).filter(p => p.length > 0);
+        if (altParts.length === 3) {
+            return { phoneName: altParts[0], appName: altParts[1], balance: altParts[2] };
+        }
+        return null;
+    }
+    
+    return { phoneName: parts[0], appName: parts[1], balance: parts[2] };
+}
+
+function parseBalance(balanceStr) {
+    balanceStr = balanceStr.replace(/[元块圆]/g, '').replace(/\s+/g, '');
+    
+    if (!isNaN(parseFloat(balanceStr))) {
+        return parseFloat(balanceStr);
+    }
+    
+    const chineseNum = balanceStr.replace(/[^零一二三四五六七八九十百千万两.点]/g, '');
+    if (chineseNum.length > 0) {
+        return chineseToNumber(chineseNum);
+    }
+    
+    return null;
+}
+
+function findMatchingApp(phoneName, appName) {
+    const data = DataManager.loadData();
+    let bestMatch = null;
+    let bestScore = 0;
+    
+    data.phones.forEach(phone => {
+        phone.apps.forEach(app => {
+            let score = 0;
+            
+            if (phone.name === phoneName) score += 30;
+            else if (phone.name.includes(phoneName) || phoneName.includes(phone.name)) score += 20;
+            else if (phone.name.indexOf(phoneName.substring(0, 2)) >= 0) score += 10;
+            
+            if (app.name === appName) score += 30;
+            else if (app.name.includes(appName) || appName.includes(app.name)) score += 20;
+            else if (app.name.indexOf(appName.substring(0, 2)) >= 0) score += 10;
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = { phone, app };
+            }
+        });
+    });
+    
+    return bestScore >= 20 ? bestMatch : null;
+}
+
+function startVoiceInput() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        showToast('您的浏览器不支持语音识别，请使用Chrome或Safari浏览器', 'error');
+        return;
+    }
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    
+    closeModal();
+    
+    showModal('🎤 语音输入', `
+        <div style="text-align: center; padding: 40px 20px;">
+            <div style="font-size: 60px; margin-bottom: 20px;">🎤</div>
+            <div style="font-size: 16px; color: var(--text-primary); margin-bottom: 8px;">请说出：手机名称，软件名称，余额</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">例如：小米手机，抖音，三十五点五</div>
+            <div id="voice-listening-indicator" style="margin-top: 20px;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background: #ef4444; animation: pulse 1s infinite;"></div>
+                <div style="font-size: 12px; color: #ef4444; margin-top: 8px;">正在听...</div>
+            </div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: function() { recognition.stop(); closeModal(); } }
+    ]);
+    
+    recognition.onresult = function(event) {
+        recognition.stop();
+        closeModal();
+        
+        const text = event.results[0][0].transcript;
+        console.log('语音识别结果:', text);
+        
+        const parsed = parseVoiceInput(text);
+        if (!parsed) {
+            showToast('无法识别语音格式，请按照"手机名称，软件名称，余额"的格式重新说', 'error');
+            return;
+        }
+        
+        const balance = parseBalance(parsed.balance);
+        if (balance === null || isNaN(balance) || balance < 0) {
+            showToast('无法识别余额，请重新输入', 'error');
+            return;
+        }
+        
+        const match = findMatchingApp(parsed.phoneName, parsed.appName);
+        if (!match) {
+            showToast(`未找到匹配的手机"${parsed.phoneName}"和软件"${parsed.appName}"`, 'error');
+            return;
+        }
+        
+        showVoiceEditConfirm(match, parsed, balance);
+    };
+    
+    recognition.onerror = function(event) {
+        recognition.stop();
+        closeModal();
+        showToast('语音识别失败：' + event.error, 'error');
+    };
+    
+    recognition.onend = function() {
+        const indicator = document.getElementById('voice-listening-indicator');
+        if (indicator) {
+            indicator.innerHTML = '<div style="font-size: 12px; color: var(--text-secondary);">已停止监听</div>';
+        }
+    };
+    
+    recognition.start();
+}
+
+function showVoiceEditConfirm(match, parsed, balance) {
+    const { phone, app } = match;
+    const currentBalance = app.balance || 0;
+    const change = balance - currentBalance;
+    
+    showModal('确认修改余额', `
+        <div style="padding: 10px 0;">
+            <div class="form-group">
+                <label class="form-label">手机名称</label>
+                <input type="text" class="form-input" value="${phone.name}" disabled>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">语音识别：${parsed.phoneName}</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">软件名称</label>
+                <input type="text" class="form-input" value="${app.name}" disabled>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">语音识别：${parsed.appName}</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">当前余额</label>
+                <input type="text" class="form-input" value="¥${currentBalance.toFixed(2)}" disabled>
+            </div>
+            <div class="form-group">
+                <label class="form-label">新余额</label>
+                <input type="text" class="form-input" value="¥${balance.toFixed(2)}" disabled>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">语音识别：${parsed.balance}</div>
+            </div>
+            <div style="padding: 12px; background: ${change >= 0 ? '#f0fdf4' : '#fef2f2'}; border-radius: 8px; margin-top: 8px;">
+                <div style="font-size: 14px; font-weight: 600; color: ${change >= 0 ? '#166534' : '#991b1b'};">
+                    ${change >= 0 ? '+' : ''}¥${change.toFixed(2)}
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                    ${change >= 0 ? '余额增加' : '余额减少'}
+                </div>
+            </div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '确认保存',
+            class: 'btn-primary',
+            action: function() {
+                try {
+                    DataManager.editApp(phone.id, app.id, {
+                        name: app.name,
+                        balance: balance,
+                        minWithdraw: app.minWithdraw || 0,
+                        highWithdraw: app.highWithdraw || 0,
+                        clearPeriod: app.clearPeriod || 0,
+                        historicalWithdrawn: app.historicalWithdrawn || 0
+                    });
+                    
+                    closeModal();
+                    showToast('余额修改成功', 'success');
+                    renderPhones();
+                    renderTotalEarnings();
+                    renderYearlyGoal();
+                } catch (error) {
+                    showToast('保存失败：' + error.message, 'error');
+                }
+            }
+        }
+    ]);
+}
+
 // ==================== 通用计算函数 ====================
 
 // 计算软件的已赚金额（累计）= 当前余额 + 已提现金额 + 历史提现金额
@@ -8156,6 +8391,10 @@ function openQuickEditModal() {
         <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
             选择要编辑的软件（同名软件合并显示）
         </div>
+        <button onclick="startVoiceInput()" style="width: 100%; padding: 12px; margin-bottom: 16px; background: linear-gradient(135deg, #f59e0b, #fbbf24); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" 
+                onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+            🎤 语音输入余额
+        </button>
         <div id="quick-edit-app-list" style="max-height: 50vh; overflow-y: auto;">
             ${appListHtml}
         </div>
