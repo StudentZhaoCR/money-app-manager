@@ -3036,6 +3036,7 @@ class DataManager {
             
             // 生成唯一ID：时间戳 + 随机数 + 手机ID的一部分
             const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + phoneId.substr(-4);
+            const today = new Date().toISOString().split('T')[0];
             const app = {
                 id: uniqueId,
                 name: appData.name,
@@ -3043,11 +3044,12 @@ class DataManager {
                 minWithdraw: parseFloat(appData.minWithdraw),
                 highWithdraw: parseFloat(appData.highWithdraw) || 0,
                 clearPeriod: parseInt(appData.clearPeriod) || 0,
-                lastLoginDate: new Date().toISOString().split('T')[0],
+                lastLoginDate: today,
                 withdrawn: 0,
                 historicalWithdrawn: 0,
                 withdrawals: [],
-                lastUpdated: new Date().toISOString()
+                lastUpdated: new Date().toISOString(),
+                earningStartDate: (appData.balance || 0) > 0 ? today : null
             };
             phone.apps.push(app);
 
@@ -3087,13 +3089,16 @@ class DataManager {
                 let todayTotalEarnings = 0;
                 if (newBalance > oldBalance) {
                     const isFirstAddWithBalance = (!app.balanceHistory || app.balanceHistory.length === 0) && oldBalance === 0 && newBalance > 0;
+                    const today = new Date().toISOString().split('T')[0];
+                    if (!app.earningStartDate) {
+                        app.earningStartDate = today;
+                    }
                     
                     if (!app.balanceHistory) {
                         app.balanceHistory = [];
                     }
                     
                     const now = new Date();
-                    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                     const change = newBalance - oldBalance;
                     
                     console.log('记录余额变化:', { oldBalance, newBalance, change, today, isFirstAddWithBalance });
@@ -3881,14 +3886,15 @@ class DataManager {
                 // 确保余额不会变成负数
                 if (app.balance < 0) app.balance = 0;
 
+                const dateStr = date || new Date().toISOString().split('T')[0];
+                
                 app.withdrawn = (app.withdrawn || 0) + amount;
                 app.lastUpdated = new Date().toISOString();
+                app.earningStartDate = dateStr;
 
                 if (!app.withdrawals) {
                     app.withdrawals = [];
                 }
-
-                const dateStr = date || new Date().toISOString().split('T')[0];
 
                 app.withdrawals.push({
                     id: Date.now().toString(),
@@ -5686,10 +5692,11 @@ function renderNextPlay() {
             const daysCanWait = Math.floor(totalEarned / minWithdraw);
             const remainingAmount = totalEarned % minWithdraw;
             
-            const nextPlayDate = new Date(today);
-            nextPlayDate.setDate(today.getDate() + daysCanWait);
+            const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date(today);
+            const nextPlayDate = new Date(startDate);
+            nextPlayDate.setDate(startDate.getDate() + daysCanWait);
             
-            const daysUntilNextPlay = daysCanWait;
+            const daysUntilNextPlay = Math.max(0, Math.ceil((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
             
             let statusLevel = 0;
             if (daysUntilNextPlay === 0) statusLevel = 1;
@@ -5946,11 +5953,14 @@ function renderExpiringApps() {
             const totalEarned = calculateAppEarned(app);
             const minWithdraw = app.minWithdraw || 0.3;
             const daysCanWait = Math.floor(totalEarned / minWithdraw);
-            const daysUntilNextPlay = daysCanWait;
+            
+            const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date(today);
+            const nextPlayDate = new Date(startDate);
+            nextPlayDate.setDate(startDate.getDate() + daysCanWait);
+            
+            const daysUntilNextPlay = Math.max(0, Math.ceil((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
             
             if (daysUntilNextPlay <= 3 && daysUntilNextPlay >= 0) {
-                const nextPlayDate = new Date(today);
-                nextPlayDate.setDate(today.getDate() + daysUntilNextPlay);
                 
                 expiringApps.push({
                     name: app.name,
@@ -6642,9 +6652,14 @@ function renderAppEarningAnalysis() {
             const minWithdraw = parseFloat(app.minWithdraw || '0') || 0;
             const canWithdraw = balance >= minWithdraw && minWithdraw > 0;
             
-            const daysUntilNextPlay = minWithdraw > 0 && averageDailyEarnings > 0 
-                ? Math.floor(balance / minWithdraw) 
-                : 0;
+            let daysUntilNextPlay = 0;
+            if (minWithdraw > 0) {
+                const daysCanWait = Math.floor(totalEarned / minWithdraw);
+                const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date();
+                const nextPlayDate = new Date(startDate);
+                nextPlayDate.setDate(startDate.getDate() + daysCanWait);
+                daysUntilNextPlay = Math.max(0, Math.ceil((nextPlayDate - new Date()) / (1000 * 60 * 60 * 24)));
+            }
 
             allApps.push({
                 phoneName: phone.name,
