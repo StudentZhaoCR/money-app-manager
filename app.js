@@ -5109,6 +5109,20 @@ function migrateOldData() {
                 hasChanges = true;
             }
 
+            // 为旧数据初始化 earningStartDate
+            if (!app.earningStartDate) {
+                // 优先使用 balanceHistory 中第一条记录的日期
+                if (app.balanceHistory && app.balanceHistory.length > 0) {
+                    app.earningStartDate = app.balanceHistory[0].date;
+                } else if (app.lastLoginDate) {
+                    app.earningStartDate = app.lastLoginDate;
+                } else {
+                    app.earningStartDate = today;
+                }
+                hasChanges = true;
+                console.log(`迁移数据：软件 ${app.name} 初始化 earningStartDate = ${app.earningStartDate}`);
+            }
+
             // 如果软件有已赚金额但没有历史记录，需要重建历史记录
             const currentEarned = calculateAppEarned(app);
             const historyDates = Object.keys(app.dailyEarnedHistory);
@@ -5671,10 +5685,11 @@ function renderNextPlay() {
     
     if (!container) return;
 
-    const today = new Date();
+    const today = getTodayLocal();
+    const todayDisplay = new Date();
     const currentDateEl = document.getElementById('next-play-current-date');
     if (currentDateEl) {
-        currentDateEl.textContent = today.toLocaleDateString('zh-CN', {
+        currentDateEl.textContent = todayDisplay.toLocaleDateString('zh-CN', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
@@ -5692,11 +5707,11 @@ function renderNextPlay() {
             const daysCanWait = Math.floor(totalEarned / minWithdraw);
             const remainingAmount = totalEarned % minWithdraw;
             
-            const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date(today);
+            const startDate = parseLocalDate(app.earningStartDate);
             const nextPlayDate = new Date(startDate);
             nextPlayDate.setDate(startDate.getDate() + daysCanWait);
             
-            const daysUntilNextPlay = Math.max(0, Math.ceil((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
+            const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
             
             let statusLevel = 0;
             if (daysUntilNextPlay === 0) statusLevel = 1;
@@ -5944,7 +5959,7 @@ function renderExpiringApps() {
     if (!container || !card) return;
 
     const data = DataManager.loadData();
-    const today = new Date();
+    const today = getTodayLocal();
     
     const expiringApps = [];
     
@@ -5954,11 +5969,11 @@ function renderExpiringApps() {
             const minWithdraw = app.minWithdraw || 0.3;
             const daysCanWait = Math.floor(totalEarned / minWithdraw);
             
-            const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date(today);
+            const startDate = parseLocalDate(app.earningStartDate);
             const nextPlayDate = new Date(startDate);
             nextPlayDate.setDate(startDate.getDate() + daysCanWait);
             
-            const daysUntilNextPlay = Math.max(0, Math.ceil((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
+            const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
             
             if (daysUntilNextPlay <= 3 && daysUntilNextPlay >= 0) {
                 
@@ -6655,10 +6670,10 @@ function renderAppEarningAnalysis() {
             let daysUntilNextPlay = 0;
             if (minWithdraw > 0) {
                 const daysCanWait = Math.floor(totalEarned / minWithdraw);
-                const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date();
+                const startDate = parseLocalDate(app.earningStartDate);
                 const nextPlayDate = new Date(startDate);
                 nextPlayDate.setDate(startDate.getDate() + daysCanWait);
-                daysUntilNextPlay = Math.max(0, Math.ceil((nextPlayDate - new Date()) / (1000 * 60 * 60 * 24)));
+                daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - getTodayLocal()) / (1000 * 60 * 60 * 24)));
             }
 
             allApps.push({
@@ -10627,6 +10642,22 @@ function getCurrentDate() {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+// 解析日期字符串（YYYY-MM-DD）为本地时间的 Date 对象，避免时区偏差
+function parseLocalDate(dateStr) {
+    if (!dateStr) return new Date();
+    const parts = String(dateStr).split('-');
+    if (parts.length === 3) {
+        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+    return new Date(dateStr);
+}
+
+// 获取今天的本地午夜 Date 对象
+function getTodayLocal() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 // 获取当前主题色
