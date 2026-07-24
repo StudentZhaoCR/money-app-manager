@@ -217,6 +217,21 @@
                 </div>
             </div>
 
+            <!-- 活跃历史记录 -->
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📺 活跃历史记录</div>
+                    <div class="section-divider"></div>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="btn btn-sm btn-secondary" onclick="renderActivityHistory(7)">近7天</button>
+                        <button class="btn btn-sm btn-secondary" onclick="renderActivityHistory(30)">近30天</button>
+                    </div>
+                </div>
+                <div id="activity-history-content">
+                    <!-- 内容由JS动态生成 -->
+                </div>
+            </div>
+
             <!-- 月收益记录 -->
             <div class="card mt-4">
                 <div class="section-header">

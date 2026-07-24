@@ -38,6 +38,7 @@
     
     --card-bg-glass: rgba(255, 255, 255, 0.8);
     
+    --radius-xs: 4px;
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
@@ -2508,6 +2509,12 @@ body {
     padding: 8px 12px;
     font-size: 12px;
     border-radius: var(--radius-sm);
+}
+
+.btn-xs {
+    padding: 4px 8px;
+    font-size: 10px;
+    border-radius: var(--radius-xs);
 }
 
 .installment-app-name {

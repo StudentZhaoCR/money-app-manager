@@ -1187,6 +1187,30 @@ function updateAppCard(phoneId, appId) {
     const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
     const totalWithdrawals = app.withdrawals ? app.withdrawals.length : 0;
     
+    const today = getCurrentDate();
+    const todayActivity = app.activityLog && app.activityLog[today];
+    const isActiveToday = todayActivity && todayActivity.active;
+    const activityDuration = todayActivity && todayActivity.duration ? todayActivity.duration : 0;
+    const todayEarning = parseFloat(app.dailyEarnings && app.dailyEarnings[today]) || 0;
+    
+    const totalEarned = app.balance + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+    const minWithdraw = app.minWithdraw || 0.3;
+    const daysCanWait = Math.floor(totalEarned / minWithdraw);
+    const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date();
+    const nextPlayDate = new Date(startDate);
+    nextPlayDate.setDate(startDate.getDate() + daysCanWait);
+    const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - new Date(today)) / (1000 * 60 * 60 * 24)));
+    
+    let activityStatus = '';
+    if (isActiveToday) {
+        const durationText = activityDuration > 0 ? `(${activityDuration}分钟)` : '';
+        activityStatus = `<span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ 已活跃${durationText}</span>`;
+    } else if (daysUntilNextPlay === 0) {
+        activityStatus = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚠️ 需立即玩</span>';
+    } else if (daysUntilNextPlay <= 3) {
+        activityStatus = '<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⏳ ' + daysUntilNextPlay + '天后</span>';
+    }
+    
     // 更新卡片内容
     targetCard.innerHTML = `
         <div class="app-header">
@@ -1195,12 +1219,15 @@ function updateAppCard(phoneId, appId) {
                 ${totalWithdrawals > 0 ? '有记录' : '新软件'}
             </span>
         </div>
-        <div class="app-core-info">
-            <span class="core-label">当前余额:</span>
-            <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div class="app-core-info">
+                <span class="core-label">当前余额:</span>
+                <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
+            </div>
+            ${activityStatus}
         </div>
         <div class="app-info-row">
-            <span>提现次数: ${totalWithdrawals}次</span>
+            <span>累计提现: ¥${totalWithdrawn.toFixed(2)} · 今日赚取: ¥${todayEarning.toFixed(2)} · 提现次数: ${totalWithdrawals}次</span>
         </div>
         <div class="action-buttons">
             <button class="btn btn-primary" onclick="openWithdrawModal('${phoneId}', '${appId}')">记录提现</button>
@@ -1303,6 +1330,22 @@ class DataManager {
                     app.dailyEarnings = {};
                     needsMigration = true;
                 }
+                if (app.activityLog === undefined) {
+                    app.activityLog = {};
+                    needsMigration = true;
+                }
+                if (app.activityLog && typeof app.activityLog === 'object') {
+                    const keys = Object.keys(app.activityLog);
+                    for (const key of keys) {
+                        if (typeof app.activityLog[key] === 'boolean') {
+                            app.activityLog[key] = {
+                                active: app.activityLog[key],
+                                duration: 0
+                            };
+                            needsMigration = true;
+                        }
+                    }
+                }
                 delete app.initialBalance;
                 delete app.earned;
                 delete app.remainingWithdrawn;
@@ -1347,6 +1390,209 @@ class DataManager {
     
     static saveSettings(settings) {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    }
+
+    // ==================== 活跃记录功能 ====================
+
+    static getTodayActiveApps(phoneId = null, limit = 5) {
+        const data = this.loadData();
+        const today = getCurrentDate();
+        
+        const appList = [];
+        let totalTodayEarning = 0;
+        let earningAppCount = 0;
+        
+        const phones = phoneId ? data.phones.filter(p => p.id === phoneId) : data.phones;
+        
+        phones.forEach(phone => {
+            (phone.apps || []).forEach(app => {
+                const totalEarned = app.balance + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+                const minWithdraw = app.minWithdraw || 0.3;
+                
+                const daysCanWait = Math.floor(totalEarned / minWithdraw);
+                const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date();
+                const nextPlayDate = new Date(startDate);
+                nextPlayDate.setDate(startDate.getDate() + daysCanWait);
+                
+                const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - new Date(today)) / (1000 * 60 * 60 * 24)));
+                
+                let priority = 0;
+                if (daysUntilNextPlay === 0) priority = 4;
+                else if (daysUntilNextPlay <= 3) priority = 3;
+                else if (daysUntilNextPlay <= 7) priority = 2;
+                else priority = 1;
+                
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+                const wasActiveYesterday = app.activityLog && app.activityLog[yesterdayStr] && app.activityLog[yesterdayStr].active;
+                
+                const todayEarning = parseFloat(app.dailyEarnings && app.dailyEarnings[today]) || 0;
+                
+                if (todayEarning > 0) {
+                    totalTodayEarning += todayEarning;
+                    earningAppCount++;
+                }
+                
+                const todayActivity = app.activityLog && app.activityLog[today];
+                const isActiveToday = todayActivity && todayActivity.active;
+                const activityDuration = todayActivity && todayActivity.duration ? todayActivity.duration : 0;
+                
+                appList.push({
+                    id: app.id,
+                    name: app.name,
+                    phoneId: phone.id,
+                    phoneName: phone.name,
+                    balance: app.balance || 0,
+                    minWithdraw: minWithdraw,
+                    totalEarned: totalEarned,
+                    daysUntilNextPlay: daysUntilNextPlay,
+                    nextPlayDate: nextPlayDate,
+                    priority: priority,
+                    wasActiveYesterday: wasActiveYesterday,
+                    isActiveToday: isActiveToday,
+                    activityDuration: activityDuration,
+                    todayEarning: todayEarning,
+                    clearPeriod: app.clearPeriod || 0
+                });
+            });
+        });
+        
+        const averageEarning = earningAppCount > 0 ? totalTodayEarning / earningAppCount : 0;
+        
+        appList.forEach(app => {
+            app.belowAverageEarning = app.todayEarning > 0 && app.todayEarning < averageEarning;
+            app.averageEarning = averageEarning;
+            
+            const baseDuration = 10;
+            
+            const urgencyBonus = Math.max(0, 10 - app.daysUntilNextPlay);
+            
+            const earningBonus = app.belowAverageEarning ? 3 : 0;
+            
+            const targetWithdraw = app.highWithdraw > 0 ? app.highWithdraw : app.minWithdraw;
+            const remainingToTarget = Math.max(0, targetWithdraw - app.balance);
+            const avgDailyEarning = app.totalEarned > 0 && app.totalEarned / (app.daysUntilNextPlay + 1) > 0 
+                ? app.totalEarned / (app.daysUntilNextPlay + 1) 
+                : 0.01;
+            const withdrawBonus = Math.min(5, Math.floor(remainingToTarget / avgDailyEarning));
+            
+            const clearPeriod = app.clearPeriod || 0;
+            const clearPeriodAdjust = Math.max(-5, -Math.floor(clearPeriod / 7));
+            
+            let recommendedDuration = baseDuration + urgencyBonus + earningBonus + withdrawBonus + clearPeriodAdjust;
+            recommendedDuration = Math.max(5, Math.min(30, recommendedDuration));
+            recommendedDuration = Math.round(recommendedDuration / 5) * 5;
+            
+            app.recommendedDuration = recommendedDuration;
+            app.durationBreakdown = {
+                base: baseDuration,
+                urgency: urgencyBonus,
+                earning: earningBonus,
+                withdraw: withdrawBonus,
+                clearPeriod: clearPeriodAdjust
+            };
+        });
+        
+        appList.sort((a, b) => {
+            if (a.priority !== b.priority) return b.priority - a.priority;
+            const aScore = (a.belowAverageEarning ? 1 : 0) + (a.wasActiveYesterday ? 0 : 0.5);
+            const bScore = (b.belowAverageEarning ? 1 : 0) + (b.wasActiveYesterday ? 0 : 0.5);
+            if (aScore !== bScore) return bScore - aScore;
+            return a.daysUntilNextPlay - b.daysUntilNextPlay;
+        });
+        
+        return appList.slice(0, limit);
+    }
+
+    static recordAppActivity(phoneId, appId, date = null, active = true, duration = 0) {
+        const data = this.loadData();
+        const today = date || getCurrentDate();
+        
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (!phone) return false;
+        
+        const app = phone.apps.find(a => a.id === appId);
+        if (!app) return false;
+        
+        if (!app.activityLog) {
+            app.activityLog = {};
+        }
+        
+        const existingRecord = app.activityLog[today];
+        app.activityLog[today] = {
+            active: active,
+            duration: active ? (duration > 0 ? duration : (existingRecord && existingRecord.duration ? existingRecord.duration : 0)) : 0
+        };
+        app.lastUpdated = new Date().toISOString();
+        
+        if (active) {
+            app.lastLoginDate = today;
+        }
+        
+        this.saveData(data);
+        return true;
+    }
+
+    static getActivityHistory(phoneId = null, days = 7) {
+        const data = this.loadData();
+        const history = {};
+        
+        const phones = phoneId ? data.phones.filter(p => p.id === phoneId) : data.phones;
+        
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            
+            history[dateStr] = {
+                date: dateStr,
+                activeApps: [],
+                totalApps: 0
+            };
+            
+            phones.forEach(phone => {
+                (phone.apps || []).forEach(app => {
+                    history[dateStr].totalApps++;
+                    if (app.activityLog && app.activityLog[dateStr]) {
+                        history[dateStr].activeApps.push({
+                            appId: app.id,
+                            appName: app.name,
+                            phoneId: phone.id,
+                            phoneName: phone.name,
+                            balance: app.balance || 0
+                        });
+                    }
+                });
+            });
+        }
+        
+        return history;
+    }
+
+    static getActivityStats(phoneId = null, days = 30) {
+        const history = this.getActivityHistory(phoneId, days);
+        const recordList = Object.values(history);
+        
+        const activeDays = recordList.filter(r => r.activeApps.length > 0).length;
+        const totalApps = recordList.length > 0 ? recordList[0].totalApps : 0;
+        
+        let totalActiveCount = 0;
+        recordList.forEach(r => {
+            totalActiveCount += r.activeApps.length;
+        });
+        
+        const avgDailyActive = recordList.length > 0 ? (totalActiveCount / recordList.length).toFixed(1) : 0;
+        const activeRate = recordList.length > 0 ? ((activeDays / recordList.length) * 100).toFixed(1) : 0;
+        
+        return {
+            activeDays: activeDays,
+            totalDays: recordList.length,
+            avgDailyActive: parseFloat(avgDailyActive),
+            activeRate: parseFloat(activeRate),
+            totalApps: totalApps,
+            history: history
+        };
     }
 
     // ==================== 年度目标功能 ====================
@@ -3049,7 +3295,8 @@ class DataManager {
                 historicalWithdrawn: 0,
                 withdrawals: [],
                 lastUpdated: new Date().toISOString(),
-                earningStartDate: (appData.balance || 0) > 0 ? today : null
+                earningStartDate: (appData.balance || 0) > 0 ? today : null,
+                activityLog: {}
             };
             phone.apps.push(app);
 
@@ -3116,58 +3363,20 @@ class DataManager {
                         });
                         app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
                     } else {
-                        let daysToDistribute = [];
+                        app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
                         
-                        if (lastUpdatedStr) {
-                            const lastUpdateDate = new Date(lastUpdatedStr);
-                            const lastUpdateDay = `${lastUpdateDate.getFullYear()}-${String(lastUpdateDate.getMonth() + 1).padStart(2, '0')}-${String(lastUpdateDate.getDate()).padStart(2, '0')}`;
-                            
-                            if (lastUpdateDay !== today) {
-                                const startDate = new Date(lastUpdateDate);
-                                startDate.setDate(startDate.getDate() + 1);
-                                const endDate = new Date(now);
-                                
-                                while (startDate <= endDate) {
-                                    const dateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
-                                    daysToDistribute.push(dateStr);
-                                    startDate.setDate(startDate.getDate() + 1);
-                                }
-                            }
+                        const existingRecord = app.balanceHistory.find(h => h.date === today);
+                        if (existingRecord) {
+                            existingRecord.change += change;
+                            existingRecord.balance = newBalance;
+                        } else {
+                            app.balanceHistory.push({
+                                date: today,
+                                balance: newBalance,
+                                change: change,
+                                note: '收益记录'
+                            });
                         }
-                        
-                        if (daysToDistribute.length === 0) {
-                            daysToDistribute = [today];
-                        }
-                        
-                        const dailyAmount = change / daysToDistribute.length;
-                        let remainingChange = change;
-                        let accumulatedBalance = oldBalance;
-                        
-                        daysToDistribute.forEach((dateStr, index) => {
-                            let dayAmount = dailyAmount;
-                            if (index === daysToDistribute.length - 1) {
-                                dayAmount = remainingChange;
-                            }
-                            dayAmount = Math.round(dayAmount * 100) / 100;
-                            remainingChange -= dayAmount;
-                            accumulatedBalance += dayAmount;
-                            accumulatedBalance = Math.round(accumulatedBalance * 100) / 100;
-                            
-                            app.dailyEarnings[dateStr] = (app.dailyEarnings[dateStr] || 0) + dayAmount;
-                            
-                            const existingRecord = app.balanceHistory.find(h => h.date === dateStr);
-                            if (existingRecord) {
-                                existingRecord.change += dayAmount;
-                                existingRecord.balance = accumulatedBalance;
-                            } else {
-                                app.balanceHistory.push({
-                                    date: dateStr,
-                                    balance: accumulatedBalance,
-                                    change: dayAmount,
-                                    note: '自动分配'
-                                });
-                            }
-                        });
                         
                         app.balanceHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
                     }
@@ -5654,6 +5863,8 @@ function renderDashboard() {
                     <span class="kpi-tile__delta">未提现金额</span>
                 </div>
             </div>
+
+            ${renderActivityPlanCard()}
         `;
     }
 
@@ -5677,6 +5888,188 @@ function renderDashboard() {
 
     // 更新今日收益显示
     updateTodayEarnings();
+}
+
+function renderActivityPlanCard() {
+    const activeApps = DataManager.getTodayActiveApps(null, 10);
+    const activityStats = DataManager.getActivityStats(null, 7);
+    
+    if (activeApps.length === 0) {
+        return `
+            <div class="card mt-4" id="activity-plan-card">
+                <div class="section-header">
+                    <div class="section-title">📺 今日活跃计划</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state__icon">📺</div>
+                    <div class="empty-state__title">暂无软件数据</div>
+                    <div class="empty-state__hint">添加手机和软件后即可查看今日活跃计划</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    const urgentCount = activeApps.filter(a => a.priority === 4).length;
+    const warningCount = activeApps.filter(a => a.priority === 3).length;
+    const recommendedApps = activeApps.slice(0, 5);
+    
+    let html = `
+        <div class="card mt-4" id="activity-plan-card">
+            <div class="section-header">
+                <div class="section-title">📺 今日活跃计划</div>
+                <div class="section-divider"></div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">标记已观看短剧/内容，给平台贡献活跃度</div>
+            </div>
+            <div style="display: flex; gap: 16px; margin-bottom: 16px; padding: 0 8px;">
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(239,68,68,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #ef4444;">${urgentCount}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">立即玩</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(245,158,11,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${warningCount}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">3天内</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(59,130,246,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6;">${activityStats.avgDailyActive}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">日均活跃</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(16,185,129,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #10b981;">${activityStats.activeRate}%</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">活跃率</div>
+                </div>
+            </div>
+            <div style="max-height: 350px; overflow-y: auto;">
+    `;
+    
+    recommendedApps.forEach((app, index) => {
+        let priorityIcon = '';
+        let priorityColor = '';
+        let statusText = '';
+        
+        if (app.priority === 4) {
+            priorityIcon = '⚠️';
+            priorityColor = '#ef4444';
+            statusText = '立即游玩';
+        } else if (app.priority === 3) {
+            priorityIcon = '⏳';
+            priorityColor = '#f59e0b';
+            statusText = `${app.daysUntilNextPlay}天后`;
+        } else if (app.priority === 2) {
+            priorityIcon = '📅';
+            priorityColor = '#3b82f6';
+            statusText = `${app.daysUntilNextPlay}天后`;
+        } else {
+            priorityIcon = '✓';
+            priorityColor = '#10b981';
+            statusText = `${app.daysUntilNextPlay}天后`;
+        }
+        
+        let activityBadge = '';
+        if (app.isActiveToday) {
+            const durationText = app.activityDuration > 0 ? `(${app.activityDuration}分钟)` : '';
+            activityBadge = `<span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ 已活跃${durationText}</span>`;
+        }
+        
+        let belowAvgBadge = '';
+        if (app.belowAverageEarning) {
+            belowAvgBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚡ 需多活跃</span>';
+        }
+        
+        let durationBreakdownText = '';
+        if (app.durationBreakdown) {
+            const parts = [];
+            if (app.durationBreakdown.urgency > 0) parts.push(`紧迫+${app.durationBreakdown.urgency}`);
+            if (app.durationBreakdown.earning > 0) parts.push(`收益偏低+${app.durationBreakdown.earning}`);
+            if (app.durationBreakdown.withdraw > 0) parts.push(`接近提现+${app.durationBreakdown.withdraw}`);
+            if (app.durationBreakdown.clearPeriod < 0) parts.push(`周期长${app.durationBreakdown.clearPeriod}`);
+            if (parts.length > 0) {
+                durationBreakdownText = `<span style="font-size: 11px; color: var(--text-muted);">(${parts.join(', ')})</span>`;
+            }
+        }
+        
+        const isChecked = app.isActiveToday ? 'checked' : '';
+        
+        html += `
+            <div style="display: flex; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 12px;">
+                <label style="flex-shrink: 0; cursor: pointer;">
+                    <input type="checkbox" ${isChecked} onchange="toggleActivityStatus('${app.phoneId}', '${app.id}', this.checked)" 
+                        style="width: 20px; height: 20px; cursor: pointer;">
+                </label>
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-weight: 600; font-size: 14px;">${app.name}</span>
+                        <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
+                        <span style="font-size: 12px; color: ${priorityColor};">${priorityIcon} ${statusText}</span>
+                        ${belowAvgBadge}
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        余额: ¥${app.balance.toFixed(2)} | 今日赚取: ¥${app.todayEarning.toFixed(2)}
+                        ${app.averageEarning > 0 ? `| 平均: ¥${app.averageEarning.toFixed(2)}` : ''}
+                    </div>
+                    <div style="font-size: 11px; color: #3b82f6; margin-top: 2px;">
+                        ⏱️ 推荐活跃: ${app.recommendedDuration}分钟 ${durationBreakdownText}
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    ${activityBadge}
+                    ${app.isActiveToday ? `
+                        <div style="display: flex; gap: 4px;">
+                            <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', ${app.recommendedDuration})" style="font-size: 10px; background: rgba(59,130,246,0.2); color: #3b82f6;">推荐</button>
+                            <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', 5)" style="font-size: 10px;">5分钟</button>
+                            <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', 10)" style="font-size: 10px;">10分钟</button>
+                            <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', 15)" style="font-size: 10px;">15分钟</button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+            <div style="padding: 12px; display: flex; gap: 8px; border-top: 1px solid var(--border-color);">
+                <button class="btn btn-secondary flex-1" onclick="refreshActivityPlan()" style="font-size: 13px;">🔄 刷新推荐</button>
+                <button class="btn btn-primary flex-1" onclick="markAllActive()" style="font-size: 13px;">✅ 全部标记活跃</button>
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+function toggleActivityStatus(phoneId, appId, isActive) {
+    const result = DataManager.recordAppActivity(phoneId, appId, null, isActive);
+    if (result) {
+        showToast(isActive ? '标记为已活跃' : '取消活跃记录', 'success');
+        renderDashboard();
+    }
+}
+
+function setActivityDuration(phoneId, appId, duration) {
+    const result = DataManager.recordAppActivity(phoneId, appId, null, true, duration);
+    if (result) {
+        showToast(`活跃时长已设置为 ${duration} 分钟`, 'success');
+        renderDashboard();
+    }
+}
+
+function refreshActivityPlan() {
+    renderDashboard();
+    showToast('推荐列表已更新', 'info');
+}
+
+function markAllActive() {
+    const activeApps = DataManager.getTodayActiveApps(null, 10);
+    let count = 0;
+    activeApps.forEach(app => {
+        if (!app.isActiveToday) {
+            DataManager.recordAppActivity(app.phoneId, app.id, null, true, app.recommendedDuration);
+            count++;
+        }
+    });
+    renderDashboard();
+    showToast(`${count} 个软件已标记为活跃（使用推荐时长）`, 'success');
 }
 
 function renderNextPlay() {
@@ -7441,10 +7834,35 @@ function renderAppList(phone) {
         `;
     }
 
+    const today = getCurrentDate();
+
     return phone.apps.map(app => {
         // 计算累计提现金额（仅已提现部分，不含余额）
         const totalWithdrawn = (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
         const totalWithdrawals = app.withdrawals ? app.withdrawals.length : 0;
+        
+        const todayActivity = app.activityLog && app.activityLog[today];
+        const isActiveToday = todayActivity && todayActivity.active;
+        const activityDuration = todayActivity && todayActivity.duration ? todayActivity.duration : 0;
+        const todayEarning = parseFloat(app.dailyEarnings && app.dailyEarnings[today]) || 0;
+        
+        const totalEarned = app.balance + (app.withdrawn || 0) + (app.historicalWithdrawn || 0);
+        const minWithdraw = app.minWithdraw || 0.3;
+        const daysCanWait = Math.floor(totalEarned / minWithdraw);
+        const startDate = app.earningStartDate ? new Date(app.earningStartDate) : new Date();
+        const nextPlayDate = new Date(startDate);
+        nextPlayDate.setDate(startDate.getDate() + daysCanWait);
+        const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - new Date(today)) / (1000 * 60 * 60 * 24)));
+        
+        let activityStatus = '';
+        if (isActiveToday) {
+            const durationText = activityDuration > 0 ? `(${activityDuration}分钟)` : '';
+            activityStatus = `<span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ 已活跃${durationText}</span>`;
+        } else if (daysUntilNextPlay === 0) {
+            activityStatus = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚠️ 需立即玩</span>';
+        } else if (daysUntilNextPlay <= 3) {
+            activityStatus = '<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⏳ ' + daysUntilNextPlay + '天后</span>';
+        }
 
         return `
             <div class="app-card" data-app-id="${app.id}">
@@ -7454,12 +7872,15 @@ function renderAppList(phone) {
                         ${totalWithdrawals > 0 ? '有记录' : '新软件'}
                     </span>
                 </div>
-                <div class="app-core-info">
-                    <span class="core-label">当前余额:</span>
-                    <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <div class="app-core-info">
+                        <span class="core-label">当前余额:</span>
+                        <span class="core-value">¥${(app.balance || 0).toFixed(2)}</span>
+                    </div>
+                    ${activityStatus}
                 </div>
                 <div class="app-info-row">
-                    <span>累计提现: ¥${totalWithdrawn.toFixed(2)} · 提现次数: ${totalWithdrawals}次</span>
+                    <span>累计提现: ¥${totalWithdrawn.toFixed(2)} · 今日赚取: ¥${todayEarning.toFixed(2)} · 提现次数: ${totalWithdrawals}次</span>
                 </div>
                 <div class="action-buttons">
                     <button class="btn btn-primary" onclick="openWithdrawModal('${phone.id}', '${app.id}')">记录提现</button>
@@ -8860,6 +9281,93 @@ function renderStats() {
     
     // 渲染软件收益排行榜
     renderAppEarningsRanking();
+    
+    // 渲染活跃历史记录
+    renderActivityHistory(7);
+}
+
+function renderActivityHistory(days = 7) {
+    const container = document.getElementById('activity-history-content');
+    if (!container) return;
+    
+    const data = DataManager.loadData();
+    const today = getCurrentDate();
+    
+    const activityRecords = {};
+    
+    for (let i = 0; i < days; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        activityRecords[dateStr] = {
+            date: dateStr,
+            activeApps: [],
+            totalDuration: 0
+        };
+    }
+    
+    data.phones.forEach(phone => {
+        (phone.apps || []).forEach(app => {
+            if (app.activityLog && typeof app.activityLog === 'object') {
+                Object.keys(app.activityLog).forEach(dateStr => {
+                    if (activityRecords[dateStr]) {
+                        const record = app.activityLog[dateStr];
+                        if (record.active || (typeof record === 'boolean' && record)) {
+                            const duration = typeof record === 'object' && record.duration ? record.duration : 0;
+                            activityRecords[dateStr].activeApps.push({
+                                name: app.name,
+                                phoneName: phone.name,
+                                duration: duration
+                            });
+                            activityRecords[dateStr].totalDuration += duration;
+                        }
+                    }
+                });
+            }
+        });
+    });
+    
+    const sortedDates = Object.values(activityRecords).sort((a, b) => b.date.localeCompare(a.date));
+    
+    let html = '';
+    
+    sortedDates.forEach(record => {
+        const [year, month, day] = record.date.split('-');
+        const dateLabel = `${parseInt(month)}月${parseInt(day)}日`;
+        const isToday = record.date === today;
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = record.date === `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+        
+        let dayLabel = dateLabel;
+        if (isToday) dayLabel = '今天';
+        else if (isYesterday) dayLabel = '昨天';
+        
+        const activeCount = record.activeApps.length;
+        const durationLabel = record.totalDuration > 0 ? `${record.totalDuration}分钟` : '无记录';
+        
+        html += `
+            <div style="padding: 12px; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-weight: 600;">${dayLabel}</span>
+                        ${isToday ? '<span style="background: rgba(59,130,246,0.15); color: #3b82f6; padding: 2px 6px; border-radius: 4px; font-size: 10px;">今日</span>' : ''}
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">
+                        ${activeCount}个软件活跃 · ${durationLabel}
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${record.activeApps.length > 0 ? record.activeApps.map(app => {
+                        const durationText = app.duration > 0 ? ' ' + app.duration + '分钟' : '';
+                        return '<span style="background: rgba(16,185,129,0.1); color: #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px;">' + app.name + '(' + app.phoneName + ')' + durationText + '</span>';
+                    }).join('') : '<span style="font-size: 12px; color: var(--text-muted);">当天无活跃记录</span>'}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
 }
 
 // 渲染月收益记录
