@@ -6074,33 +6074,7 @@ function markAllActive() {
 }
 
 let activityTimers = {};
-
-function getTimerKey(phoneId, appId) {
-    return `activity_timer_${phoneId}_${appId}`;
-}
-
-function getTimerState(phoneId, appId) {
-    const key = getTimerKey(phoneId, appId);
-    const stored = localStorage.getItem(key);
-    if (stored) {
-        try {
-            return JSON.parse(stored);
-        } catch (e) {
-            return null;
-        }
-    }
-    return null;
-}
-
-function saveTimerState(phoneId, appId, state) {
-    const key = getTimerKey(phoneId, appId);
-    localStorage.setItem(key, JSON.stringify(state));
-}
-
-function clearTimerState(phoneId, appId) {
-    const key = getTimerKey(phoneId, appId);
-    localStorage.removeItem(key);
-}
+let timerStates = {};
 
 function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
@@ -6113,61 +6087,83 @@ function formatDuration(seconds) {
 }
 
 function updateTimerDisplay(phoneId, appId, elapsedSeconds) {
-    const timerEl = document.getElementById(`timer-display-${phoneId}-${appId}`);
+    const selector = `[data-timer="${phoneId}-${appId}"]`;
+    const timerEl = document.querySelector(selector);
     if (timerEl) {
         timerEl.textContent = formatDuration(elapsedSeconds);
+    } else {
+        console.log('Timer element not found:', selector);
+        const allTimerEls = document.querySelectorAll('[data-timer]');
+        console.log('All timer elements found:', allTimerEls.length);
+        allTimerEls.forEach(el => {
+            console.log('Found element:', el.getAttribute('data-timer'));
+        });
     }
 }
 
 function startTimer(phoneId, appId) {
-    const state = getTimerState(phoneId, appId);
+    console.log('startTimer called:', phoneId, appId);
+    const key = `${phoneId}_${appId}`;
+    const state = timerStates[key];
     const startTime = state && state.startTime ? state.startTime : Date.now();
+    console.log('startTime:', startTime);
     
-    saveTimerState(phoneId, appId, { startTime, isRunning: true });
+    timerStates[key] = { startTime, isRunning: true };
     
-    if (activityTimers[`${phoneId}_${appId}`]) {
-        clearInterval(activityTimers[`${phoneId}_${appId}`]);
+    if (activityTimers[key]) {
+        clearInterval(activityTimers[key]);
     }
     
     const update = () => {
-        const currentState = getTimerState(phoneId, appId);
+        const currentState = timerStates[key];
         if (!currentState || !currentState.isRunning) {
-            clearInterval(activityTimers[`${phoneId}_${appId}`]);
+            clearInterval(activityTimers[key]);
             return;
         }
         const elapsedSeconds = Math.floor((Date.now() - currentState.startTime) / 1000);
+        console.log('elapsedSeconds:', elapsedSeconds);
         updateTimerDisplay(phoneId, appId, elapsedSeconds);
     };
     
     update();
-    activityTimers[`${phoneId}_${appId}`] = setInterval(update, 1000);
+    activityTimers[key] = setInterval(update, 1000);
+    console.log('Timer started, interval ID:', activityTimers[key]);
     
-    const startBtn = document.getElementById(`btn-start-${phoneId}-${appId}`);
-    const pauseBtn = document.getElementById(`btn-pause-${phoneId}-${appId}`);
-    const stopBtn = document.getElementById(`btn-stop-${phoneId}-${appId}`);
-    if (startBtn) startBtn.style.display = 'none';
-    if (pauseBtn) pauseBtn.style.display = 'inline-flex';
-    if (stopBtn) stopBtn.style.display = 'inline-flex';
+    const container = document.getElementById('activity-page-content');
+    if (container) {
+        const buttons = container.querySelectorAll(`[data-phone="${phoneId}"][data-app="${appId}"]`);
+        buttons.forEach(btn => {
+            if (btn.dataset.action === 'start') btn.style.display = 'none';
+            if (btn.dataset.action === 'pause') btn.style.display = 'inline-flex';
+            if (btn.dataset.action === 'stop') btn.style.display = 'inline-flex';
+        });
+    }
 }
 
 function pauseTimer(phoneId, appId) {
-    const state = getTimerState(phoneId, appId);
+    const key = `${phoneId}_${appId}`;
+    const state = timerStates[key];
     if (state) {
-        saveTimerState(phoneId, appId, { ...state, isRunning: false });
+        timerStates[key] = { ...state, isRunning: false };
     }
-    if (activityTimers[`${phoneId}_${appId}`]) {
-        clearInterval(activityTimers[`${phoneId}_${appId}`]);
-        delete activityTimers[`${phoneId}_${appId}`];
+    if (activityTimers[key]) {
+        clearInterval(activityTimers[key]);
+        delete activityTimers[key];
     }
     
-    const startBtn = document.getElementById(`btn-start-${phoneId}-${appId}`);
-    const pauseBtn = document.getElementById(`btn-pause-${phoneId}-${appId}`);
-    if (startBtn) startBtn.style.display = 'inline-flex';
-    if (pauseBtn) pauseBtn.style.display = 'none';
+    const container = document.getElementById('activity-page-content');
+    if (container) {
+        const buttons = container.querySelectorAll(`[data-phone="${phoneId}"][data-app="${appId}"]`);
+        buttons.forEach(btn => {
+            if (btn.dataset.action === 'start') btn.style.display = 'inline-flex';
+            if (btn.dataset.action === 'pause') btn.style.display = 'none';
+        });
+    }
 }
 
 function stopTimer(phoneId, appId) {
-    const state = getTimerState(phoneId, appId);
+    const key = `${phoneId}_${appId}`;
+    const state = timerStates[key];
     if (state) {
         const elapsedSeconds = Math.floor((Date.now() - state.startTime) / 1000);
         const durationMinutes = Math.ceil(elapsedSeconds / 60);
@@ -6179,26 +6175,27 @@ function stopTimer(phoneId, appId) {
         }
     }
     
-    clearTimerState(phoneId, appId);
-    if (activityTimers[`${phoneId}_${appId}`]) {
-        clearInterval(activityTimers[`${phoneId}_${appId}`]);
-        delete activityTimers[`${phoneId}_${appId}`];
+    delete timerStates[key];
+    if (activityTimers[key]) {
+        clearInterval(activityTimers[key]);
+        delete activityTimers[key];
     }
     
     updateTimerDisplay(phoneId, appId, 0);
     
-    const startBtn = document.getElementById(`btn-start-${phoneId}-${appId}`);
-    const pauseBtn = document.getElementById(`btn-pause-${phoneId}-${appId}`);
-    const stopBtn = document.getElementById(`btn-stop-${phoneId}-${appId}`);
-    if (startBtn) startBtn.style.display = 'inline-flex';
-    if (pauseBtn) pauseBtn.style.display = 'none';
-    if (stopBtn) stopBtn.style.display = 'none';
-    
-    renderActivityPage();
+    const container = document.getElementById('activity-page-content');
+    if (container) {
+        const buttons = container.querySelectorAll(`[data-phone="${phoneId}"][data-app="${appId}"]`);
+        buttons.forEach(btn => {
+            if (btn.dataset.action === 'start') btn.style.display = 'inline-flex';
+            if (btn.dataset.action === 'pause') btn.style.display = 'none';
+            if (btn.dataset.action === 'stop') btn.style.display = 'none';
+        });
+    }
 }
 
 function renderActivityPage() {
-    const activeApps = DataManager.getTodayActiveApps(null, 10);
+    const activeApps = DataManager.getTodayActiveApps(null, Infinity);
     const activityStats = DataManager.getActivityStats(null, 7);
     const container = document.getElementById('activity-page-content');
     
@@ -6297,7 +6294,8 @@ function renderActivityPage() {
             belowAvgBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚡ 需多活跃</span>';
         }
         
-        const timerState = getTimerState(app.phoneId, app.id);
+        const key = `${app.phoneId}_${app.id}`;
+        const timerState = timerStates[key];
         let elapsedSeconds = 0;
         let isRunning = false;
         if (timerState) {
@@ -6310,7 +6308,7 @@ function renderActivityPage() {
         const stopBtnStyle = timerState ? 'display: inline-flex;' : 'display: none;';
         
         html += `
-            <div style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 10px;">
+            <div data-card-phone="${app.phoneId}" data-card-app="${app.id}" style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="flex-shrink: 0; width: 48px; height: 48px; background: rgba(139,92,246,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;">📱</div>
                     <div style="flex: 1;">
@@ -6331,21 +6329,21 @@ function renderActivityPage() {
                 <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
                     <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 12px; color: var(--text-secondary);">⏱️ 推荐: ${app.recommendedDuration}分钟</span>
-                        <div id="timer-display-${app.phoneId}-${app.id}" style="font-size: 18px; font-weight: 700; color: #8b5cf6; font-family: monospace;">
+                        <div data-timer="${app.phoneId}-${app.id}" data-phone-id="${app.phoneId}" data-app-id="${app.id}" style="font-size: 18px; font-weight: 700; color: #8b5cf6; font-family: monospace;">
                             ${formatDuration(elapsedSeconds)}
                         </div>
                         ${isRunning ? '<span style="font-size: 10px; color: #10b981; background: rgba(16,185,129,0.1); padding: 2px 6px; border-radius: 4px;">运行中</span>' : ''}
                     </div>
                     <div style="display: flex; gap: 6px;">
-                        <button id="btn-start-${app.phoneId}-${app.id}" onclick="startTimer('${app.phoneId}', '${app.id}')" 
+                        <button class="timer-btn" data-action="start" data-phone="${app.phoneId}" data-app="${app.id}" data-recommended="${app.recommendedDuration}"
                             style="${startBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;">
                             ▶️ 开始
                         </button>
-                        <button id="btn-pause-${app.phoneId}-${app.id}" onclick="pauseTimer('${app.phoneId}', '${app.id}')" 
+                        <button class="timer-btn" data-action="pause" data-phone="${app.phoneId}" data-app="${app.id}" data-recommended="${app.recommendedDuration}"
                             style="${pauseBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;">
                             ⏸️ 暂停
                         </button>
-                        <button id="btn-stop-${app.phoneId}-${app.id}" onclick="stopTimer('${app.phoneId}', '${app.id}')" 
+                        <button class="timer-btn" data-action="stop" data-phone="${app.phoneId}" data-app="${app.id}" data-recommended="${app.recommendedDuration}"
                             style="${stopBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">
                             ⏹️ 停止
                         </button>
@@ -6367,9 +6365,10 @@ function renderActivityPage() {
     container.innerHTML = html;
     
     activeApps.forEach(app => {
-        const timerState = getTimerState(app.phoneId, app.id);
+        const key = `${app.phoneId}_${app.id}`;
+        const timerState = timerStates[key];
         if (timerState && timerState.isRunning) {
-            if (!activityTimers[`${app.phoneId}_${app.id}`]) {
+            if (!activityTimers[key]) {
                 startTimer(app.phoneId, app.id);
             }
         }
@@ -8046,6 +8045,135 @@ document.addEventListener('click', function(e) {
     if (!menu || !menu.classList.contains('is-open')) return;
     if (e.target.closest('.page-actions__more')) return;
     menu.classList.remove('is-open');
+});
+
+document.addEventListener('click', function(e) {
+    const timerBtn = e.target.closest('.timer-btn');
+    if (timerBtn) {
+        const action = timerBtn.dataset.action;
+        const phoneId = timerBtn.dataset.phone;
+        const appId = timerBtn.dataset.app;
+        const parentCard = timerBtn.closest('[data-card-phone]');
+        const recommendedDuration = parseInt(timerBtn.dataset.recommended) || 0;
+        
+        if (action === 'start') {
+            const key = `${phoneId}_${appId}`;
+            const state = timerStates[key];
+            const startTime = state && state.startTime ? state.startTime : Date.now();
+            timerStates[key] = { startTime, isRunning: true, recommendedDuration };
+            
+            if (activityTimers[key]) {
+                clearInterval(activityTimers[key]);
+            }
+            
+            const update = () => {
+                const currentState = timerStates[key];
+                if (!currentState || !currentState.isRunning) {
+                    clearInterval(activityTimers[key]);
+                    return;
+                }
+                const elapsedSeconds = Math.floor((Date.now() - currentState.startTime) / 1000);
+                
+                const allTimerEls = document.querySelectorAll('[data-timer]');
+                allTimerEls.forEach(el => {
+                    if (el.getAttribute('data-phone-id') === phoneId && el.getAttribute('data-app-id') === appId) {
+                        el.textContent = formatDuration(elapsedSeconds);
+                    }
+                });
+                
+                if (currentState.recommendedDuration > 0 && elapsedSeconds >= currentState.recommendedDuration * 60) {
+                    clearInterval(activityTimers[key]);
+                    
+                    const durationMinutes = Math.ceil(elapsedSeconds / 60);
+                    const result = DataManager.recordAppActivity(phoneId, appId, null, true, durationMinutes);
+                    if (result) {
+                        showToast(`已自动完成 ${durationMinutes} 分钟活跃时长`, 'success');
+                    }
+                    
+                    delete timerStates[key];
+                    
+                    const allTimerEls2 = document.querySelectorAll('[data-timer]');
+                    allTimerEls2.forEach(el => {
+                        if (el.getAttribute('data-phone-id') === phoneId && el.getAttribute('data-app-id') === appId) {
+                            el.textContent = '00:00';
+                        }
+                    });
+                    
+                    const buttons = parentCard.querySelectorAll('.timer-btn');
+                    buttons.forEach(btn => {
+                        if (btn.dataset.action === 'start') btn.style.display = 'inline-flex';
+                        if (btn.dataset.action === 'pause') btn.style.display = 'none';
+                        if (btn.dataset.action === 'stop') btn.style.display = 'none';
+                    });
+                }
+            };
+            
+            update();
+            activityTimers[key] = setInterval(update, 1000);
+            
+            console.log('parentCard:', parentCard);
+            console.log('parentCard exists:', !!parentCard);
+            if (parentCard) {
+                const buttons = parentCard.querySelectorAll('.timer-btn');
+                console.log('buttons found:', buttons.length);
+                buttons.forEach(btn => {
+                    console.log('button action:', btn.dataset.action, 'current display:', btn.style.display);
+                    if (btn.dataset.action === 'start') btn.style.display = 'none';
+                    if (btn.dataset.action === 'pause') btn.style.display = 'inline-flex';
+                    if (btn.dataset.action === 'stop') btn.style.display = 'inline-flex';
+                });
+            }
+        } else if (action === 'pause') {
+            const key = `${phoneId}_${appId}`;
+            const state = timerStates[key];
+            if (state) {
+                timerStates[key] = { ...state, isRunning: false };
+            }
+            if (activityTimers[key]) {
+                clearInterval(activityTimers[key]);
+                delete activityTimers[key];
+            }
+            
+            const buttons = parentCard.querySelectorAll('.timer-btn');
+            buttons.forEach(btn => {
+                if (btn.dataset.action === 'start') btn.style.display = 'inline-flex';
+                if (btn.dataset.action === 'pause') btn.style.display = 'none';
+            });
+        } else if (action === 'stop') {
+            const key = `${phoneId}_${appId}`;
+            const state = timerStates[key];
+            if (state) {
+                const elapsedSeconds = Math.floor((Date.now() - state.startTime) / 1000);
+                const durationMinutes = Math.ceil(elapsedSeconds / 60);
+                if (durationMinutes > 0) {
+                    const result = DataManager.recordAppActivity(phoneId, appId, null, true, durationMinutes);
+                    if (result) {
+                        showToast(`已记录 ${durationMinutes} 分钟活跃时长`, 'success');
+                    }
+                }
+            }
+            
+            delete timerStates[key];
+            if (activityTimers[key]) {
+                clearInterval(activityTimers[key]);
+                delete activityTimers[key];
+            }
+            
+            const allTimerEls = document.querySelectorAll('[data-timer]');
+            allTimerEls.forEach(el => {
+                if (el.getAttribute('data-phone-id') === phoneId && el.getAttribute('data-app-id') === appId) {
+                    el.textContent = '00:00';
+                }
+            });
+            
+            const buttons = parentCard.querySelectorAll('.timer-btn');
+            buttons.forEach(btn => {
+                if (btn.dataset.action === 'start') btn.style.display = 'inline-flex';
+                if (btn.dataset.action === 'pause') btn.style.display = 'none';
+                if (btn.dataset.action === 'stop') btn.style.display = 'none';
+            });
+        }
+    }
 });
 
 // 渲染手机管理页面
