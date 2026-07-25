@@ -2312,8 +2312,11 @@ class DataManager {
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                if (app.dailyEarnings && app.dailyEarnings[today]) {
-                    totalEarned += parseFloat(app.dailyEarnings[today]) || 0;
+                if (app.balanceHistory && app.balanceHistory.length > 0) {
+                    const todayRecord = app.balanceHistory.find(record => record.date === today);
+                    if (todayRecord && todayRecord.change > 0) {
+                        totalEarned += parseFloat(todayRecord.change) || 0;
+                    }
                 }
             });
         });
@@ -2335,8 +2338,11 @@ class DataManager {
             let dayEarned = 0;
             data.phones.forEach(phone => {
                 phone.apps.forEach(app => {
-                    if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
-                        dayEarned += parseFloat(app.dailyEarnings[dateStr]) || 0;
+                    if (app.balanceHistory && app.balanceHistory.length > 0) {
+                        const dateRecord = app.balanceHistory.find(record => record.date === dateStr);
+                        if (dateRecord && dateRecord.change > 0) {
+                            dayEarned += parseFloat(dateRecord.change) || 0;
+                        }
                     }
                 });
             });
@@ -2367,15 +2373,6 @@ class DataManager {
                             dailyTotals[record.date] += parseFloat(record.change) || 0;
                         }
                     });
-                } else if (app.dailyEarnings) {
-                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
-                        if (date <= today) {
-                            if (!dailyTotals[date]) {
-                                dailyTotals[date] = 0;
-                            }
-                            dailyTotals[date] += parseFloat(amount) || 0;
-                        }
-                    });
                 }
             });
         });
@@ -2386,7 +2383,11 @@ class DataManager {
         
         const result = Object.entries(dailyTotals)
             .map(([date, amount]) => ({ date, amount }))
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
+            .sort((a, b) => {
+                if (a.date === today) return -1;
+                if (b.date === today) return 1;
+                return new Date(b.date) - new Date(a.date);
+            });
         
         return result;
     }
@@ -5578,6 +5579,7 @@ function showPage(pageName) {
     if (pageName === 'daily-earnings') renderDailyEarningsPage();
     if (pageName === 'app-details') renderAppDetailsPage();
     if (pageName === 'phone-earnings') renderPhoneEarningsPage();
+    if (pageName === 'activity') renderActivityPage();
     
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
@@ -5864,7 +5866,6 @@ function renderDashboard() {
                 </div>
             </div>
 
-            ${renderActivityPlanCard()}
         `;
     }
 
@@ -6070,6 +6071,309 @@ function markAllActive() {
     });
     renderDashboard();
     showToast(`${count} 个软件已标记为活跃（使用推荐时长）`, 'success');
+}
+
+let activityTimers = {};
+
+function getTimerKey(phoneId, appId) {
+    return `activity_timer_${phoneId}_${appId}`;
+}
+
+function getTimerState(phoneId, appId) {
+    const key = getTimerKey(phoneId, appId);
+    const stored = localStorage.getItem(key);
+    if (stored) {
+        try {
+            return JSON.parse(stored);
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function saveTimerState(phoneId, appId, state) {
+    const key = getTimerKey(phoneId, appId);
+    localStorage.setItem(key, JSON.stringify(state));
+}
+
+function clearTimerState(phoneId, appId) {
+    const key = getTimerKey(phoneId, appId);
+    localStorage.removeItem(key);
+}
+
+function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function updateTimerDisplay(phoneId, appId, elapsedSeconds) {
+    const timerEl = document.getElementById(`timer-display-${phoneId}-${appId}`);
+    if (timerEl) {
+        timerEl.textContent = formatDuration(elapsedSeconds);
+    }
+}
+
+function startTimer(phoneId, appId) {
+    const state = getTimerState(phoneId, appId);
+    const startTime = state && state.startTime ? state.startTime : Date.now();
+    
+    saveTimerState(phoneId, appId, { startTime, isRunning: true });
+    
+    if (activityTimers[`${phoneId}_${appId}`]) {
+        clearInterval(activityTimers[`${phoneId}_${appId}`]);
+    }
+    
+    const update = () => {
+        const currentState = getTimerState(phoneId, appId);
+        if (!currentState || !currentState.isRunning) {
+            clearInterval(activityTimers[`${phoneId}_${appId}`]);
+            return;
+        }
+        const elapsedSeconds = Math.floor((Date.now() - currentState.startTime) / 1000);
+        updateTimerDisplay(phoneId, appId, elapsedSeconds);
+    };
+    
+    update();
+    activityTimers[`${phoneId}_${appId}`] = setInterval(update, 1000);
+    
+    const startBtn = document.getElementById(`btn-start-${phoneId}-${appId}`);
+    const pauseBtn = document.getElementById(`btn-pause-${phoneId}-${appId}`);
+    const stopBtn = document.getElementById(`btn-stop-${phoneId}-${appId}`);
+    if (startBtn) startBtn.style.display = 'none';
+    if (pauseBtn) pauseBtn.style.display = 'inline-flex';
+    if (stopBtn) stopBtn.style.display = 'inline-flex';
+}
+
+function pauseTimer(phoneId, appId) {
+    const state = getTimerState(phoneId, appId);
+    if (state) {
+        saveTimerState(phoneId, appId, { ...state, isRunning: false });
+    }
+    if (activityTimers[`${phoneId}_${appId}`]) {
+        clearInterval(activityTimers[`${phoneId}_${appId}`]);
+        delete activityTimers[`${phoneId}_${appId}`];
+    }
+    
+    const startBtn = document.getElementById(`btn-start-${phoneId}-${appId}`);
+    const pauseBtn = document.getElementById(`btn-pause-${phoneId}-${appId}`);
+    if (startBtn) startBtn.style.display = 'inline-flex';
+    if (pauseBtn) pauseBtn.style.display = 'none';
+}
+
+function stopTimer(phoneId, appId) {
+    const state = getTimerState(phoneId, appId);
+    if (state) {
+        const elapsedSeconds = Math.floor((Date.now() - state.startTime) / 1000);
+        const durationMinutes = Math.ceil(elapsedSeconds / 60);
+        if (durationMinutes > 0) {
+            const result = DataManager.recordAppActivity(phoneId, appId, null, true, durationMinutes);
+            if (result) {
+                showToast(`已记录 ${durationMinutes} 分钟活跃时长`, 'success');
+            }
+        }
+    }
+    
+    clearTimerState(phoneId, appId);
+    if (activityTimers[`${phoneId}_${appId}`]) {
+        clearInterval(activityTimers[`${phoneId}_${appId}`]);
+        delete activityTimers[`${phoneId}_${appId}`];
+    }
+    
+    updateTimerDisplay(phoneId, appId, 0);
+    
+    const startBtn = document.getElementById(`btn-start-${phoneId}-${appId}`);
+    const pauseBtn = document.getElementById(`btn-pause-${phoneId}-${appId}`);
+    const stopBtn = document.getElementById(`btn-stop-${phoneId}-${appId}`);
+    if (startBtn) startBtn.style.display = 'inline-flex';
+    if (pauseBtn) pauseBtn.style.display = 'none';
+    if (stopBtn) stopBtn.style.display = 'none';
+    
+    renderActivityPage();
+}
+
+function renderActivityPage() {
+    const activeApps = DataManager.getTodayActiveApps(null, 10);
+    const activityStats = DataManager.getActivityStats(null, 7);
+    const container = document.getElementById('activity-page-content');
+    
+    if (!container) return;
+    
+    const todayDisplay = new Date();
+    const currentDateEl = document.getElementById('activity-current-date');
+    if (currentDateEl) {
+        currentDateEl.textContent = todayDisplay.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+        });
+    }
+    
+    if (activeApps.length === 0) {
+        container.innerHTML = `
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">📺 今日活跃计划</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="empty-state">
+                    <div class="empty-state__icon">📺</div>
+                    <div class="empty-state__title">暂无软件数据</div>
+                    <div class="empty-state__hint">添加手机和软件后即可查看今日活跃计划</div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    const urgentCount = activeApps.filter(a => a.priority === 4).length;
+    const warningCount = activeApps.filter(a => a.priority === 3).length;
+    
+    let html = `
+        <div class="card mt-4">
+            <div class="section-header">
+                <div class="section-title">📺 今日活跃计划</div>
+                <div class="section-divider"></div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">标记已观看短剧/内容，给平台贡献活跃度</div>
+            </div>
+            <div style="display: flex; gap: 16px; margin-bottom: 16px; padding: 0 8px;">
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(239,68,68,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #ef4444;">${urgentCount}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">立即玩</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(245,158,11,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${warningCount}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">3天内</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(59,130,246,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6;">${activityStats.avgDailyActive}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">日均活跃</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(16,185,129,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #10b981;">${activityStats.activeRate}%</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">活跃率</div>
+                </div>
+            </div>
+            <div style="max-height: calc(100vh - 400px); overflow-y: auto;">
+    `;
+    
+    activeApps.forEach(app => {
+        let priorityIcon = '';
+        let priorityColor = '';
+        let statusText = '';
+        
+        if (app.priority === 4) {
+            priorityIcon = '⚠️';
+            priorityColor = '#ef4444';
+            statusText = '立即游玩';
+        } else if (app.priority === 3) {
+            priorityIcon = '⏳';
+            priorityColor = '#f59e0b';
+            statusText = `${app.daysUntilNextPlay}天后`;
+        } else if (app.priority === 2) {
+            priorityIcon = '📅';
+            priorityColor = '#3b82f6';
+            statusText = `${app.daysUntilNextPlay}天后`;
+        } else {
+            priorityIcon = '✓';
+            priorityColor = '#10b981';
+            statusText = `${app.daysUntilNextPlay}天后`;
+        }
+        
+        let activityBadge = '';
+        if (app.isActiveToday) {
+            const durationText = app.activityDuration > 0 ? '(' + app.activityDuration + '分钟)' : '';
+            activityBadge = '<span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ 已活跃' + durationText + '</span>';
+        }
+        
+        let belowAvgBadge = '';
+        if (app.belowAverageEarning) {
+            belowAvgBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚡ 需多活跃</span>';
+        }
+        
+        const timerState = getTimerState(app.phoneId, app.id);
+        let elapsedSeconds = 0;
+        let isRunning = false;
+        if (timerState) {
+            isRunning = timerState.isRunning;
+            elapsedSeconds = Math.floor((Date.now() - timerState.startTime) / 1000);
+        }
+        
+        const startBtnStyle = isRunning ? 'display: none;' : 'display: inline-flex;';
+        const pauseBtnStyle = isRunning ? 'display: inline-flex;' : 'display: none;';
+        const stopBtnStyle = timerState ? 'display: inline-flex;' : 'display: none;';
+        
+        html += `
+            <div style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="flex-shrink: 0; width: 48px; height: 48px; background: rgba(139,92,246,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;">📱</div>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-weight: 600; font-size: 14px;">${app.name}</span>
+                            <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
+                            <span style="font-size: 12px; color: ${priorityColor};">${priorityIcon} ${statusText}</span>
+                            ${belowAvgBadge}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                            余额: ¥${app.balance.toFixed(2)} | 今日赚取: ¥${app.todayEarning.toFixed(2)}
+                            ${app.averageEarning > 0 ? '| 平均: ¥' + app.averageEarning.toFixed(2) : ''}
+                        </div>
+                    </div>
+                    ${activityBadge}
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
+                    <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; color: var(--text-secondary);">⏱️ 推荐: ${app.recommendedDuration}分钟</span>
+                        <div id="timer-display-${app.phoneId}-${app.id}" style="font-size: 18px; font-weight: 700; color: #8b5cf6; font-family: monospace;">
+                            ${formatDuration(elapsedSeconds)}
+                        </div>
+                        ${isRunning ? '<span style="font-size: 10px; color: #10b981; background: rgba(16,185,129,0.1); padding: 2px 6px; border-radius: 4px;">运行中</span>' : ''}
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button id="btn-start-${app.phoneId}-${app.id}" onclick="startTimer('${app.phoneId}', '${app.id}')" 
+                            style="${startBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                            ▶️ 开始
+                        </button>
+                        <button id="btn-pause-${app.phoneId}-${app.id}" onclick="pauseTimer('${app.phoneId}', '${app.id}')" 
+                            style="${pauseBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                            ⏸️ 暂停
+                        </button>
+                        <button id="btn-stop-${app.phoneId}-${app.id}" onclick="stopTimer('${app.phoneId}', '${app.id}')" 
+                            style="${stopBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                            ⏹️ 停止
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+            <div style="padding: 12px; display: flex; gap: 8px; border-top: 1px solid var(--border-color);">
+                <button class="btn btn-secondary flex-1" onclick="renderActivityPage()" style="font-size: 13px;">🔄 刷新推荐</button>
+                <button class="btn btn-primary flex-1" onclick="markAllActive(); renderActivityPage()" style="font-size: 13px;">✅ 全部标记活跃</button>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    activeApps.forEach(app => {
+        const timerState = getTimerState(app.phoneId, app.id);
+        if (timerState && timerState.isRunning) {
+            if (!activityTimers[`${app.phoneId}_${app.id}`]) {
+                startTimer(app.phoneId, app.id);
+            }
+        }
+    });
 }
 
 function renderNextPlay() {
@@ -12908,12 +13212,12 @@ function renderYearlyGoal() {
                 <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
                     📈 每日赚取记录 (${allDailyEarnings.length}天)
                 </div>
-                <div id="daily-earnings-container" style="display: flex; gap: 8px; overflow-x: auto; padding: 4px; scroll-behavior: smooth;">
+                <div id="daily-earnings-container" style="display: flex; gap: 8px; overflow-x: auto; padding: 4px;">
                     ${allDailyEarnings.map(day => {
                         const isDayAchieved = day.amount >= dailyTargetAmount && dailyTargetAmount > 0;
                         const isToday = day.date === todayStr;
                         return `
-                        <div onclick="showDailyEarningDetail('${day.date}')" style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'}; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div id="daily-earning-item-${day.date}" onclick="showDailyEarningDetail('${day.date}')" style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'}; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                             <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">${day.date.slice(5)}</div>
                             <div style="font-size: 13px; font-weight: 600; color: ${isDayAchieved ? 'var(--success-color)' : 'var(--text-primary)'}">¥${day.amount.toFixed(0)}</div>
                             ${isDayAchieved ? '<div style="font-size: 9px; color: var(--success-color);">✓</div>' : ''}
@@ -12921,14 +13225,6 @@ function renderYearlyGoal() {
                         `;
                     }).join('')}
                 </div>
-                <script>
-                    setTimeout(function() {
-                        const container = document.getElementById('daily-earnings-container');
-                        if (container) {
-                            container.scrollLeft = container.scrollWidth;
-                        }
-                    }, 100);
-                </script>
             </div>
             ` : ''}
 
