@@ -6658,11 +6658,47 @@ function renderExpiringApps() {
     const today = getTodayLocal();
     
     const expiringApps = [];
+    const withdrawReadyApps = [];
+    const clearPeriodApps = [];
     
     data.phones.forEach(phone => {
         (phone.apps || []).forEach(app => {
             const totalEarned = calculateAppEarned(app);
             const minWithdraw = app.minWithdraw || 0.3;
+            const balance = app.balance || 0;
+            
+            // 1. 余额不够最小提现金额，建议删除
+            if (balance < minWithdraw && balance > 0) {
+                withdrawReadyApps.push({
+                    name: app.name,
+                    phoneName: phone.name,
+                    phoneId: phone.id,
+                    appId: app.id,
+                    balance: balance,
+                    minWithdraw: minWithdraw
+                });
+            }
+            
+            // 2. 清零周期即将到达前一天（提醒下载回来）
+            if (app.clearPeriod && app.earningStartDate) {
+                const startDate = parseLocalDate(app.earningStartDate);
+                const clearDate = new Date(startDate);
+                clearDate.setDate(startDate.getDate() + app.clearPeriod);
+                
+                const daysUntilClear = Math.round((clearDate - today) / (1000 * 60 * 60 * 24));
+                
+                if (daysUntilClear === 1 || daysUntilClear === 0) {
+                    clearPeriodApps.push({
+                        name: app.name,
+                        phoneName: phone.name,
+                        phoneId: phone.id,
+                        appId: app.id,
+                        daysUntilClear: daysUntilClear,
+                        clearDate: clearDate
+                    });
+                }
+            }
+            
             const daysCanWait = Math.floor(totalEarned / minWithdraw);
             
             const startDate = parseLocalDate(app.earningStartDate);
@@ -6679,7 +6715,7 @@ function renderExpiringApps() {
                     phoneId: phone.id,
                     appId: app.id,
                     daysUntilNextPlay: daysUntilNextPlay,
-                    balance: app.balance || 0,
+                    balance: balance,
                     nextPlayDate: nextPlayDate
                 });
             }
@@ -6687,8 +6723,11 @@ function renderExpiringApps() {
     });
     
     expiringApps.sort((a, b) => a.daysUntilNextPlay - b.daysUntilNextPlay);
+    clearPeriodApps.sort((a, b) => a.daysUntilClear - b.daysUntilClear);
     
-    if (expiringApps.length === 0) {
+    const hasAlerts = expiringApps.length > 0 || withdrawReadyApps.length > 0 || clearPeriodApps.length > 0;
+    
+    if (!hasAlerts) {
         card.style.display = 'none';
         return;
     }
@@ -6697,6 +6736,8 @@ function renderExpiringApps() {
     
     const urgentCount = expiringApps.filter(a => a.daysUntilNextPlay === 0).length;
     const warningCount = expiringApps.filter(a => a.daysUntilNextPlay > 0 && a.daysUntilNextPlay <= 3).length;
+    const withdrawCount = withdrawReadyApps.length;
+    const clearCount = clearPeriodApps.length;
     
     let html = `
         <div style="padding: 12px;">
@@ -6708,6 +6749,36 @@ function renderExpiringApps() {
                             <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
                                 <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
                                 <div style="font-size: 11px; color: var(--text-secondary);">${app.phoneName}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${clearCount > 0 ? `
+                <div style="background: linear-gradient(135deg, rgba(251, 146, 60, 0.1) 0%, rgba(251, 146, 60, 0.05) 100%); border-left: 4px solid #fb923c; border-radius: 0 12px 12px 0; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #fb923c; margin-bottom: 8px;">⏳ 清零周期提醒 (${clearCount}个)</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">清零周期即将到达，请及时提现或下载回来保存</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${clearPeriodApps.map(app => `
+                            <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
+                                <div style="font-size: 11px; color: ${app.daysUntilClear <= 0 ? '#ef4444' : '#f59e0b'};">${app.phoneName} · ${app.daysUntilClear <= 0 ? '今天到期' : app.daysUntilClear + '天后到期'}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${withdrawCount > 0 ? `
+                <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border-left: 4px solid #ef4444; border-radius: 0 12px 12px 0; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #ef4444; margin-bottom: 8px;">🗑️ 建议删除 (${withdrawCount}个)</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">以下软件余额太少，不值得继续，可以考虑删除</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${withdrawReadyApps.map(app => `
+                            <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
+                                <div style="font-size: 11px; color: #ef4444;">${app.phoneName} · 余额¥${app.balance.toFixed(2)}/${app.minWithdraw.toFixed(2)}</div>
                             </div>
                         `).join('')}
                     </div>
