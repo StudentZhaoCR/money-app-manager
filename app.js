@@ -4128,6 +4128,36 @@ class DataManager {
         }
         return data;
     }
+    
+    // 软删除：标记软件为已删除（用于清零周期提醒）
+    static markAppDeleted(phoneId, appId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone) {
+            const app = phone.apps.find(a => a.id === appId);
+            if (app) {
+                app.isDeleted = true;
+                app.deleteDate = new Date().toISOString().split('T')[0];
+                this.saveData(data);
+            }
+        }
+        return data;
+    }
+    
+    // 恢复已删除的软件
+    static restoreApp(phoneId, appId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (phone) {
+            const app = phone.apps.find(a => a.id === appId);
+            if (app) {
+                app.isDeleted = false;
+                delete app.deleteDate;
+                this.saveData(data);
+            }
+        }
+        return data;
+    }
 
     static deletePhone(phoneId) {
         const data = this.loadData();
@@ -6666,9 +6696,10 @@ function renderExpiringApps() {
             const totalEarned = calculateAppEarned(app);
             const minWithdraw = app.minWithdraw || 0.3;
             const balance = app.balance || 0;
+            const isDeleted = app.isDeleted === true;
             
-            // 1. 余额不够最小提现金额，建议删除
-            if (balance < minWithdraw && balance > 0) {
+            // 1. 余额不够最小提现金额，建议删除（只检查未删除的软件）
+            if (!isDeleted && balance < minWithdraw && balance > 0) {
                 withdrawReadyApps.push({
                     name: app.name,
                     phoneName: phone.name,
@@ -6679,8 +6710,8 @@ function renderExpiringApps() {
                 });
             }
             
-            // 2. 清零周期即将到达前一天（提醒下载回来）
-            if (app.clearPeriod && app.earningStartDate) {
+            // 2. 清零周期即将到达前一天（只提醒已删除的软件，下载回来）
+            if (isDeleted && app.clearPeriod && app.earningStartDate) {
                 const startDate = parseLocalDate(app.earningStartDate);
                 const clearDate = new Date(startDate);
                 clearDate.setDate(startDate.getDate() + app.clearPeriod);
@@ -6699,25 +6730,28 @@ function renderExpiringApps() {
                 }
             }
             
-            const daysCanWait = Math.floor(totalEarned / minWithdraw);
-            
-            const startDate = parseLocalDate(app.earningStartDate);
-            const nextPlayDate = new Date(startDate);
-            nextPlayDate.setDate(startDate.getDate() + daysCanWait);
-            
-            const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
-            
-            if (daysUntilNextPlay <= 3 && daysUntilNextPlay >= 0) {
+            // 3. 到期提醒（只检查未删除的软件）
+            if (!isDeleted) {
+                const daysCanWait = Math.floor(totalEarned / minWithdraw);
                 
-                expiringApps.push({
-                    name: app.name,
-                    phoneName: phone.name,
-                    phoneId: phone.id,
-                    appId: app.id,
-                    daysUntilNextPlay: daysUntilNextPlay,
-                    balance: balance,
-                    nextPlayDate: nextPlayDate
-                });
+                const startDate = parseLocalDate(app.earningStartDate);
+                const nextPlayDate = new Date(startDate);
+                nextPlayDate.setDate(startDate.getDate() + daysCanWait);
+                
+                const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - today) / (1000 * 60 * 60 * 24)));
+                
+                if (daysUntilNextPlay <= 3 && daysUntilNextPlay >= 0) {
+                    
+                    expiringApps.push({
+                        name: app.name,
+                        phoneName: phone.name,
+                        phoneId: phone.id,
+                        appId: app.id,
+                        daysUntilNextPlay: daysUntilNextPlay,
+                        balance: balance,
+                        nextPlayDate: nextPlayDate
+                    });
+                }
             }
         });
     });
@@ -6758,12 +6792,15 @@ function renderExpiringApps() {
             ${clearCount > 0 ? `
                 <div style="background: linear-gradient(135deg, rgba(251, 146, 60, 0.1) 0%, rgba(251, 146, 60, 0.05) 100%); border-left: 4px solid #fb923c; border-radius: 0 12px 12px 0; padding: 12px; margin-bottom: 12px;">
                     <div style="font-size: 13px; font-weight: 600; color: #fb923c; margin-bottom: 8px;">⏳ 清零周期提醒 (${clearCount}个)</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">清零周期即将到达，请及时提现或下载回来保存</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">以下已删除软件的清零周期即将到达，请及时下载回来保存</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
                         ${clearPeriodApps.map(app => `
-                            <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
-                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
-                                <div style="font-size: 11px; color: ${app.daysUntilClear <= 0 ? '#ef4444' : '#f59e0b'};">${app.phoneName} · ${app.daysUntilClear <= 0 ? '今天到期' : app.daysUntilClear + '天后到期'}</div>
+                            <div style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
+                                    <div style="font-size: 11px; color: ${app.daysUntilClear <= 0 ? '#ef4444' : '#f59e0b'};">${app.phoneName} · ${app.daysUntilClear <= 0 ? '今天到期' : app.daysUntilClear + '天后到期'}</div>
+                                </div>
+                                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; white-space: nowrap;" onclick="restoreApp('${app.phoneId}', '${app.appId}')">已下载</button>
                             </div>
                         `).join('')}
                     </div>
@@ -6774,11 +6811,14 @@ function renderExpiringApps() {
                 <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border-left: 4px solid #ef4444; border-radius: 0 12px 12px 0; padding: 12px; margin-bottom: 12px;">
                     <div style="font-size: 13px; font-weight: 600; color: #ef4444; margin-bottom: 8px;">🗑️ 建议删除 (${withdrawCount}个)</div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">以下软件余额太少，不值得继续，可以考虑删除</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
                         ${withdrawReadyApps.map(app => `
-                            <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
-                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
-                                <div style="font-size: 11px; color: #ef4444;">${app.phoneName} · 余额¥${app.balance.toFixed(2)}/${app.minWithdraw.toFixed(2)}</div>
+                            <div style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                <div style="flex: 1; min-width: 0; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
+                                    <div style="font-size: 11px; color: #ef4444;">${app.phoneName} · 余额¥${app.balance.toFixed(2)}/${app.minWithdraw.toFixed(2)}</div>
+                                </div>
+                                <button class="btn btn-error" style="font-size: 11px; padding: 4px 10px; white-space: nowrap;" onclick="markAppDeleted('${app.phoneId}', '${app.appId}')">标记删除</button>
                             </div>
                         `).join('')}
                     </div>
@@ -8357,8 +8397,12 @@ function renderAppList(phone) {
         nextPlayDate.setDate(startDate.getDate() + daysCanWait);
         const daysUntilNextPlay = Math.max(0, Math.round((nextPlayDate - new Date(today)) / (1000 * 60 * 60 * 24)));
         
+        const isDeleted = app.isDeleted === true;
+        
         let activityStatus = '';
-        if (isActiveToday) {
+        if (isDeleted) {
+            activityStatus = '<span style="background: rgba(107,114,128,0.15); color: #6b7280; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">🗑️ 已删除</span>';
+        } else if (isActiveToday) {
             const durationText = activityDuration > 0 ? `(${activityDuration}分钟)` : '';
             activityStatus = `<span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ 已活跃${durationText}</span>`;
         } else if (daysUntilNextPlay === 0) {
@@ -8368,9 +8412,9 @@ function renderAppList(phone) {
         }
 
         return `
-            <div class="app-card" data-app-id="${app.id}">
+            <div class="app-card" data-app-id="${app.id}" style="${isDeleted ? 'opacity: 0.6; border-style: dashed;' : ''}">
                 <div class="app-header">
-                    <span class="app-name">${app.name}</span>
+                    <span class="app-name" style="${isDeleted ? 'text-decoration: line-through; color: var(--text-muted);' : ''}">${app.name}</span>
                     <span class="status-tag ${totalWithdrawals > 0 ? 'ready' : 'pending'}">
                         ${totalWithdrawals > 0 ? '有记录' : '新软件'}
                     </span>
@@ -8388,7 +8432,9 @@ function renderAppList(phone) {
                 <div class="action-buttons">
                     <button class="btn btn-primary" onclick="openWithdrawModal('${phone.id}', '${app.id}')">记录提现</button>
                     <button class="btn btn-secondary" onclick="openEditAppModal('${phone.id}', '${app.id}')">编辑</button>
-                    <button class="btn btn-error" onclick="deleteApp('${phone.id}', '${app.id}')">删除</button>
+                    ${isDeleted 
+                        ? `<button class="btn btn-secondary" onclick="restoreApp('${phone.id}', '${app.id}')" style="color: #10b981;">恢复</button>` 
+                        : `<button class="btn btn-error" onclick="deleteApp('${phone.id}', '${app.id}')">删除</button>`}
                 </div>
             </div>
         `;
@@ -9377,6 +9423,22 @@ function deleteApp(phoneId, appId) {
         DataManager.deleteApp(phoneId, appId);
         renderPhones();
         
+    }
+}
+
+function markAppDeleted(phoneId, appId) {
+    if (confirm('确定要标记这个软件为已删除吗？\n\n标记后该软件将不再显示在正常列表中，但会在清零周期快到时提醒您下载回来。')) {
+        DataManager.markAppDeleted(phoneId, appId);
+        renderDashboard();
+        showToast('已标记为删除');
+    }
+}
+
+function restoreApp(phoneId, appId) {
+    if (confirm('确定要恢复这个软件吗？')) {
+        DataManager.restoreApp(phoneId, appId);
+        renderDashboard();
+        showToast('已恢复软件');
     }
 }
 
