@@ -755,7 +755,7 @@ async function safeExecuteAsync(operation, fn) {
 
 
 function openAddInstallmentModal() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
     showModal('添加分期还款', `
         <div class="form-group">
             <label class="form-label">平台名称</label>
@@ -1318,7 +1318,7 @@ class DataManager {
                     needsMigration = true;
                 }
                 if (app.lastLoginDate === undefined) {
-                    app.lastLoginDate = new Date().toISOString().split('T')[0];
+                    app.lastLoginDate = getCurrentDate();
                     needsMigration = true;
                 }
                 // 为旧数据添加收益追踪字段
@@ -2395,7 +2395,7 @@ class DataManager {
     // 获取每台手机每天的赚取记录
     static getPhoneDailyEarnings() {
         const data = this.loadData();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         const phoneDailyEarnings = {};
         
         data.phones.forEach(phone => {
@@ -2435,7 +2435,7 @@ class DataManager {
         const data = this.loadData();
         let totalEarnings = 0;
         let daysWithEarnings = new Set();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
@@ -2510,7 +2510,7 @@ class DataManager {
     static calculateMaxDailyEarnings() {
         const data = this.loadData();
         let maxEarnings = 0;
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         
         const dailyEarningsMap = new Map();
         
@@ -3255,7 +3255,7 @@ class DataManager {
 
     static addPhone(name) {
         const data = this.loadData();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         // 生成唯一ID：时间戳 + 随机数 + 名称哈希
         const nameHash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
         const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + nameHash;
@@ -3283,7 +3283,7 @@ class DataManager {
             
             // 生成唯一ID：时间戳 + 随机数 + 手机ID的一部分
             const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5) + phoneId.substr(-4);
-            const today = new Date().toISOString().split('T')[0];
+            const today = getCurrentDate();
             const app = {
                 id: uniqueId,
                 name: appData.name,
@@ -3330,14 +3330,14 @@ class DataManager {
                 app.lastUpdated = new Date().toISOString();
                 
                 if (newBalance !== oldBalance) {
-                    app.lastLoginDate = new Date().toISOString().split('T')[0];
+                    app.lastLoginDate = getCurrentDate();
                 }
                 
                 // 记录余额变化（只记录增加的情况，提现不算）
                 let todayTotalEarnings = 0;
                 if (newBalance > oldBalance) {
                     const isFirstAddWithBalance = (!app.balanceHistory || app.balanceHistory.length === 0) && oldBalance === 0 && newBalance > 0;
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = getCurrentDate();
                     if (!app.earningStartDate) {
                         app.earningStartDate = today;
                     }
@@ -3698,7 +3698,7 @@ class DataManager {
     static addDownloadedGame(gameName, phoneId = null) {
         const games = this.getDownloadedGames();
         const allGames = this.getAllGames();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         
         // 检查是否之前下载过这个游戏（已删除的）- 需要匹配同一手机
         const deletedGame = allGames.find(g => 
@@ -3777,7 +3777,7 @@ class DataManager {
         if (game) {
             // 标记为已删除，而不是真正删除
             game.deleted = true;
-            game.deleteDate = new Date().toISOString().split('T')[0];
+            game.deleteDate = getCurrentDate();
             this.saveDownloadedGames(games);
         }
         
@@ -4042,7 +4042,7 @@ class DataManager {
     // 获取游戏统计（可按手机ID筛选）
     static getGameStats(phoneId = null) {
         const games = this.getDownloadedGames(phoneId);
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         
         return {
             totalGames: games.length,
@@ -4096,7 +4096,7 @@ class DataManager {
                 // 确保余额不会变成负数
                 if (app.balance < 0) app.balance = 0;
 
-                const dateStr = date || new Date().toISOString().split('T')[0];
+                const dateStr = date || getCurrentDate();
                 
                 app.withdrawn = (app.withdrawn || 0) + amount;
                 app.lastUpdated = new Date().toISOString();
@@ -4137,7 +4137,7 @@ class DataManager {
             const app = phone.apps.find(a => a.id === appId);
             if (app) {
                 app.isDeleted = true;
-                app.deleteDate = new Date().toISOString().split('T')[0];
+                app.deleteDate = getCurrentDate();
                 this.saveData(data);
             }
         }
@@ -4344,7 +4344,7 @@ class DataManager {
             installment.repaymentHistory = [];
         }
         installment.repaymentHistory.push({
-            date: new Date().toISOString().split('T')[0],
+            date: getCurrentDate(),
             amount: repayAmount,
             timestamp: new Date().toISOString()
         });
@@ -4543,7 +4543,7 @@ class DataManager {
         const plannedDays = Math.max(1, Math.ceil((new Date(furthestDueDate) - now) / (1000 * 60 * 60 * 24)));
 
         // 获取今日实际提现金额
-        const today = now.toISOString().split('T')[0];
+        const today = formatLocalDate(now);
         let todayWithdrawal = 0;
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
@@ -4566,7 +4566,7 @@ class DataManager {
             for (let i = 0; i < 7; i++) {
                 const date = new Date(now);
                 date.setDate(date.getDate() - i);
-                const dateStr = date.toISOString().split('T')[0];
+                const dateStr = formatLocalDate(date);
 
                 let dayWithdrawal = 0;
                 data.phones.forEach(phone => {
@@ -4959,7 +4959,7 @@ class DataManager {
         const firstApp = appAnalysis[0];
         
         // 计算今日达标状态
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         let todayEarned = 0;
         let todayTarget = 0;
         let todayAchieved = false;
@@ -5499,7 +5499,7 @@ function checkInstallmentReminders() {
         // 提前3天、1天提醒
         if (daysRemaining <= 3 && daysRemaining > 0) {
             const lastReminder = localStorage.getItem(`installment_reminder_${installment.id}`);
-            const todayStr = now.toISOString().split('T')[0];
+            const todayStr = formatLocalDate(now);
             
             // 每天只提醒一次
             if (lastReminder !== todayStr) {
@@ -5530,7 +5530,7 @@ function checkWithdrawReminders() {
 function checkDailyGoalReminders() {
     const data = DataManager.loadData();
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = formatLocalDate(now);
     
     // 计算今日总提现
     let totalWithdrawnToday = 0;
@@ -7364,7 +7364,7 @@ function generateSmartSuggestions(data) {
                     }
                     const yesterday = new Date();
                     yesterday.setDate(yesterday.getDate() - 1);
-                    const yesterdayStr = yesterday.toISOString().split('T')[0];
+                    const yesterdayStr = formatLocalDate(yesterday);
                     if (w.date === yesterdayStr) {
                         yesterdayWithdrawal += w.amount;
                     }
@@ -7807,7 +7807,7 @@ function showAppDetailModal(appId) {
                             .slice()
                             .sort((a, b) => new Date(b.date) - new Date(a.date))
                             .map(record => {
-                                const isToday = record.date === new Date().toISOString().split('T')[0];
+                                const isToday = record.date === getCurrentDate();
                                 const isPositive = record.change > 0;
                                 return `
                                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-color); ${isToday ? 'background: rgba(56, 239, 125, 0.1);' : ''}">
@@ -7939,7 +7939,7 @@ function renderIncomeCalendar() {
         }
 
         // 判断是否是今天
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         const isToday = dateStr === today;
         if (isToday) {
             backgroundColor = 'rgba(255,255,255,0.4)';
@@ -9145,7 +9145,7 @@ function openWithdrawModal(phoneId, appId) {
         </div>
         <div class="form-group">
             <label class="form-label">提现日期</label>
-            <input type="date" id="withdraw-date" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+            <input type="date" id="withdraw-date" class="form-input" value="${getCurrentDate()}">
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -9688,7 +9688,7 @@ function openQuickWithdrawModal(index) {
                         app.withdrawals = [];
                     }
                     app.withdrawals.push({
-                        date: new Date().toISOString().split('T')[0],
+                        date: getCurrentDate(),
                         amount: amount
                     });
                     
@@ -11331,7 +11331,7 @@ function openAddInstallmentModal() {
 // 计算每日需要赚取的金额（按期数顺序还款，每期单独计算）
 function calculateDailyEarnNeeded() {
     const data = DataManager.loadData();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
 
     // 获取所有未完成的分期
     const activeInstallments = data.installments.filter(inst => {
@@ -11368,7 +11368,7 @@ function calculateDailyEarnNeeded() {
 
 // 打开批量添加分期模态框
 function openBatchAddInstallmentModal() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
     
     showModal('批量添加分期还款', `
         <div class="form-group">
@@ -11462,7 +11462,7 @@ function calculateBatchInstallments(platform, periods, amount, firstDate, cycle)
     for (let i = 0; i < periods; i++) {
         installments.push({
             platform: platform,
-            dueDate: currentDate.toISOString().split('T')[0],
+            dueDate: formatLocalDate(currentDate),
             amount: amount,
             periodNumber: i + 1,  // 期数标记
             totalPeriods: periods,  // 总期数
@@ -11714,6 +11714,14 @@ function getCurrentDate() {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// 格式化任意 Date 对象为本地日期字符串（YYYY-MM-DD），避免 toISOString 的时区偏差
+function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
 
@@ -14191,7 +14199,7 @@ function resetDailyGoalToAuto() {
 function quickMarkToday(achieved) {
     if (!currentDailyGoalAppId) return;
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
     const goal = DataManager.getAppDailyGoal(currentDailyGoalAppId);
     
     // 自动记录：达标时记录目标金额作为收益，未达标时记录0
@@ -14210,7 +14218,7 @@ function markTodayAchievement(achieved) {
     
     const earnedInput = document.getElementById('today-earned-input');
     const earnedAmount = earnedInput ? parseFloat(earnedInput.value) || 0 : 0;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
     
     DataManager.markAppDailyAchievement(currentDailyGoalAppId, today, achieved, earnedAmount);
     
@@ -14400,7 +14408,7 @@ function renderDailyGoalCalendar() {
     const daysInMonth = lastDay.getDate();
     const startDayOfWeek = firstDay.getDay();
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentDate();
     
     // 空白格子
     for (let i = 0; i < startDayOfWeek; i++) {
@@ -14740,7 +14748,7 @@ function renderDailyEarningsPage() {
         const totalEarnings = profitableDays.reduce((sum, day) => sum + day.amount, 0);
         const averageEarnings = profitableDays.length > 0 ? totalEarnings / profitableDays.length : 0;
         const maxEarnings = profitableDays.length > 0 ? Math.max(...profitableDays.map(d => d.amount)) : 0;
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         const todayEarnings = allDailyEarnings.find(d => d.date === today)?.amount || 0;
         
         // 计算达标天数
@@ -14798,7 +14806,7 @@ function renderDailyEarningsPage() {
             const date = new Date(day.date);
             const dateStr = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
             const weekDay = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
-            const isToday = day.date === new Date().toISOString().split('T')[0];
+            const isToday = day.date === getCurrentDate();
             
             // 判断是否达标
             const isAchieved = targetAmount > 0 && day.amount >= targetAmount;
@@ -14827,7 +14835,7 @@ function updateTodayEarnings() {
     const todayEarningsEl = document.getElementById('today-earnings');
     if (todayEarningsEl) {
         const allDailyEarnings = DataManager.getAllDailyEarnings();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getCurrentDate();
         const todayEarnings = allDailyEarnings.find(d => d.date === today)?.amount || 0;
         todayEarningsEl.textContent = `¥${todayEarnings.toFixed(2)}`;
     }
