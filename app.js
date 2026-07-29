@@ -3562,6 +3562,39 @@ class DataManager {
         };
     }
 
+    // 计算可高档提现总额（达到highWithdraw金额的软件的余额总和）
+    static calculateHighWithdrawTotal() {
+        const data = this.loadData();
+        let highWithdrawTotal = 0;
+        let appCount = 0;
+        const appsList = [];
+        
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                const highWithdraw = app.highWithdraw || 0;
+                const balance = app.balance || 0;
+                
+                // 如果余额达到高档提现金额
+                if (highWithdraw > 0 && balance >= highWithdraw) {
+                    highWithdrawTotal += balance;
+                    appCount++;
+                    appsList.push({
+                        name: app.name,
+                        phoneName: phone.name,
+                        balance: balance,
+                        highWithdraw: highWithdraw
+                    });
+                }
+            });
+        });
+        
+        return {
+            total: highWithdrawTotal,
+            appCount: appCount,
+            apps: appsList
+        };
+    }
+
     // 计算指定月份的软件收益
     static calculateMonthlyEarnings(year, month) {
         const data = this.loadData();
@@ -5855,6 +5888,9 @@ function renderDashboard() {
         ? `${trendIcon} ${Math.abs(trendDelta).toFixed(2)}`
         : (todayEarning > 0 ? `↗ 今日 ${todayEarning.toFixed(2)}` : '— 暂无数据');
 
+    // 计算可高档提现总额
+    const highWithdrawData = DataManager.calculateHighWithdrawTotal();
+
     // 渲染 v2 看板
     const root = document.getElementById('dashboard-v2-root');
     if (root) {
@@ -5895,6 +5931,36 @@ function renderDashboard() {
                     <span class="kpi-tile__delta">未提现金额</span>
                 </div>
             </div>
+
+            ${highWithdrawData.appCount > 0 ? `
+            <div class="card" style="margin-top: 16px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: #3b82f6;">💎 可高档提现</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">达到高档提现金额的软件</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 22px; font-weight: 700; color: #3b82f6;">¥${highWithdrawData.total.toFixed(2)}</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">${highWithdrawData.appCount} 个软件可提现</div>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${highWithdrawData.apps.slice(0, 5).map(app => `
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px;">
+                            <div>
+                                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</span>
+                                <span style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">${app.phoneName}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 13px; font-weight: 600; color: #3b82f6;">¥${app.balance.toFixed(2)}</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">高档¥${app.highWithdraw.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                    ${highWithdrawData.appCount > 5 ? `<div style="font-size: 11px; color: var(--text-muted); text-align: center;">还有 ${highWithdrawData.appCount - 5} 个软件...</div>` : ''}
+                </div>
+            </div>
+            ` : ''}
 
         `;
     }
