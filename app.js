@@ -356,10 +356,10 @@ function calculatePhoneTotalWithdrawn(phone) {
 let modalIsShowing = false;
 
 // 显示模态框
-function showModal(title, body, buttons, enableScroll = false) {
+function showModal(title, body, buttons, enableScroll = false, forceReplace = false) {
     console.log('showModal called with:', title, buttons.length);
-    // 防止重复触发
-    if (modalIsShowing) {
+    // 防止重复触发（除非强制替换）
+    if (modalIsShowing && !forceReplace) {
         console.log('modalIsShowing is true, returning');
         return;
     }
@@ -367,6 +367,11 @@ function showModal(title, body, buttons, enableScroll = false) {
     const modal = document.getElementById('modal');
     const modalContent = document.querySelector('.modal-content');
     const modalBody = document.getElementById('modal-body');
+    
+    // 如果是替换，先关闭当前模态框
+    if (forceReplace && modalIsShowing) {
+        modal.classList.remove('show');
+    }
     
     // 先确保模态框是隐藏状态
     modal.style.display = 'none';
@@ -500,6 +505,386 @@ function closeModal() {
     
     // 重置模态框状态
     modalIsShowing = false;
+}
+
+// ==================== 短剧观看模态框 ====================
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function openDramaModal(phoneId, appId, forceReplace = false) {
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === phoneId);
+    const app = phone?.apps.find(a => a.id === appId);
+    if (!phone || !app) return;
+
+    const dramaRecords = DataManager.getDramaRecords(phoneId, appId);
+    const today = getCurrentDate();
+    const todayRecords = dramaRecords.filter(r => r.date === today);
+
+    const periodLabels = {
+        morning: '🌅 上午',
+        afternoon: '☀️ 下午',
+        evening: '🌙 晚上'
+    };
+    
+    const periodColors = {
+        morning: '#f59e0b',
+        afternoon: '#3b82f6',
+        evening: '#8b5cf6'
+    };
+
+    let dramasHtml = '';
+    if (todayRecords.length > 0) {
+        dramasHtml = todayRecords.map(record => {
+            const totalWatched = record.periods.morning.watched + record.periods.afternoon.watched + record.periods.evening.watched;
+            const overallProgress = record.totalEpisodes > 0 ? (totalWatched / record.totalEpisodes) * 100 : 0;
+            
+            // 生成每个时段的UI
+            const periodsHtml = ['morning', 'afternoon', 'evening'].map(period => {
+                const pData = record.periods[period];
+                const progress = pData.total > 0 ? (pData.watched / pData.total) * 100 : 0;
+                const canAddMore = pData.watched < pData.total;
+                const canReduce = pData.watched > 0;
+                
+                return `
+                    <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="width: 50px; font-size: 11px; color: var(--text-secondary);">${periodLabels[period]}</div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="background: var(--border-color); height: 14px; border-radius: 3px; overflow: hidden; display: flex; align-items: center;">
+                                <div style="background: ${periodColors[period]}; height: 100%; width: ${progress}%; transition: width 0.3s; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px;">
+                                    <span style="font-size: 9px; color: white; font-weight: 600;">${pData.watched}</span>
+                                </div>
+                                ${progress === 0 ? '<span style="font-size: 9px; color: var(--text-secondary); padding-left: 4px;">0</span>' : ''}
+                            </div>
+                        </div>
+                        <div style="width: 45px; text-align: right; font-size: 11px; color: var(--text-secondary);">/${pData.total}</div>
+                        <div style="display: flex; gap: 3px;">
+                            <button onclick="updateDramaPeriodUI('${phoneId}', '${appId}', '${record.id}', '${period}', -1)" ${!canReduce ? 'disabled' : ''} style="${!canReduce ? 'opacity: 0.4; cursor: not-allowed; background: #64748b;' : 'background: #f59e0b; color: white;'} border: none; border-radius: 4px; width: 24px; height: 22px; cursor: pointer; font-size: 12px;">-</button>
+                            <button onclick="updateDramaPeriodUI('${phoneId}', '${appId}', '${record.id}', '${period}', 1)" ${!canAddMore ? 'disabled' : ''} style="${!canAddMore ? 'opacity: 0.4; cursor: not-allowed; background: #64748b;' : 'background: #10b981; color: white;'} border: none; border-radius: 4px; width: 24px; height: 22px; cursor: pointer; font-size: 12px;">+</button>
+                            ${canAddMore ? `<button onclick="updateDramaPeriodUI('${phoneId}', '${appId}', '${record.id}', '${period}', 5)" 
+                                style="background: #8b5cf6; color: white; border: none; border-radius: 4px; padding: 0 6px; height: 22px; cursor: pointer; font-size: 11px;">+5</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(record.name)}</div>
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                                共${record.totalEpisodes}集 · 已看${totalWatched}集
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="font-size: 11px; color: #10b981; font-weight: 600;">${overallProgress.toFixed(0)}%</div>
+                            <button onclick="deleteDramaRecord('${phoneId}', '${appId}', '${record.id}')" 
+                                style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; font-size: 14px;">🗑️</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 总进度条 -->
+                    <div style="background: var(--border-color); height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 10px;">
+                        <div style="background: linear-gradient(to right, #10b981, #34d399); height: 100%; width: ${overallProgress}%; transition: width 0.3s;"></div>
+                    </div>
+                    
+                    <!-- 三个时段进度 -->
+                    ${periodsHtml}
+                </div>
+            `;
+        }).join('');
+    } else {
+        dramasHtml = '<div style="text-align: center; color: var(--text-secondary); padding: 20px; font-size: 13px;">今日暂无短剧记录</div>';
+    }
+
+    // 统计
+    let totalMorning = 0, totalAfternoon = 0, totalEvening = 0;
+    let watchedMorning = 0, watchedAfternoon = 0, watchedEvening = 0;
+    todayRecords.forEach(r => {
+        totalMorning += r.periods.morning.total;
+        totalAfternoon += r.periods.afternoon.total;
+        totalEvening += r.periods.evening.total;
+        watchedMorning += r.periods.morning.watched;
+        watchedAfternoon += r.periods.afternoon.watched;
+        watchedEvening += r.periods.evening.watched;
+    });
+    const totalWatched = watchedMorning + watchedAfternoon + watchedEvening;
+    const totalEpisodes = totalMorning + totalAfternoon + totalEvening;
+
+    showModal(`📺 短剧观看 - ${app.name}`, `
+        <div style="margin-bottom: 16px;">
+            <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <div style="flex: 1; text-align: center; padding: 4px;">
+                        <div style="font-size: 16px; font-weight: 700; color: ${periodColors.morning};">${watchedMorning}/${totalMorning}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">🌅 上午</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 4px; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color);">
+                        <div style="font-size: 16px; font-weight: 700; color: ${periodColors.afternoon};">${watchedAfternoon}/${totalAfternoon}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">☀️ 下午</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 4px;">
+                        <div style="font-size: 16px; font-weight: 700; color: ${periodColors.evening};">${watchedEvening}/${totalEvening}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">🌙 晚上</div>
+                    </div>
+                </div>
+                <div style="text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">
+                    今日共看 <span style="font-weight: 600; color: #10b981;">${totalWatched}</span> / ${totalEpisodes} 集
+                </div>
+            </div>
+
+            ${dramasHtml}
+
+            <!-- 添加新短剧按钮 -->
+            <button onclick="showAddDramaForm('${phoneId}', '${appId}')" 
+                style="width: 100%; background: #8b5cf6; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;">
+                ➕ 添加短剧
+            </button>
+        </div>
+    `, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ], true, forceReplace);
+}
+
+function showAddDramaForm(phoneId, appId) {
+    showModal('➕ 添加短剧', `
+        <div style="padding: 8px 0;">
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label">短剧名称</label>
+                <input type="text" id="drama-name" class="form-input" placeholder="请输入短剧名称" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary);">
+            </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label">总集数</label>
+                <input type="number" id="drama-episodes" class="form-input" placeholder="请输入总集数" min="1" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary);">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; padding: 8px; background: var(--bg-secondary); border-radius: 6px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">📅 时段自动分配</div>
+                    <div id="drama-preview" style="display: flex; gap: 8px; font-size: 11px;">
+                        <span>🌅 上午: -集</span>
+                        <span>☀️ 下午: -集</span>
+                        <span>🌙 晚上: -集</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: () => openDramaModal(phoneId, appId, true) },
+        { 
+            text: '添加', 
+            class: 'btn-primary', 
+            action: () => {
+                const name = document.getElementById('drama-name').value.trim();
+                const episodes = parseInt(document.getElementById('drama-episodes').value) || 0;
+
+                if (!name) {
+                    showToast('请输入短剧名称');
+                    return;
+                }
+                if (episodes <= 0) {
+                    showToast('请输入有效的集数');
+                    return;
+                }
+
+                DataManager.addDramaRecord(phoneId, appId, {
+                    name,
+                    totalEpisodes: episodes
+                });
+
+                showToast('短剧已添加！');
+                openDramaModal(phoneId, appId, true);
+            }
+        }
+    ], false, true); // forceReplace = true
+
+    // 监听集数输入，实时预览分配
+    const episodesInput = document.getElementById('drama-episodes');
+    const previewDiv = document.getElementById('drama-preview');
+    if (episodesInput && previewDiv) {
+        episodesInput.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (val > 0) {
+                const base = Math.floor(val / 3);
+                const rem = val % 3;
+                previewDiv.innerHTML = `
+                    <span>🌅 上午: ${base + (rem > 0 ? 1 : 0)}集</span>
+                    <span>☀️ 下午: ${base + (rem > 1 ? 1 : 0)}集</span>
+                    <span>🌙 晚上: ${base}集</span>
+                `;
+            } else {
+                previewDiv.innerHTML = `
+                    <span>🌅 上午: -集</span>
+                    <span>☀️ 下午: -集</span>
+                    <span>🌙 晚上: -集</span>
+                `;
+            }
+        });
+    }
+}
+
+function updateDramaPeriodUI(phoneId, appId, recordId, period, delta) {
+    const record = DataManager.updateDramaPeriod(phoneId, appId, recordId, period, delta);
+    if (!record) return;
+
+    const periodLabels = { morning: '🌅 上午', afternoon: '☀️ 下午', evening: '🌙 晚上' };
+    const periodData = record.periods[period];
+    showToast(`${periodLabels[period]}已更新: ${periodData.watched}/${periodData.total} 集`);
+    
+    // 不关闭模态框，直接更新内容
+    refreshDramaModalContent(phoneId, appId);
+}
+
+// 刷新短剧模态框内容而不关闭
+function refreshDramaModalContent(phoneId, appId) {
+    const data = DataManager.loadData();
+    const phone = data.phones.find(p => p.id === phoneId);
+    const app = phone?.apps.find(a => a.id === appId);
+    if (!phone || !app) return;
+
+    const dramaRecords = DataManager.getDramaRecords(phoneId, appId);
+    const today = getCurrentDate();
+    const todayRecords = dramaRecords.filter(r => r.date === today);
+
+    const periodLabels = {
+        morning: '🌅 上午',
+        afternoon: '☀️ 下午',
+        evening: '🌙 晚上'
+    };
+    
+    const periodColors = {
+        morning: '#f59e0b',
+        afternoon: '#3b82f6',
+        evening: '#8b5cf6'
+    };
+
+    let dramasHtml = '';
+    if (todayRecords.length > 0) {
+        dramasHtml = todayRecords.map(record => {
+            const totalWatched = record.periods.morning.watched + record.periods.afternoon.watched + record.periods.evening.watched;
+            const overallProgress = record.totalEpisodes > 0 ? (totalWatched / record.totalEpisodes) * 100 : 0;
+            
+            const periodsHtml = ['morning', 'afternoon', 'evening'].map(period => {
+                const pData = record.periods[period];
+                const progress = pData.total > 0 ? (pData.watched / pData.total) * 100 : 0;
+                const canAddMore = pData.watched < pData.total;
+                const canReduce = pData.watched > 0;
+                
+                return `
+                    <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="width: 50px; font-size: 11px; color: var(--text-secondary);">${periodLabels[period]}</div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="background: var(--border-color); height: 14px; border-radius: 3px; overflow: hidden; display: flex; align-items: center;">
+                                <div style="background: ${periodColors[period]}; height: 100%; width: ${progress}%; transition: width 0.3s; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px;">
+                                    <span style="font-size: 9px; color: white; font-weight: 600;">${pData.watched}</span>
+                                </div>
+                                ${progress === 0 ? '<span style="font-size: 9px; color: var(--text-secondary); padding-left: 4px;">0</span>' : ''}
+                            </div>
+                        </div>
+                        <div style="width: 45px; text-align: right; font-size: 11px; color: var(--text-secondary);">/${pData.total}</div>
+                        <div style="display: flex; gap: 3px;">
+                            <button onclick="updateDramaPeriodUI('${phoneId}', '${appId}', '${record.id}', '${period}', -1)" ${!canReduce ? 'disabled' : ''} style="${!canReduce ? 'opacity: 0.4; cursor: not-allowed; background: #64748b;' : 'background: #f59e0b; color: white;'} border: none; border-radius: 4px; width: 24px; height: 22px; cursor: pointer; font-size: 12px;">-</button>
+                            <button onclick="updateDramaPeriodUI('${phoneId}', '${appId}', '${record.id}', '${period}', 1)" ${!canAddMore ? 'disabled' : ''} style="${!canAddMore ? 'opacity: 0.4; cursor: not-allowed; background: #64748b;' : 'background: #10b981; color: white;'} border: none; border-radius: 4px; width: 24px; height: 22px; cursor: pointer; font-size: 12px;">+</button>
+                            ${canAddMore ? `<button onclick="updateDramaPeriodUI('${phoneId}', '${appId}', '${record.id}', '${period}', 5)" style="background: #8b5cf6; color: white; border: none; border-radius: 4px; padding: 0 6px; height: 22px; cursor: pointer; font-size: 11px;">+5</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(record.name)}</div>
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                                共${record.totalEpisodes}集 · 已看${totalWatched}集
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="font-size: 11px; color: #10b981; font-weight: 600;">${overallProgress.toFixed(0)}%</div>
+                            <button onclick="deleteDramaRecord('${phoneId}', '${appId}', '${record.id}')" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; font-size: 14px;">🗑️</button>
+                        </div>
+                    </div>
+                    <div style="background: var(--border-color); height: 4px; border-radius: 2px; overflow: hidden; margin-bottom: 10px;">
+                        <div style="background: linear-gradient(to right, #10b981, #34d399); height: 100%; width: ${overallProgress}%; transition: width 0.3s;"></div>
+                    </div>
+                    ${periodsHtml}
+                </div>
+            `;
+        }).join('');
+    } else {
+        dramasHtml = '<div style="text-align: center; color: var(--text-secondary); padding: 20px; font-size: 13px;">今日暂无短剧记录</div>';
+    }
+
+    // 统计
+    let totalMorning = 0, totalAfternoon = 0, totalEvening = 0;
+    let watchedMorning = 0, watchedAfternoon = 0, watchedEvening = 0;
+    todayRecords.forEach(r => {
+        totalMorning += r.periods.morning.total;
+        totalAfternoon += r.periods.afternoon.total;
+        totalEvening += r.periods.evening.total;
+        watchedMorning += r.periods.morning.watched;
+        watchedAfternoon += r.periods.afternoon.watched;
+        watchedEvening += r.periods.evening.watched;
+    });
+    const totalWatched = watchedMorning + watchedAfternoon + watchedEvening;
+    const totalEpisodes = totalMorning + totalAfternoon + totalEvening;
+
+    const contentHtml = `
+        <div style="margin-bottom: 16px;">
+            <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <div style="flex: 1; text-align: center; padding: 4px;">
+                        <div style="font-size: 16px; font-weight: 700; color: ${periodColors.morning};">${watchedMorning}/${totalMorning}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">🌅 上午</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 4px; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color);">
+                        <div style="font-size: 16px; font-weight: 700; color: ${periodColors.afternoon};">${watchedAfternoon}/${totalAfternoon}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">☀️ 下午</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 4px;">
+                        <div style="font-size: 16px; font-weight: 700; color: ${periodColors.evening};">${watchedEvening}/${totalEvening}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">🌙 晚上</div>
+                    </div>
+                </div>
+                <div style="text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">
+                    今日共看 <span style="font-weight: 600; color: #10b981;">${totalWatched}</span> / ${totalEpisodes} 集
+                </div>
+            </div>
+            ${dramasHtml}
+            <button onclick="showAddDramaForm('${phoneId}', '${appId}')" style="width: 100%; background: #8b5cf6; color: white; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;">
+                ➕ 添加短剧
+            </button>
+        </div>
+    `;
+
+    // 直接更新模态框内容，不关闭
+    const modalBody = document.getElementById('modal-body');
+    if (modalBody) {
+        modalBody.innerHTML = contentHtml;
+    }
+}
+
+function deleteDramaRecord(phoneId, appId, recordId) {
+    showModal('确认删除', `
+        <div style="padding: 12px 0;">
+            <div style="font-size: 14px; color: var(--text-primary); margin-bottom: 8px;">确定要删除这部短剧记录吗？</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">此操作无法撤销</div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: () => openDramaModal(phoneId, appId, true) },
+        { 
+            text: '删除', 
+            class: 'btn-primary', 
+            action: () => {
+                DataManager.deleteDramaRecord(phoneId, appId, recordId);
+                showToast('短剧记录已删除');
+                openDramaModal(phoneId, appId, true);
+            }
+        }
+    ], false, true); // forceReplace = true
 }
 
 // 显示提示消息
@@ -1334,6 +1719,31 @@ class DataManager {
                     app.activityLog = {};
                     needsMigration = true;
                 }
+                if (app.dramaRecords === undefined) {
+                    app.dramaRecords = [];
+                    needsMigration = true;
+                }
+                // 迁移旧格式短剧记录（单个 period 改为 periods 对象）
+                if (app.dramaRecords && Array.isArray(app.dramaRecords)) {
+                    app.dramaRecords.forEach(record => {
+                        if (record.watchedEpisodes !== undefined && record.period !== undefined && record.periods === undefined) {
+                            // 旧格式：只有一个 period
+                            const baseCount = Math.floor(record.totalEpisodes / 3);
+                            const remainder = record.totalEpisodes % 3;
+                            const oldWatched = record.watchedEpisodes || 0;
+                            const oldPeriod = record.period || 'morning';
+                            
+                            record.periods = {
+                                morning: { total: baseCount + (remainder > 0 ? 1 : 0), watched: oldPeriod === 'morning' ? oldWatched : 0 },
+                                afternoon: { total: baseCount + (remainder > 1 ? 1 : 0), watched: oldPeriod === 'afternoon' ? oldWatched : 0 },
+                                evening: { total: baseCount, watched: oldPeriod === 'evening' ? oldWatched : 0 }
+                            };
+                            delete record.watchedEpisodes;
+                            delete record.period;
+                            needsMigration = true;
+                        }
+                    });
+                }
                 if (app.activityLog && typeof app.activityLog === 'object') {
                     const keys = Object.keys(app.activityLog);
                     for (const key of keys) {
@@ -1593,6 +2003,148 @@ class DataManager {
             totalApps: totalApps,
             history: history
         };
+    }
+
+    // ==================== 短剧观看记录功能 ====================
+
+    // 获取软件的短剧观看记录
+    static getDramaRecords(phoneId, appId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (!phone) return [];
+        const app = phone.apps.find(a => a.id === appId);
+        if (!app) return [];
+        return app.dramaRecords || [];
+    }
+
+    // 添加短剧记录 - 自动将总集数分配到三个时段
+    static addDramaRecord(phoneId, appId, dramaData) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (!phone) return false;
+        const app = phone.apps.find(a => a.id === appId);
+        if (!app) return false;
+
+        if (!app.dramaRecords) {
+            app.dramaRecords = [];
+        }
+
+        const today = getCurrentDate();
+        const totalEpisodes = dramaData.totalEpisodes;
+        
+        // 自动分配到三个时段
+        const baseCount = Math.floor(totalEpisodes / 3);
+        const remainder = totalEpisodes % 3;
+        
+        const newRecord = {
+            id: Date.now().toString(),
+            name: dramaData.name,
+            totalEpisodes: totalEpisodes,
+            periods: {
+                morning: { total: baseCount + (remainder > 0 ? 1 : 0), watched: 0 },
+                afternoon: { total: baseCount + (remainder > 1 ? 1 : 0), watched: 0 },
+                evening: { total: baseCount, watched: 0 }
+            },
+            date: today,
+            createdAt: new Date().toISOString()
+        };
+
+        app.dramaRecords.push(newRecord);
+        this.saveData(data);
+        return newRecord;
+    }
+
+    // 更新短剧记录的某个时段观看集数
+    static updateDramaPeriod(phoneId, appId, recordId, period, delta) {
+        console.log('DataManager.updateDramaPeriod called:', phoneId, appId, recordId, period, delta);
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (!phone) { console.log('phone not found'); return false; }
+        const app = phone.apps.find(a => a.id === appId);
+        if (!app || !app.dramaRecords) { console.log('app or dramaRecords not found'); return false; }
+
+        const record = app.dramaRecords.find(r => r.id === recordId);
+        if (!record || !record.periods[period]) { console.log('record or period not found'); return false; }
+
+        console.log('current periodData:', record.periods[period]);
+        const periodData = record.periods[period];
+        let newWatched = periodData.watched + delta;
+        if (newWatched < 0) newWatched = 0;
+        if (newWatched > periodData.total) newWatched = periodData.total;
+
+        periodData.watched = newWatched;
+        console.log('updated periodData:', periodData);
+        this.saveData(data);
+        return record;
+    }
+
+    // 更新短剧记录（通用）
+    static updateDramaRecord(phoneId, appId, recordId, updates) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (!phone) return false;
+        const app = phone.apps.find(a => a.id === appId);
+        if (!app || !app.dramaRecords) return false;
+
+        const record = app.dramaRecords.find(r => r.id === recordId);
+        if (!record) return false;
+
+        Object.assign(record, updates);
+        this.saveData(data);
+        return record;
+    }
+
+    // 删除短剧记录
+    static deleteDramaRecord(phoneId, appId, recordId) {
+        const data = this.loadData();
+        const phone = data.phones.find(p => p.id === phoneId);
+        if (!phone) return false;
+        const app = phone.apps.find(a => a.id === appId);
+        if (!app || !app.dramaRecords) return false;
+
+        app.dramaRecords = app.dramaRecords.filter(r => r.id !== recordId);
+        this.saveData(data);
+        return true;
+    }
+
+    // 获取所有今日短剧统计（按时段分组）
+    static getTodayDramaStats() {
+        const data = this.loadData();
+        const today = getCurrentDate();
+        const result = {
+            morning: { dramas: [], totalEpisodes: 0, watchedEpisodes: 0 },
+            afternoon: { dramas: [], totalEpisodes: 0, watchedEpisodes: 0 },
+            evening: { dramas: [], totalEpisodes: 0, watchedEpisodes: 0 }
+        };
+
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (app.dramaRecords) {
+                    app.dramaRecords.forEach(record => {
+                        if (record.date === today) {
+                            ['morning', 'afternoon', 'evening'].forEach(period => {
+                                const periodData = record.periods[period];
+                                if (periodData && periodData.total > 0) {
+                                    result[period].dramas.push({
+                                        id: record.id,
+                                        name: record.name,
+                                        phoneName: phone.name,
+                                        appName: app.name,
+                                        totalEpisodes: periodData.total,
+                                        watchedEpisodes: periodData.watched,
+                                        period: period
+                                    });
+                                    result[period].totalEpisodes += periodData.total;
+                                    result[period].watchedEpisodes += periodData.watched;
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        });
+
+        return result;
     }
 
     // ==================== 年度目标功能 ====================
@@ -3297,7 +3849,8 @@ class DataManager {
                 withdrawals: [],
                 lastUpdated: new Date().toISOString(),
                 earningStartDate: (appData.balance || 0) > 0 ? today : null,
-                activityLog: {}
+                activityLog: {},
+                dramaRecords: []
             };
             phone.apps.push(app);
 
@@ -6389,19 +6942,19 @@ function renderActivityPage() {
         if (app.belowAverageEarning) {
             belowAvgBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚡ 需多活跃</span>';
         }
-        
-        const key = `${app.phoneId}_${app.id}`;
-        const timerState = timerStates[key];
-        let elapsedSeconds = 0;
-        let isRunning = false;
-        if (timerState) {
-            isRunning = timerState.isRunning;
-            elapsedSeconds = Math.floor((Date.now() - timerState.startTime) / 1000);
-        }
-        
-        const startBtnStyle = isRunning ? 'display: none;' : 'display: inline-flex;';
-        const pauseBtnStyle = isRunning ? 'display: inline-flex;' : 'display: none;';
-        const stopBtnStyle = timerState ? 'display: inline-flex;' : 'display: none;';
+
+        // 获取今日短剧记录
+        const todayDramaCount = DataManager.getDramaRecords(app.phoneId, app.id).filter(r => r.date === getCurrentDate()).length;
+        const dramaBadge = todayDramaCount > 0 ? `<span style="background: rgba(139,92,246,0.15); color: #8b5cf6; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">📺 ${todayDramaCount}部</span>` : '';
+
+        // 获取今日短剧观看进度
+        const todayRecords = DataManager.getDramaRecords(app.phoneId, app.id).filter(r => r.date === getCurrentDate());
+        let totalWatched = 0, totalEpisodes = 0;
+        todayRecords.forEach(r => {
+            totalWatched += r.periods.morning.watched + r.periods.afternoon.watched + r.periods.evening.watched;
+            totalEpisodes += r.periods.morning.total + r.periods.afternoon.total + r.periods.evening.total;
+        });
+        const dramaProgress = totalEpisodes > 0 ? `<span style="font-size: 11px; color: #8b5cf6; margin-left: 4px;">观看进度: ${totalWatched}/${totalEpisodes}集</span>` : '';
         
         html += `
             <div data-card-phone="${app.phoneId}" data-card-app="${app.id}" style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 10px;">
@@ -6413,37 +6966,21 @@ function renderActivityPage() {
                             <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
                             <span style="font-size: 12px; color: ${priorityColor};">${priorityIcon} ${statusText}</span>
                             ${belowAvgBadge}
+                            ${dramaBadge}
                         </div>
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
                             余额: ¥${app.balance.toFixed(2)} | 今日赚取: ¥${app.todayEarning.toFixed(2)}
-                            ${app.averageEarning > 0 ? '| 平均: ¥' + app.averageEarning.toFixed(2) : ''}
+                            ${dramaProgress}
                         </div>
                     </div>
                     ${activityBadge}
                 </div>
                 
-                <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
-                    <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 12px; color: var(--text-secondary);">⏱️ 推荐: ${app.recommendedDuration}分钟</span>
-                        <div data-timer="${app.phoneId}-${app.id}" data-phone-id="${app.phoneId}" data-app-id="${app.id}" style="font-size: 18px; font-weight: 700; color: #8b5cf6; font-family: monospace;">
-                            ${formatDuration(elapsedSeconds)}
-                        </div>
-                        ${isRunning ? '<span style="font-size: 10px; color: #10b981; background: rgba(16,185,129,0.1); padding: 2px 6px; border-radius: 4px;">运行中</span>' : ''}
-                    </div>
-                    <div style="display: flex; gap: 6px;">
-                        <button class="timer-btn" data-action="start" data-phone="${app.phoneId}" data-app="${app.id}" data-recommended="${app.recommendedDuration}"
-                            style="${startBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                            ▶️ 开始
-                        </button>
-                        <button class="timer-btn" data-action="pause" data-phone="${app.phoneId}" data-app="${app.id}" data-recommended="${app.recommendedDuration}"
-                            style="${pauseBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                            ⏸️ 暂停
-                        </button>
-                        <button class="timer-btn" data-action="stop" data-phone="${app.phoneId}" data-app="${app.id}" data-recommended="${app.recommendedDuration}"
-                            style="${stopBtnStyle} align-items: center; justify-content: center; padding: 6px 12px; font-size: 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                            ⏹️ 停止
-                        </button>
-                    </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                    <button class="drama-btn" data-phone="${app.phoneId}" data-app="${app.id}" onclick="openDramaModal('${app.phoneId}', '${app.id}')"
+                        style="flex: 1; align-items: center; justify-content: center; padding: 10px; font-size: 14px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none; border-radius: 8px; cursor: pointer; display: inline-flex; font-weight: 600;">
+                        📺 观看短剧
+                    </button>
                 </div>
             </div>
         `;
@@ -6457,6 +6994,46 @@ function renderActivityPage() {
             </div>
         </div>
     `;
+    
+    // 添加今日短剧统计展示
+    const dramaStats = DataManager.getTodayDramaStats();
+    const morningTotal = dramaStats.morning.totalEpisodes;
+    const morningWatched = dramaStats.morning.watchedEpisodes;
+    const afternoonTotal = dramaStats.afternoon.totalEpisodes;
+    const afternoonWatched = dramaStats.afternoon.watchedEpisodes;
+    const eveningTotal = dramaStats.evening.totalEpisodes;
+    const eveningWatched = dramaStats.evening.watchedEpisodes;
+    const totalDramas = dramaStats.morning.dramas.length + dramaStats.afternoon.dramas.length + dramaStats.evening.dramas.length;
+    const totalWatchedEpisodes = morningWatched + afternoonWatched + eveningWatched;
+    
+    if (totalDramas > 0) {
+        html += `
+            <div class="card mt-4">
+                <div class="section-header">
+                    <div class="section-title">🎬 今日短剧统计</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div style="display: flex; gap: 6px; padding: 8px;">
+                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(245,158,11,0.1); border-radius: 10px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #f59e0b;">${morningWatched}/${morningTotal}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">🌅 上午</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(59,130,246,0.1); border-radius: 10px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #3b82f6;">${afternoonWatched}/${afternoonTotal}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">☀️ 下午</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 10px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #8b5cf6;">${eveningWatched}/${eveningTotal}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">🌙 晚上</div>
+                    </div>
+                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(16,185,129,0.1); border-radius: 10px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #10b981;">${totalWatchedEpisodes}</div>
+                        <div style="font-size: 10px; color: var(--text-secondary);">已看集数</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
     
     container.innerHTML = html;
     
@@ -8586,10 +9163,6 @@ function renderPhoneEarningsPage() {
                 <div style="font-size: 11px; opacity: 0.9;">今日收益</div>
                 <div style="font-size: 22px; font-weight: 700;">¥${todayEarning.toFixed(2)}</div>
             </div>
-            <div style="flex: 1; min-width: 100px; background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); border-radius: 12px; padding: 14px; color: white;">
-                <div style="font-size: 11px; opacity: 0.9;">总收益</div>
-                <div style="font-size: 22px; font-weight: 700;">¥${totalEarnings.toFixed(2)}</div>
-            </div>
             <div style="flex: 1; min-width: 100px; background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); border-radius: 12px; padding: 14px; color: white;">
                 <div style="font-size: 11px; opacity: 0.9;">总手机数</div>
                 <div style="font-size: 22px; font-weight: 700;">${phones.length}</div>
@@ -8633,16 +9206,14 @@ function renderPhoneEarningsPage() {
         // 获取最近14天的数据
         const recentDates = sortedDates.slice(0, 14);
         
-        // 计算统计
-        const weekTotal = recentDates.slice(0, 7).reduce((sum, date) => sum + (parseFloat(dailyEarnings[date]) || 0), 0);
-        const monthTotal = recentDates.reduce((sum, date) => sum + (parseFloat(dailyEarnings[date]) || 0), 0);
-        const avgDaily = sortedDates.length > 0 ? monthTotal / sortedDates.length : 0;
-        
         // 获取今天该手机各软件的收益详情
         const todayApps = phoneAppsDetail[phoneId]?.map(app => {
             const amount = parseFloat(app.dailyEarnings?.[today] || 0);
             return { name: app.name, amount };
         }).filter(a => a.amount > 0).sort((a, b) => b.amount - a) || [];
+
+        // 计算柱状图最大值用于显示金额
+        const maxAmount = Math.max(...recentDates.map(d => parseFloat(dailyEarnings[d]) || 0), 0.01);
 
         html += `
             <div style="background: var(--card-bg); border-radius: 12px; padding: 14px; border: 1px solid var(--border-color);">
@@ -8651,10 +9222,6 @@ function renderPhoneEarningsPage() {
                         <span style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); color: white; padding: 5px 10px; border-radius: 16px; font-size: 12px; font-weight: 600;">
                             📱 ${phone.phoneName}
                         </span>
-                    </div>
-                    <div style="display: flex; gap: 12px; font-size: 12px;">
-                        <span style="color: #10b981; font-weight: 600;">7天: ¥${weekTotal.toFixed(2)}</span>
-                        <span style="color: var(--text-secondary);">日均: ¥${avgDaily.toFixed(2)}</span>
                     </div>
                 </div>
                 
@@ -8673,15 +9240,15 @@ function renderPhoneEarningsPage() {
                 ` : ''}
 
                 <!-- 最近14天收益柱状图 -->
-                <div style="display: flex; align-items: flex-end; gap: 3px; height: 50px; background: var(--bg-secondary); border-radius: 8px; padding: 6px;">
+                <div style="display: flex; align-items: flex-end; gap: 3px; height: 70px; background: var(--bg-secondary); border-radius: 8px; padding: 20px 6px 6px; position: relative;">
                     ${recentDates.length > 0 ? recentDates.map(date => {
                         const amount = parseFloat(dailyEarnings[date]) || 0;
-                        const maxAmount = Math.max(...recentDates.map(d => parseFloat(dailyEarnings[d]) || 0), 0.01);
                         const height = (amount / maxAmount) * 100;
                         const dateObj = new Date(date);
                         const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
                         return `
-                            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; height: 100%; justify-content: flex-end;">
+                            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; height: 100%; justify-content: flex-end; position: relative;">
+                                ${amount > 0 ? `<span style="position: absolute; top: -16px; font-size: 9px; color: #10b981; font-weight: 600;">${amount.toFixed(2)}</span>` : ''}
                                 <div title="${dateStr}: ¥${amount.toFixed(2)}" style="width: 100%; max-width: 24px; height: ${height}%; background: ${amount > 0 ? 'linear-gradient(to top, #10b981, #34d399)' : '#374151'}; border-radius: 3px 3px 0 0; min-height: 2px;"></div>
                             </div>
                         `;
@@ -9583,26 +10150,46 @@ function openQuickEditModal() {
         return;
     }
     
-    // 生成软件列表HTML - 使用data属性存储appName，避免引号问题
-    const appListHtml = Array.from(appNameMap.keys()).map((appName, index) => {
+    // 加载保存的排序顺序
+    const savedOrder = JSON.parse(localStorage.getItem('quickEditAppOrder') || '[]');
+    const allAppNames = Array.from(appNameMap.keys());
+    
+    // 根据保存的顺序排序
+    const sortedNames = savedOrder.length > 0 
+        ? [...savedOrder].filter(n => allAppNames.includes(n)).concat(allAppNames.filter(n => !savedOrder.includes(n)))
+        : allAppNames;
+    
+    // 生成软件列表HTML - 支持拖拽排序
+    const appListHtml = sortedNames.map((appName, index) => {
         const appInstances = appNameMap.get(appName);
-        // 对appName进行HTML转义，避免显示问题
+        if (!appInstances) return '';
         const htmlEscapedAppName = appName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         return `
-            <div class="app-select-item" data-app-name="${htmlEscapedAppName}" data-app-index="${index}" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;" 
+            <div class="app-select-item" data-app-name="${htmlEscapedAppName}" data-app-index="${index}" 
+                 draggable="true"
+                 style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; cursor: grab; transition: all 0.2s; user-select: none;" 
                  onmouseover="this.style.borderColor='var(--primary-color)'; this.style.background='var(--bg-cream)'" 
-                 onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='transparent'">
+                 onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='transparent'"
+                 ondragstart="this.style.opacity='0.5'; event.dataTransfer.setData('text/plain', '${index}')"
+                 ondragend="this.style.opacity='1'"
+                 ondragover="event.preventDefault(); this.style.borderTop='2px solid var(--primary-color)'"
+                 ondragleave="this.style.borderTop='none'"
+                 ondrop="event.preventDefault(); handleDrop(event, this)">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 600;">${htmlEscapedAppName}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 14px; cursor: grab;">⋮⋮</span>
+                        <span style="font-weight: 600;">${htmlEscapedAppName}</span>
+                    </div>
                     <span style="font-size: 12px; color: var(--text-secondary);">${appInstances.length}台手机</span>
                 </div>
             </div>
         `;
     }).join('');
     
-    // 保存appNameMap到全局变量，供后续使用
+    // 保存appNameMap和排序列表到全局变量
     window.quickEditAppMap = appNameMap;
-    window.quickEditAppNames = Array.from(appNameMap.keys());
+    window.quickEditAppNames = sortedNames;
+    window.dragIndex = null;
     
     showModal('快速编辑 - 选择软件', `
         <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
@@ -9619,6 +10206,7 @@ function openQuickEditModal() {
                 <button onclick="parseTextInput()" class="btn btn-secondary" style="white-space: nowrap;">解析</button>
             </div>
         </div>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">💡 拖动左侧 ⋮⋮ 图标可调整顺序</div>
         <div id="quick-edit-app-list" style="max-height: 50vh; overflow-y: auto;">
             ${appListHtml}
         </div>
@@ -9626,19 +10214,68 @@ function openQuickEditModal() {
         { text: '关闭', class: 'btn-secondary', action: closeModal }
     ], true);
     
-    // 绑定点击事件（使用事件委托，避免内联onclick的引号问题）
+    // 绑定点击和拖拽事件
     setTimeout(() => {
         const appList = document.getElementById('quick-edit-app-list');
         if (appList) {
             appList.querySelectorAll('.app-select-item').forEach(item => {
-                item.addEventListener('click', function() {
+                item.addEventListener('click', function(e) {
+                    // 如果是拖拽操作，不触发点击
+                    if (this.classList.contains('dragging')) return;
                     const index = parseInt(this.getAttribute('data-app-index'));
                     const appName = window.quickEditAppNames[index];
                     selectAppForEdit(appName);
                 });
+                
+                item.addEventListener('dragstart', function(e) {
+                    window.dragIndex = parseInt(this.getAttribute('data-app-index'));
+                    this.classList.add('dragging');
+                });
+                
+                item.addEventListener('dragend', function(e) {
+                    this.classList.remove('dragging');
+                    // 保存新顺序
+                    const items = appList.querySelectorAll('.app-select-item');
+                    const newOrder = Array.from(items).map(it => it.getAttribute('data-app-name'));
+                    localStorage.setItem('quickEditAppOrder', JSON.stringify(newOrder));
+                });
             });
         }
     }, 100);
+}
+
+// 处理拖放
+function handleDrop(event, targetElement) {
+    event.stopPropagation();
+    const appList = document.getElementById('quick-edit-app-list');
+    if (!appList || window.dragIndex === null) return;
+    
+    const items = Array.from(appList.querySelectorAll('.app-select-item'));
+    const dragIndex = window.dragIndex;
+    const targetIndex = items.indexOf(targetElement);
+    
+    if (dragIndex === targetIndex) return;
+    
+    // 重新排序
+    const itemsArr = Array.from(appList.querySelectorAll('.app-select-item'));
+    const [draggedItem] = itemsArr.splice(dragIndex, 1);
+    itemsArr.splice(targetIndex, 0, draggedItem);
+    
+    // 更新data-app-index
+    itemsArr.forEach((item, i) => {
+        item.setAttribute('data-app-index', i);
+    });
+    
+    // 更新全局数组
+    window.quickEditAppNames = itemsArr.map(it => it.getAttribute('data-app-name'));
+    
+    // 保存到localStorage
+    localStorage.setItem('quickEditAppOrder', JSON.stringify(window.quickEditAppNames));
+    
+    window.dragIndex = null;
+    appList.querySelectorAll('.app-select-item').forEach(it => {
+        it.style.borderTop = 'none';
+    });
 }
 
 // 快速编辑功能 - 第二步：选择手机
