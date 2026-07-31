@@ -6844,8 +6844,8 @@ function stopTimer(phoneId, appId) {
 }
 
 function renderActivityPage() {
+    const data = DataManager.loadData();
     const activeApps = DataManager.getTodayActiveApps(null, Infinity);
-    const activityStats = DataManager.getActivityStats(null, 7);
     const container = document.getElementById('activity-page-content');
     
     if (!container) return;
@@ -6861,7 +6861,59 @@ function renderActivityPage() {
         });
     }
     
-    if (activeApps.length === 0) {
+    // 计算短剧统计数据
+    const today = getCurrentDate();
+    let totalDramas = 0;
+    let totalWatchedToday = 0;
+    let totalEpisodesToday = 0;
+    let inProgressCount = 0;
+    let completedCount = 0;
+    
+    // 为每个软件添加短剧状态
+    const appsWithDramaInfo = activeApps.map(app => {
+        const dramaRecords = DataManager.getDramaRecords(app.phoneId, app.id);
+        const todayRecords = dramaRecords.filter(r => r.date === today);
+        
+        let appWatched = 0;
+        let appTotal = 0;
+        let hasUnfinished = false;
+        
+        todayRecords.forEach(r => {
+            const recordWatched = r.periods.morning.watched + r.periods.afternoon.watched + r.periods.evening.watched;
+            const recordTotal = r.periods.morning.total + r.periods.afternoon.total + r.periods.evening.total;
+            appWatched += recordWatched;
+            appTotal += recordTotal;
+            if (recordWatched < recordTotal) {
+                hasUnfinished = true;
+            }
+        });
+        
+        totalDramas += todayRecords.length;
+        totalWatchedToday += appWatched;
+        totalEpisodesToday += appTotal;
+        if (hasUnfinished) {
+            inProgressCount++;
+        } else if (todayRecords.length > 0) {
+            completedCount++;
+        }
+        
+        return {
+            ...app,
+            dramaRecords: todayRecords,
+            dramaWatched: appWatched,
+            dramaTotal: appTotal,
+            hasUnfinished: hasUnfinished
+        };
+    });
+    
+    // 排序：有未完成短剧的排最前，然后按优先级
+    appsWithDramaInfo.sort((a, b) => {
+        if (a.hasUnfinished !== b.hasUnfinished) return a.hasUnfinished ? -1 : 1;
+        if (a.priority !== b.priority) return b.priority - a.priority;
+        return a.daysUntilNextPlay - b.daysUntilNextPlay;
+    });
+    
+    if (appsWithDramaInfo.length === 0) {
         container.innerHTML = `
             <div class="card mt-4">
                 <div class="section-header">
@@ -6878,8 +6930,8 @@ function renderActivityPage() {
         return;
     }
     
-    const urgentCount = activeApps.filter(a => a.priority === 4).length;
-    const warningCount = activeApps.filter(a => a.priority === 3).length;
+    // 计算完成率
+    const completionRate = totalEpisodesToday > 0 ? Math.round((totalWatchedToday / totalEpisodesToday) * 100) : 0;
     
     let html = `
         <div class="card mt-4">
@@ -6888,54 +6940,62 @@ function renderActivityPage() {
                 <div class="section-divider"></div>
                 <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">标记已观看短剧/内容，给平台贡献活跃度</div>
             </div>
-            <div style="display: flex; gap: 16px; margin-bottom: 16px; padding: 0 8px;">
-                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(239,68,68,0.1); border-radius: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #ef4444;">${urgentCount}</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">立即玩</div>
-                </div>
-                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(245,158,11,0.1); border-radius: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${warningCount}</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">3天内</div>
-                </div>
-                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(59,130,246,0.1); border-radius: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6;">${activityStats.avgDailyActive}</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">日均活跃</div>
-                </div>
-                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(16,185,129,0.1); border-radius: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #10b981;">${activityStats.activeRate}%</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">活跃率</div>
+            
+            <!-- 搜索框 -->
+            <div style="padding: 0 8px; margin-bottom: 12px;">
+                <div style="position: relative;">
+                    <input type="text" id="activity-search" placeholder="🔍 搜索软件名称..." 
+                        style="width: 100%; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); font-size: 14px; outline: none;"
+                        oninput="filterActivityApps(this.value)">
                 </div>
             </div>
-            <div style="max-height: calc(100vh - 400px); overflow-y: auto;">
+            
+            <!-- 短剧统计卡片 -->
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; padding: 0 8px;">
+                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 10px;">
+                    <div style="font-size: 18px; font-weight: 700; color: #8b5cf6;">${totalDramas}</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">今日短剧</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(245,158,11,0.1); border-radius: 10px;">
+                    <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">${inProgressCount}</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">进行中</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(59,130,246,0.1); border-radius: 10px;">
+                    <div style="font-size: 18px; font-weight: 700; color: #3b82f6;">${totalWatchedToday}</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">已看集数</div>
+                </div>
+                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(16,185,129,0.1); border-radius: 10px;">
+                    <div style="font-size: 18px; font-weight: 700; color: #10b981;">${completionRate}%</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">完成率</div>
+                </div>
+            </div>
+            <div id="activity-app-list" style="max-height: calc(100vh - 420px); overflow-y: auto;">
     `;
     
-    activeApps.forEach(app => {
-        let priorityIcon = '';
-        let priorityColor = '';
-        let statusText = '';
+    const renderAppCard = (app) => {
+        // 短剧进度
+        const progressPercent = app.dramaTotal > 0 ? Math.round((app.dramaWatched / app.dramaTotal) * 100) : 0;
+        const progressColor = app.hasUnfinished ? '#f59e0b' : '#10b981';
         
-        if (app.priority === 4) {
-            priorityIcon = '⚠️';
-            priorityColor = '#ef4444';
-            statusText = '立即游玩';
-        } else if (app.priority === 3) {
-            priorityIcon = '⏳';
-            priorityColor = '#f59e0b';
-            statusText = `${app.daysUntilNextPlay}天后`;
-        } else if (app.priority === 2) {
-            priorityIcon = '📅';
-            priorityColor = '#3b82f6';
-            statusText = `${app.daysUntilNextPlay}天后`;
+        let dramaInfo = '';
+        if (app.dramaRecords.length > 0) {
+            dramaInfo = `
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 8px 10px; margin-top: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-size: 11px; color: var(--text-secondary);">📖 今日进度</span>
+                        <span style="font-size: 11px; color: ${progressColor}; font-weight: 600;">${app.dramaWatched}/${app.dramaTotal}集 (${progressPercent}%)</span>
+                    </div>
+                    <div style="background: var(--border-color); height: 4px; border-radius: 2px; overflow: hidden;">
+                        <div style="background: ${progressColor}; height: 100%; width: ${progressPercent}%; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+            `;
         } else {
-            priorityIcon = '✓';
-            priorityColor = '#10b981';
-            statusText = `${app.daysUntilNextPlay}天后`;
-        }
-        
-        let activityBadge = '';
-        if (app.isActiveToday) {
-            const durationText = app.activityDuration > 0 ? '(' + app.activityDuration + '分钟)' : '';
-            activityBadge = '<span style="background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ 已活跃' + durationText + '</span>';
+            dramaInfo = `
+                <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary); padding: 4px 0;">
+                    今日还未添加短剧 · 点击下方按钮开始
+                </div>
+            `;
         }
         
         let belowAvgBadge = '';
@@ -6943,107 +7003,80 @@ function renderActivityPage() {
             belowAvgBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚡ 需多活跃</span>';
         }
 
-        // 获取今日短剧记录
-        const todayDramaCount = DataManager.getDramaRecords(app.phoneId, app.id).filter(r => r.date === getCurrentDate()).length;
-        const dramaBadge = todayDramaCount > 0 ? `<span style="background: rgba(139,92,246,0.15); color: #8b5cf6; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">📺 ${todayDramaCount}部</span>` : '';
-
-        // 获取今日短剧观看进度
-        const todayRecords = DataManager.getDramaRecords(app.phoneId, app.id).filter(r => r.date === getCurrentDate());
-        let totalWatched = 0, totalEpisodes = 0;
-        todayRecords.forEach(r => {
-            totalWatched += r.periods.morning.watched + r.periods.afternoon.watched + r.periods.evening.watched;
-            totalEpisodes += r.periods.morning.total + r.periods.afternoon.total + r.periods.evening.total;
-        });
-        const dramaProgress = totalEpisodes > 0 ? `<span style="font-size: 11px; color: #8b5cf6; margin-left: 4px;">观看进度: ${totalWatched}/${totalEpisodes}集</span>` : '';
+        // 短剧徽章
+        const dramaBadges = [];
+        if (app.hasUnfinished) {
+            dramaBadges.push('<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">待看完</span>');
+        }
+        if (app.dramaRecords.length > 0) {
+            dramaBadges.push(`<span style="background: rgba(139,92,246,0.15); color: #8b5cf6; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${app.dramaRecords.length}部短剧</span>`);
+        }
         
-        html += `
-            <div data-card-phone="${app.phoneId}" data-card-app="${app.id}" style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 10px;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="flex-shrink: 0; width: 48px; height: 48px; background: rgba(139,92,246,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px;">📱</div>
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        // 如果有未完成短剧，加一个高亮边框
+        const highlightStyle = app.hasUnfinished ? 'border-left: 3px solid #f59e0b; background: rgba(245,158,11,0.03);' : '';
+        
+        return `
+            <div data-card-phone="${app.phoneId}" data-card-app="${app.id}" style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 8px; ${highlightStyle}">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="flex-shrink: 0; width: 44px; height: 44px; background: ${app.hasUnfinished ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)'}; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">${app.hasUnfinished ? '📺' : '📱'}</div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                             <span style="font-weight: 600; font-size: 14px;">${app.name}</span>
                             <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
-                            <span style="font-size: 12px; color: ${priorityColor};">${priorityIcon} ${statusText}</span>
                             ${belowAvgBadge}
-                            ${dramaBadge}
+                            ${dramaBadges.join('')}
                         </div>
-                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
-                            余额: ¥${app.balance.toFixed(2)} | 今日赚取: ¥${app.todayEarning.toFixed(2)}
-                            ${dramaProgress}
-                        </div>
+                        ${dramaInfo}
                     </div>
-                    ${activityBadge}
                 </div>
                 
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                    <button class="drama-btn" data-phone="${app.phoneId}" data-app="${app.id}" onclick="openDramaModal('${app.phoneId}', '${app.id}')"
-                        style="flex: 1; align-items: center; justify-content: center; padding: 10px; font-size: 14px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none; border-radius: 8px; cursor: pointer; display: inline-flex; font-weight: 600;">
-                        📺 观看短剧
-                    </button>
-                </div>
+                <button class="drama-btn" data-phone="${app.phoneId}" data-app="${app.id}" onclick="openDramaModal('${app.phoneId}', '${app.id}')"
+                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 16px; font-size: 14px; background: ${app.hasUnfinished ? 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)'}; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; box-shadow: 0 2px 8px ${app.hasUnfinished ? 'rgba(245,158,11,0.3)' : 'rgba(139,92,246,0.3)'}; transition: all 0.2s; letter-spacing: 1px;">
+                    <span style="font-size: 16px;">${app.hasUnfinished ? '▶' : '📺'}</span>
+                    <span>${app.hasUnfinished ? '继续观看' : '观看短剧'}</span>
+                </button>
             </div>
         `;
-    });
+    };
+    
+    html += appsWithDramaInfo.map(renderAppCard).join('');
     
     html += `
             </div>
             <div style="padding: 12px; display: flex; gap: 8px; border-top: 1px solid var(--border-color);">
-                <button class="btn btn-secondary flex-1" onclick="renderActivityPage()" style="font-size: 13px;">🔄 刷新推荐</button>
+                <button class="btn btn-secondary flex-1" onclick="renderActivityPage()" style="font-size: 13px;">🔄 刷新</button>
                 <button class="btn btn-primary flex-1" onclick="markAllActive(); renderActivityPage()" style="font-size: 13px;">✅ 全部标记活跃</button>
             </div>
         </div>
     `;
     
-    // 添加今日短剧统计展示
-    const dramaStats = DataManager.getTodayDramaStats();
-    const morningTotal = dramaStats.morning.totalEpisodes;
-    const morningWatched = dramaStats.morning.watchedEpisodes;
-    const afternoonTotal = dramaStats.afternoon.totalEpisodes;
-    const afternoonWatched = dramaStats.afternoon.watchedEpisodes;
-    const eveningTotal = dramaStats.evening.totalEpisodes;
-    const eveningWatched = dramaStats.evening.watchedEpisodes;
-    const totalDramas = dramaStats.morning.dramas.length + dramaStats.afternoon.dramas.length + dramaStats.evening.dramas.length;
-    const totalWatchedEpisodes = morningWatched + afternoonWatched + eveningWatched;
-    
-    if (totalDramas > 0) {
-        html += `
-            <div class="card mt-4">
-                <div class="section-header">
-                    <div class="section-title">🎬 今日短剧统计</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div style="display: flex; gap: 6px; padding: 8px;">
-                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(245,158,11,0.1); border-radius: 10px;">
-                        <div style="font-size: 14px; font-weight: 700; color: #f59e0b;">${morningWatched}/${morningTotal}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary);">🌅 上午</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(59,130,246,0.1); border-radius: 10px;">
-                        <div style="font-size: 14px; font-weight: 700; color: #3b82f6;">${afternoonWatched}/${afternoonTotal}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary);">☀️ 下午</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 10px;">
-                        <div style="font-size: 14px; font-weight: 700; color: #8b5cf6;">${eveningWatched}/${eveningTotal}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary);">🌙 晚上</div>
-                    </div>
-                    <div style="flex: 1; text-align: center; padding: 10px; background: rgba(16,185,129,0.1); border-radius: 10px;">
-                        <div style="font-size: 14px; font-weight: 700; color: #10b981;">${totalWatchedEpisodes}</div>
-                        <div style="font-size: 10px; color: var(--text-secondary);">已看集数</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
     container.innerHTML = html;
     
-    activeApps.forEach(app => {
-        const key = `${app.phoneId}_${app.id}`;
-        const timerState = timerStates[key];
-        if (timerState && timerState.isRunning) {
-            if (!activityTimers[key]) {
-                startTimer(app.phoneId, app.id);
-            }
+    // 绑定搜索事件
+    setTimeout(() => {
+        const searchInput = document.getElementById('activity-search');
+        if (searchInput) {
+            searchInput.focus();
+        }
+    }, 50);
+}
+
+// 搜索过滤函数
+function filterActivityApps(keyword) {
+    const listContainer = document.getElementById('activity-app-list');
+    if (!listContainer) return;
+    
+    const cards = listContainer.querySelectorAll('[data-card-phone]');
+    const lowerKeyword = keyword.toLowerCase().trim();
+    
+    cards.forEach(card => {
+        const appName = card.querySelector('span[style*="font-weight: 600"]')?.textContent.toLowerCase() || '';
+        const phoneName = card.querySelectorAll('span')[1]?.textContent.toLowerCase() || '';
+        
+        if (!lowerKeyword || appName.includes(lowerKeyword) || phoneName.includes(lowerKeyword)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
         }
     });
 }
