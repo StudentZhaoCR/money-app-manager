@@ -9201,10 +9201,6 @@ function renderPhoneEarningsPage() {
     phones.forEach((phone, index) => {
         const dailyEarnings = phone.dailyEarnings || {}
         const phoneId = Object.keys(phoneDailyEarnings)[index];
-        const sortedDates = Object.keys(dailyEarnings).sort((a, b) => new Date(b) - new Date(a));
-        
-        // 获取最近14天的数据
-        const recentDates = sortedDates.slice(0, 14);
         
         // 获取今天该手机各软件的收益详情
         const todayApps = phoneAppsDetail[phoneId]?.map(app => {
@@ -9212,8 +9208,10 @@ function renderPhoneEarningsPage() {
             return { name: app.name, amount };
         }).filter(a => a.amount > 0).sort((a, b) => b.amount - a) || [];
 
-        // 计算柱状图最大值用于显示金额
-        const maxAmount = Math.max(...recentDates.map(d => parseFloat(dailyEarnings[d]) || 0), 0.01);
+        // 计算今日和历史收益
+        const todayAmount = parseFloat(dailyEarnings[today]) || 0;
+        const totalDays = Object.keys(dailyEarnings).length;
+        const totalEarned = Object.values(dailyEarnings).reduce((sum, v) => sum + parseFloat(v || 0), 0);
 
         html += `
             <div style="background: var(--card-bg); border-radius: 12px; padding: 14px; border: 1px solid var(--border-color);">
@@ -9222,6 +9220,10 @@ function renderPhoneEarningsPage() {
                         <span style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); color: white; padding: 5px 10px; border-radius: 16px; font-size: 12px; font-weight: 600;">
                             📱 ${phone.phoneName}
                         </span>
+                    </div>
+                    <div style="display: flex; gap: 12px; font-size: 12px;">
+                        <span style="color: #10b981; font-weight: 600;">今日: ¥${todayAmount.toFixed(2)}</span>
+                        <span style="color: var(--text-secondary);">共${totalDays}天</span>
                     </div>
                 </div>
                 
@@ -9236,34 +9238,6 @@ function renderPhoneEarningsPage() {
                                 </span>
                             `).join('')}
                         </div>
-                    </div>
-                ` : ''}
-
-                <!-- 最近14天收益柱状图 -->
-                <div style="display: flex; align-items: flex-end; gap: 3px; height: 70px; background: var(--bg-secondary); border-radius: 8px; padding: 20px 6px 6px; position: relative;">
-                    ${recentDates.length > 0 ? recentDates.map(date => {
-                        const amount = parseFloat(dailyEarnings[date]) || 0;
-                        const height = (amount / maxAmount) * 100;
-                        const dateObj = new Date(date);
-                        const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-                        return `
-                            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; height: 100%; justify-content: flex-end; position: relative;">
-                                ${amount > 0 ? `<span style="position: absolute; top: -16px; font-size: 9px; color: #10b981; font-weight: 600;">${amount.toFixed(2)}</span>` : ''}
-                                <div title="${dateStr}: ¥${amount.toFixed(2)}" style="width: 100%; max-width: 24px; height: ${height}%; background: ${amount > 0 ? 'linear-gradient(to top, #10b981, #34d399)' : '#374151'}; border-radius: 3px 3px 0 0; min-height: 2px;"></div>
-                            </div>
-                        `;
-                    }).join('') : '<div style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 11px;">暂无记录</div>'}
-                </div>
-                
-                <!-- 日期标签 -->
-                ${recentDates.length > 0 ? `
-                    <div style="display: flex; gap: 3px; padding: 2px 6px;">
-                        ${recentDates.map((date, i) => {
-                            const dateObj = new Date(date);
-                            const dateStr = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-                            const isToday = date === today;
-                            return `<span style="flex: 1; text-align: center; font-size: 9px; color: ${isToday ? '#3b82f6' : 'var(--text-muted)'}; ${isToday ? 'font-weight: 600;' : ''}">${i === 0 ? '今' : dateStr.split('/')[1]}</span>`;
-                        }).join('')}
                     </div>
                 ` : ''}
             </div>
