@@ -12,8 +12,11 @@ function getAllGameDrawHistory() {
         }
     });
     
-    // 也检查旧的存储方式（兼容旧数据）
-    const oldHistory = localStorage.getItem('moneyApp_gameDrawHistory');
+    // 也检查旧的存储方式（兼容旧数据，使用系统隔离key）
+    const sysKey = window.SYS_KEYS && window.SYS_KEYS.gameDrawHistory ? 
+        window.SYS_KEYS.gameDrawHistory() : 
+        (window.getSystemKey ? window.getSystemKey('moneyApp_gameDrawHistory') : 'moneyApp_gameDrawHistory');
+    const oldHistory = localStorage.getItem(sysKey);
     if (oldHistory) {
         try {
             const parsed = JSON.parse(oldHistory);
@@ -490,11 +493,12 @@ function finishAllMultiGames() {
         totalDuration: Math.floor((Date.now() - timer.startTime) / 1000)
     };
     
-    // 保存到历史记录
-    let history = JSON.parse(localStorage.getItem('crossPhoneDrawHistory') || '[]');
+    // 保存到历史记录（使用系统隔离key）
+    const crossDrawKey = window.getSystemKey ? window.getSystemKey('crossPhoneDrawHistory') : 'crossPhoneDrawHistory';
+    let history = JSON.parse(localStorage.getItem(crossDrawKey) || '[]');
     history.unshift(record);
     if (history.length > 30) history = history.slice(0, 30);
-    localStorage.setItem('crossPhoneDrawHistory', JSON.stringify(history));
+    localStorage.setItem(crossDrawKey, JSON.stringify(history));
     
     // 清理
     window.multiGameTimer = null;

@@ -723,13 +723,16 @@ body {
     font-family: var(--font-display);
     position: relative;
     z-index: 1;
-    display: inline-block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 8px 20px;
     background: rgba(255, 255, 255, 0.15);
     border-radius: var(--radius-full);
     border: 3px solid rgba(255, 255, 255, 0.4);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
     transition: all var(--transition-fast);
+    line-height: 1;
     /* 增强文字可读性 */
     -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.1);
 }
@@ -745,6 +748,16 @@ body {
     padding: 20px;
     max-width: 800px;
     margin: 0 auto;
+}
+
+/* 双系统切换动画 */
+@keyframes systemFadeIn {
+    0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.system-switching {
+    animation: systemFadeIn 0.4s ease-out;
 }
 
 /* 页面切换 */
@@ -3933,6 +3946,7 @@ body {
     
     .nav-title {
         font-size: 18px;
+        gap: 4px;
     }
     
     .main-content {

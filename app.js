@@ -5,6 +5,265 @@ const INSTALLMENTS_KEY = 'moneyApp_installments';
 const EXPENSES_KEY = 'moneyApp_expenses';
 const SETTINGS_KEY = 'moneyApp_settings';
 
+// 双系统管理
+let currentSystem = localStorage.getItem('moneyApp_currentSystem') || 'main';
+const SYSTEMS_KEY = 'moneyApp_systems';
+
+function getSystemKey(baseKey) {
+    return currentSystem === 'main' ? baseKey : `${baseKey}_${currentSystem}`;
+}
+
+// 为指定系统ID生成key（用于创建/删除系统时的操作）
+function getSystemKeyFor(baseKey, systemId) {
+    return systemId === 'main' ? baseKey : `${baseKey}_${systemId}`;
+}
+
+// 系统隔离的辅助函数
+const SYS_KEYS = {
+    expandedPhones: () => getSystemKey('expandedPhones'),
+    gameTimers: () => getSystemKey('moneyApp_gameTimers'),
+    gameDrawHistory: () => getSystemKey('moneyApp_gameDrawHistory'),
+    dailyGaps: () => getSystemKey('moneyApp_dailyGaps'),
+    personalFinance: () => getSystemKey('moneyApp_personalFinance'),
+    withdrawReminder: () => getSystemKey('withdraw_reminder'),
+    dailyGoalReminder: () => getSystemKey('daily_goal_reminder'),
+    quickEditAppOrder: () => getSystemKey('quickEditAppOrder'),
+    quickEditAppNames: () => getSystemKey('quickEditAppNames'),
+    dailyGapRecords: () => getSystemKey('moneyApp_dailyGapRecords')
+};
+
+function getSystemsList() {
+    const stored = localStorage.getItem(SYSTEMS_KEY);
+    if (stored) return JSON.parse(stored);
+    return [
+        { id: 'main', name: '主系统', icon: '📱', color: '#8b5cf6' }
+    ];
+}
+
+function saveSystemsList(systems) {
+    localStorage.setItem(SYSTEMS_KEY, JSON.stringify(systems));
+}
+
+function getCurrentSystemInfo() {
+    const systems = getSystemsList();
+    return systems.find(s => s.id === currentSystem) || systems[0];
+}
+
+function switchSystem(systemId) {
+    if (systemId === currentSystem) return;
+    currentSystem = systemId;
+    localStorage.setItem('moneyApp_currentSystem', systemId);
+    
+    // 添加切换动画
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.classList.remove('system-switching');
+        void mainContent.offsetWidth; // 触发重排
+        mainContent.classList.add('system-switching');
+    }
+    
+    // 刷新整个页面数据
+    if (typeof renderTotalEarnings === 'function') renderTotalEarnings();
+    if (typeof renderDashboardV2 === 'function') renderDashboardV2();
+    if (typeof renderPhones === 'function') renderPhones();
+    if (typeof renderActivityPlan === 'function') renderActivityPlan();
+    if (typeof renderPhoneEarningsPage === 'function') renderPhoneEarningsPage();
+    if (typeof renderStats === 'function') renderStats();
+    if (typeof renderWithdrawPlan === 'function') renderWithdrawPlan();
+    if (typeof renderExpiringApps === 'function') renderExpiringApps();
+    if (typeof updateTodayEarnings === 'function') updateTodayEarnings();
+    // 更新导航栏标题
+    updateNavbarTitle();
+    showToast(`已切换到 ${getCurrentSystemInfo().name}`, 'success');
+}
+
+function updateNavbarTitle() {
+    const info = getCurrentSystemInfo();
+    const iconEl = document.getElementById('nav-system-icon');
+    const nameEl = document.getElementById('nav-system-name');
+    if (iconEl) iconEl.textContent = info.icon;
+    if (nameEl) nameEl.textContent = currentSystem === 'main' ? '赚钱软件管理系统' : info.name;
+}
+
+function openSystemSwitchModal() {
+    const systems = getSystemsList();
+    const info = getCurrentSystemInfo();
+    
+    const html = `
+        <div style="padding: 4px 0;">
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; text-align: center;">
+                当前系统：<span style="font-weight: 600; color: var(--text-primary);">${info.icon} ${info.name}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${systems.map(sys => `
+                    <div onclick="switchSystem('${sys.id}'); closeModal();"
+                        style="display: flex; align-items: center; gap: 14px; padding: 16px; background: ${sys.id === currentSystem ? 'linear-gradient(135deg, ' + sys.color + '20, ' + sys.color + '10)' : 'var(--bg-secondary)'}; border: 2px solid ${sys.id === currentSystem ? sys.color : 'transparent'}; border-radius: 12px; cursor: pointer; transition: all 0.2s;">
+                        <div style="width: 44px; height: 44px; background: ${sys.color}20; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px;">${sys.icon}</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 15px;">${sys.name}</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${sys.id === currentSystem ? '当前使用中' : '点击切换'}</div>
+                        </div>
+                        ${sys.id === currentSystem ? '<div style="color: ' + sys.color + '; font-size: 20px;">✓</div>' : ''}
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px;">➕ 创建新系统</div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="new-system-name" class="form-input" placeholder="系统名称" style="flex: 1; font-size: 14px;">
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <select id="new-system-icon" class="form-input" style="flex: 1; font-size: 14px;">
+                        <option value="📱">📱 手机</option>
+                        <option value="🎮">🎮 游戏</option>
+                        <option value="💼">💼 工作</option>
+                        <option value="🏠">🏠 生活</option>
+                        <option value="💰">💰 理财</option>
+                        <option value="🔒">🔒 隐私</option>
+                        <option value="⚡">⚡ 极速</option>
+                        <option value="🌙">🌙 夜间</option>
+                    </select>
+                    <select id="new-system-color" class="form-input" style="flex: 1; font-size: 14px;">
+                        <option value="#8b5cf6">紫色</option>
+                        <option value="#3b82f6">蓝色</option>
+                        <option value="#10b981">绿色</option>
+                        <option value="#f59e0b">橙色</option>
+                        <option value="#ef4444">红色</option>
+                        <option value="#ec4899">粉色</option>
+                        <option value="#14b8a6">青色</option>
+                        <option value="#6366f1">靛蓝</option>
+                    </select>
+                </div>
+            </div>
+            
+            ${systems.length > 1 ? `
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <button onclick="deleteCurrentSystem()" style="width: 100%; padding: 10px; background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">🗑️ 删除当前系统</button>
+                <div style="font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 6px;">删除后该系统的所有数据将永久丢失</div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+    
+    showModal('🔀 切换系统', html, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '创建并切换',
+            class: 'btn-primary',
+            action: () => {
+                const name = document.getElementById('new-system-name')?.value.trim();
+                if (!name) {
+                    showToast('请输入系统名称');
+                    return;
+                }
+                const icon = document.getElementById('new-system-icon')?.value || '📱';
+                const color = document.getElementById('new-system-color')?.value || '#8b5cf6';
+                const newId = 'sys_' + Date.now().toString(36);
+                const systems = getSystemsList();
+                systems.push({ id: newId, name, icon, color });
+                saveSystemsList(systems);
+                
+                // 初始化新系统的空数据（使用 getSystemKeyFor 直接为新系统ID生成key）
+                localStorage.setItem(getSystemKeyFor(PHONES_KEY, newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor(INSTALLMENTS_KEY, newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor(EXPENSES_KEY, newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor(SETTINGS_KEY, newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor(DATA_KEY, newId), JSON.stringify({ phones: [], installments: [], expenses: [], settings: {} }));
+                localStorage.setItem(getSystemKeyFor('moneyApp_dailyGapRecords', newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor('moneyApp_downloadedGames', newId), JSON.stringify([]));
+                // 初始化其他隔离的存储键
+                localStorage.setItem(getSystemKeyFor('expandedPhones', newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor('moneyApp_gameTimers', newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor('moneyApp_gameDrawHistory', newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor('moneyApp_dailyGaps', newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor('moneyApp_personalFinance', newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor('withdraw_reminder', newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor('daily_goal_reminder', newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor('quickEditAppOrder', newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor('quickEditAppNames', newId), JSON.stringify([]));
+                
+                closeModal();
+                
+                // 自动切换到新系统
+                setTimeout(() => {
+                    currentSystem = newId;
+                    localStorage.setItem('moneyApp_currentSystem', newId);
+                    
+                    const mainContent = document.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.classList.remove('system-switching');
+                        void mainContent.offsetWidth;
+                        mainContent.classList.add('system-switching');
+                    }
+                    
+                    if (typeof renderTotalEarnings === 'function') renderTotalEarnings();
+                    if (typeof renderDashboardV2 === 'function') renderDashboardV2();
+                    if (typeof renderPhones === 'function') renderPhones();
+                    if (typeof renderActivityPlan === 'function') renderActivityPlan();
+                    if (typeof renderPhoneEarningsPage === 'function') renderPhoneEarningsPage();
+                    if (typeof renderStats === 'function') renderStats();
+                    if (typeof renderWithdrawPlan === 'function') renderWithdrawPlan();
+                    if (typeof renderExpiringApps === 'function') renderExpiringApps();
+                    if (typeof updateTodayEarnings === 'function') updateTodayEarnings();
+                    updateNavbarTitle();
+                    showToast(`已创建并切换到 ${name}`, 'success');
+                }, 150);
+            }
+        }
+    ], { forceReplace: true });
+}
+
+function deleteCurrentSystem() {
+    if (currentSystem === 'main') {
+        showToast('主系统不能删除', 'error');
+        return;
+    }
+    
+    showConfirm('确认删除', `确定要删除「${getCurrentSystemInfo().name}」吗？该系统的所有数据将永久丢失！`, () => {
+        // 删除该系统的所有数据（使用 getSystemKeyFor 确保正确删除）
+        const sysId = currentSystem;
+        const keysToDelete = [
+            getSystemKeyFor(PHONES_KEY, sysId),
+            getSystemKeyFor(INSTALLMENTS_KEY, sysId),
+            getSystemKeyFor(EXPENSES_KEY, sysId),
+            getSystemKeyFor(SETTINGS_KEY, sysId),
+            getSystemKeyFor(DATA_KEY, sysId),
+            getSystemKeyFor('moneyApp_dailyGapRecords', sysId),
+            getSystemKeyFor('moneyApp_downloadedGames', sysId),
+            getSystemKeyFor('expandedPhones', sysId),
+            getSystemKeyFor('moneyApp_gameTimers', sysId),
+            getSystemKeyFor('moneyApp_gameDrawHistory', sysId),
+            getSystemKeyFor('moneyApp_dailyGaps', sysId),
+            getSystemKeyFor('moneyApp_personalFinance', sysId),
+            getSystemKeyFor('withdraw_reminder', sysId),
+            getSystemKeyFor('daily_goal_reminder', sysId),
+            getSystemKeyFor('quickEditAppOrder', sysId),
+            getSystemKeyFor('quickEditAppNames', sysId)
+        ];
+        keysToDelete.forEach(key => localStorage.removeItem(key));
+        
+        // 从系统列表中移除
+        const systems = getSystemsList().filter(s => s.id !== currentSystem);
+        saveSystemsList(systems);
+        
+        // 切换回主系统
+        currentSystem = 'main';
+        localStorage.setItem('moneyApp_currentSystem', 'main');
+        
+        closeModal();
+        showToast('已删除并切换到主系统', 'success');
+        
+        // 刷新页面
+        setTimeout(() => {
+            renderTotalEarnings();
+            renderDashboardV2();
+            renderPhones();
+            updateNavbarTitle();
+        }, 100);
+    });
+}
+
 // 游戏管理存储键
 const DOWNLOADED_GAMES_KEY = 'moneyApp_downloadedGames';
 const GAME_DRAW_HISTORY_KEY = 'moneyApp_gameDrawHistory';
@@ -521,9 +780,9 @@ function openDramaModal(phoneId, appId, forceReplace = false) {
     const app = phone?.apps.find(a => a.id === appId);
     if (!phone || !app) return;
 
-    const dramaRecords = DataManager.getDramaRecords(phoneId, appId);
+    const dramaRecords = DataManager.getActiveDramaRecords(phoneId, appId);
     const today = getCurrentDate();
-    const todayRecords = dramaRecords.filter(r => r.date === today);
+    const todayRecords = dramaRecords;
 
     const periodLabels = {
         morning: '🌅 上午',
@@ -573,10 +832,10 @@ function openDramaModal(phoneId, appId, forceReplace = false) {
             }).join('');
             
             return `
-                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid ${record.date === today ? 'var(--border-color)' : 'rgba(245,158,11,0.3)'};">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(record.name)}</div>
+                            <div style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(record.name)}${record.date !== today ? `<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 4px;">📅 ${record.date.slice(5)}</span>` : ''}</div>
                             <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
                                 共${record.totalEpisodes}集 · 已看${totalWatched}集
                             </div>
@@ -744,9 +1003,9 @@ function refreshDramaModalContent(phoneId, appId) {
     const app = phone?.apps.find(a => a.id === appId);
     if (!phone || !app) return;
 
-    const dramaRecords = DataManager.getDramaRecords(phoneId, appId);
+    const dramaRecords = DataManager.getActiveDramaRecords(phoneId, appId);
     const today = getCurrentDate();
-    const todayRecords = dramaRecords.filter(r => r.date === today);
+    const todayRecords = dramaRecords;
 
     const periodLabels = {
         morning: '🌅 上午',
@@ -794,10 +1053,10 @@ function refreshDramaModalContent(phoneId, appId) {
             }).join('');
             
             return `
-                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border-color);">
+                <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid ${record.date === today ? 'var(--border-color)' : 'rgba(245,158,11,0.3)'};">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(record.name)}</div>
+                            <div style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(record.name)}${record.date !== today ? `<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 4px;">📅 ${record.date.slice(5)}</span>` : ''}</div>
                             <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
                                 共${record.totalEpisodes}集 · 已看${totalWatched}集
                             </div>
@@ -1627,11 +1886,16 @@ function updateAppCard(phoneId, appId) {
 // 数据管理类
 class DataManager {
     static loadData() {
-        // 尝试从分片存储加载数据
-        const phones = localStorage.getItem(PHONES_KEY);
-        const installments = localStorage.getItem(INSTALLMENTS_KEY);
-        const expenses = localStorage.getItem(EXPENSES_KEY);
-        const settings = localStorage.getItem(SETTINGS_KEY);
+        // 尝试从分片存储加载数据（使用系统前缀）
+        const pKey = getSystemKey(PHONES_KEY);
+        const iKey = getSystemKey(INSTALLMENTS_KEY);
+        const eKey = getSystemKey(EXPENSES_KEY);
+        const sKey = getSystemKey(SETTINGS_KEY);
+        
+        const phones = localStorage.getItem(pKey);
+        const installments = localStorage.getItem(iKey);
+        const expenses = localStorage.getItem(eKey);
+        const settings = localStorage.getItem(sKey);
 
         let result;
         // 如果分片存储有数据，使用分片存储
@@ -1644,7 +1908,7 @@ class DataManager {
             };
         } else {
             // 否则从旧的单文件存储加载数据（兼容旧版本）
-            const savedData = localStorage.getItem(DATA_KEY);
+            const savedData = localStorage.getItem(getSystemKey(DATA_KEY));
             if (savedData) {
                 const parsedData = JSON.parse(savedData);
                 result = {
@@ -1664,7 +1928,7 @@ class DataManager {
         }
 
         // 加载每日缺口记录
-        const dailyGapRecords = localStorage.getItem('moneyApp_dailyGapRecords');
+        const dailyGapRecords = localStorage.getItem(getSystemKey('moneyApp_dailyGapRecords'));
         if (dailyGapRecords) {
             result.dailyGapRecords = JSON.parse(dailyGapRecords);
         }
@@ -1696,6 +1960,10 @@ class DataManager {
                 }
                 if (app.highWithdraw === undefined) {
                     app.highWithdraw = 0;
+                    needsMigration = true;
+                }
+                if (!app.highWithdrawTiers) {
+                    app.highWithdrawTiers = [];
                     needsMigration = true;
                 }
                 if (app.clearPeriod === undefined) {
@@ -1771,15 +2039,15 @@ class DataManager {
     }
 
     static saveData(data) {
-        // 分片存储数据
-        localStorage.setItem(PHONES_KEY, JSON.stringify(data.phones));
-        localStorage.setItem(INSTALLMENTS_KEY, JSON.stringify(data.installments));
-        localStorage.setItem(EXPENSES_KEY, JSON.stringify(data.expenses));
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(data.settings));
+        // 分片存储数据（使用系统前缀）
+        localStorage.setItem(getSystemKey(PHONES_KEY), JSON.stringify(data.phones));
+        localStorage.setItem(getSystemKey(INSTALLMENTS_KEY), JSON.stringify(data.installments));
+        localStorage.setItem(getSystemKey(EXPENSES_KEY), JSON.stringify(data.expenses));
+        localStorage.setItem(getSystemKey(SETTINGS_KEY), JSON.stringify(data.settings));
         
         // 保存每日缺口记录
         if (data.dailyGapRecords) {
-            localStorage.setItem('moneyApp_dailyGapRecords', JSON.stringify(data.dailyGapRecords));
+            localStorage.setItem(getSystemKey('moneyApp_dailyGapRecords'), JSON.stringify(data.dailyGapRecords));
         }
         
         
@@ -1787,19 +2055,19 @@ class DataManager {
     
     // 保存特定类型的数据（优化性能）
     static savePhones(phones) {
-        localStorage.setItem(PHONES_KEY, JSON.stringify(phones));
+        localStorage.setItem(getSystemKey(PHONES_KEY), JSON.stringify(phones));
     }
     
     static saveInstallments(installments) {
-        localStorage.setItem(INSTALLMENTS_KEY, JSON.stringify(installments));
+        localStorage.setItem(getSystemKey(INSTALLMENTS_KEY), JSON.stringify(installments));
     }
     
     static saveExpenses(expenses) {
-        localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
+        localStorage.setItem(getSystemKey(EXPENSES_KEY), JSON.stringify(expenses));
     }
     
     static saveSettings(settings) {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        localStorage.setItem(getSystemKey(SETTINGS_KEY), JSON.stringify(settings));
     }
 
     // ==================== 活跃记录功能 ====================
@@ -2017,6 +2285,20 @@ class DataManager {
         return app.dramaRecords || [];
     }
 
+    // 获取需要展示的短剧记录：未看完的（不论日期）+ 今天的记录
+    static getActiveDramaRecords(phoneId, appId) {
+        const records = this.getDramaRecords(phoneId, appId);
+        const today = getCurrentDate();
+        return records.filter(r => {
+            // 今天的记录始终显示
+            if (r.date === today) return true;
+            // 未看完的记录也显示
+            const watched = (r.periods.morning?.watched || 0) + (r.periods.afternoon?.watched || 0) + (r.periods.evening?.watched || 0);
+            const total = (r.periods.morning?.total || 0) + (r.periods.afternoon?.total || 0) + (r.periods.evening?.total || 0);
+            return watched < total;
+        });
+    }
+
     // 添加短剧记录 - 自动将总集数分配到三个时段
     static addDramaRecord(phoneId, appId, dramaData) {
         const data = this.loadData();
@@ -2121,7 +2403,12 @@ class DataManager {
             phone.apps.forEach(app => {
                 if (app.dramaRecords) {
                     app.dramaRecords.forEach(record => {
-                        if (record.date === today) {
+                        // 显示今天的记录 + 未看完的记录
+                        const watched = (record.periods.morning?.watched || 0) + (record.periods.afternoon?.watched || 0) + (record.periods.evening?.watched || 0);
+                        const total = (record.periods.morning?.total || 0) + (record.periods.afternoon?.total || 0) + (record.periods.evening?.total || 0);
+                        const shouldShow = record.date === today || watched < total;
+                        
+                        if (shouldShow) {
                             ['morning', 'afternoon', 'evening'].forEach(period => {
                                 const periodData = record.periods[period];
                                 if (periodData && periodData.total > 0) {
@@ -2151,7 +2438,7 @@ class DataManager {
 
     // 获取年度目标设置
     static getYearlyGoal() {
-        const settings = localStorage.getItem(SETTINGS_KEY);
+        const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
         const parsed = settings ? JSON.parse(settings) : {};
         const currentYear = new Date().getFullYear();
         
@@ -2175,18 +2462,18 @@ class DataManager {
     
     // 保存年度目标
     static saveYearlyGoal(amount, year, autoDistribute = true, mode = 'custom') {
-        const settings = localStorage.getItem(SETTINGS_KEY);
+        const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
         const parsed = settings ? JSON.parse(settings) : {};
         parsed.yearlyGoalAmount = parseFloat(amount) || 0;
         parsed.yearlyGoalYear = parseInt(year) || new Date().getFullYear();
         parsed.yearlyGoalAutoDistribute = autoDistribute;
         parsed.yearlyGoalMode = mode;
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
+        localStorage.setItem(getSystemKey(SETTINGS_KEY), JSON.stringify(parsed));
     }
     
     // 保存年度目标历史
     static saveYearlyGoalHistory(year, goalAmount, actualAmount) {
-        const settings = localStorage.getItem(SETTINGS_KEY);
+        const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
         const parsed = settings ? JSON.parse(settings) : {};
         
         if (!parsed.yearlyGoalHistory) {
@@ -2221,12 +2508,12 @@ class DataManager {
         // 按年份排序
         parsed.yearlyGoalHistory.sort((a, b) => b.year - a.year);
         
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
+        localStorage.setItem(getSystemKey(SETTINGS_KEY), JSON.stringify(parsed));
     }
     
     // 获取年度目标历史
     static getYearlyGoalHistory() {
-        const settings = localStorage.getItem(SETTINGS_KEY);
+        const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
         const parsed = settings ? JSON.parse(settings) : {};
         return parsed.yearlyGoalHistory || [];
     }
@@ -3657,7 +3944,7 @@ class DataManager {
 
     // 获取个人财产数据
     static getPersonalFinance() {
-        const finance = localStorage.getItem('moneyApp_personalFinance');
+        const finance = localStorage.getItem(SYS_KEYS.personalFinance());
         if (finance) {
             return JSON.parse(finance);
         }
@@ -3673,7 +3960,7 @@ class DataManager {
 
     // 保存个人财产数据
     static savePersonalFinance(finance) {
-        localStorage.setItem('moneyApp_personalFinance', JSON.stringify(finance));
+        localStorage.setItem(SYS_KEYS.personalFinance(), JSON.stringify(finance));
     }
 
     // 添加收入来源（工资、奖金等）
@@ -3793,15 +4080,15 @@ class DataManager {
 
     // 清空所有数据
     static clearAllData() {
-        localStorage.removeItem(PHONES_KEY);
-        localStorage.removeItem(INSTALLMENTS_KEY);
-        localStorage.removeItem(EXPENSES_KEY);
-        localStorage.removeItem(SETTINGS_KEY);
-        localStorage.removeItem(DATA_KEY);
+        localStorage.removeItem(getSystemKey(PHONES_KEY));
+        localStorage.removeItem(getSystemKey(INSTALLMENTS_KEY));
+        localStorage.removeItem(getSystemKey(EXPENSES_KEY));
+        localStorage.removeItem(getSystemKey(SETTINGS_KEY));
+        localStorage.removeItem(getSystemKey(DATA_KEY));
         
-        localStorage.removeItem('moneyApp_gameDrawHistory');
-        localStorage.removeItem('moneyApp_gameTimers');
-        localStorage.removeItem('moneyApp_dailyGaps');
+        localStorage.removeItem(SYS_KEYS.gameDrawHistory());
+        localStorage.removeItem(SYS_KEYS.gameTimers());
+        localStorage.removeItem(SYS_KEYS.dailyGaps());
         return { phones: [], installments: [], expenses: [], settings: {} };
     }
 
@@ -3842,6 +4129,7 @@ class DataManager {
                 balance: appData.balance || 0,
                 minWithdraw: parseFloat(appData.minWithdraw),
                 highWithdraw: parseFloat(appData.highWithdraw) || 0,
+                highWithdrawTiers: appData.highWithdrawTiers || [],
                 clearPeriod: parseInt(appData.clearPeriod) || 0,
                 lastLoginDate: today,
                 withdrawn: 0,
@@ -3878,6 +4166,7 @@ class DataManager {
                 app.balance = newBalance;
                 app.minWithdraw = parseFloat(appData.minWithdraw);
                 app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
+                app.highWithdrawTiers = appData.highWithdrawTiers || [];
                 app.clearPeriod = parseInt(appData.clearPeriod) || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
@@ -4115,36 +4404,70 @@ class DataManager {
         };
     }
 
-    // 计算可高档提现总额（达到highWithdraw金额的软件的余额总和）
+    // 计算可高档提现总额（按多档位分类）
     static calculateHighWithdrawTotal() {
         const data = this.loadData();
-        let highWithdrawTotal = 0;
-        let appCount = 0;
         const appsList = [];
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                const highWithdraw = app.highWithdraw || 0;
                 const balance = app.balance || 0;
+                const highWithdraw = app.highWithdraw || 0;
+                const tiers = app.highWithdrawTiers || [];
                 
-                // 如果余额达到高档提现金额
-                if (highWithdraw > 0 && balance >= highWithdraw) {
-                    highWithdrawTotal += balance;
-                    appCount++;
+                // 如果有多档位，按档位检查
+                if (tiers.length > 0) {
+                    tiers.forEach(tier => {
+                        if (tier.amount > 0 && balance >= tier.amount) {
+                            appsList.push({
+                                name: app.name,
+                                phoneName: phone.name,
+                                balance: balance,
+                                highWithdraw: tier.amount,
+                                tierName: tier.name || `¥${tier.amount}`,
+                                tierAmount: tier.amount
+                            });
+                        }
+                    });
+                } else if (highWithdraw > 0 && balance >= highWithdraw) {
+                    // 兼容旧数据：单个高档提现额度
                     appsList.push({
                         name: app.name,
                         phoneName: phone.name,
                         balance: balance,
-                        highWithdraw: highWithdraw
+                        highWithdraw: highWithdraw,
+                        tierName: `¥${highWithdraw}`,
+                        tierAmount: highWithdraw
                     });
                 }
             });
         });
         
+        // 按档位分组
+        const tierGroups = {};
+        appsList.forEach(app => {
+            if (!tierGroups[app.tierAmount]) {
+                tierGroups[app.tierAmount] = {
+                    tierName: app.tierName,
+                    tierAmount: app.tierAmount,
+                    total: 0,
+                    appCount: 0,
+                    apps: []
+                };
+            }
+            tierGroups[app.tierAmount].total += app.balance;
+            tierGroups[app.tierAmount].appCount++;
+            tierGroups[app.tierAmount].apps.push(app);
+        });
+        
+        // 转为数组并按档位金额排序（从高到低）
+        const tiers = Object.values(tierGroups).sort((a, b) => b.tierAmount - a.tierAmount);
+        
         return {
-            total: highWithdrawTotal,
-            appCount: appCount,
-            apps: appsList
+            total: tiers.reduce((sum, t) => sum + t.total, 0),
+            appCount: appsList.length,
+            apps: appsList,
+            tiers: tiers
         };
     }
 
@@ -4179,12 +4502,12 @@ class DataManager {
             ...timerData,
             lastUpdated: new Date().toISOString()
         };
-        localStorage.setItem('moneyApp_gameTimers', JSON.stringify(timers));
+        localStorage.setItem(SYS_KEYS.gameTimers(), JSON.stringify(timers));
     }
     
     // 获取所有游戏计时
     static getAllGameTimers() {
-        const timers = localStorage.getItem('moneyApp_gameTimers');
+        const timers = localStorage.getItem(SYS_KEYS.gameTimers());
         return timers ? JSON.parse(timers) : {};
     }
     
@@ -4198,7 +4521,7 @@ class DataManager {
     static clearGameTimer(gameId) {
         const timers = this.getAllGameTimers();
         delete timers[gameId];
-        localStorage.setItem('moneyApp_gameTimers', JSON.stringify(timers));
+        localStorage.setItem(SYS_KEYS.gameTimers(), JSON.stringify(timers));
     }
     
     // 计算剩余时间（支持跨天、暂停和后台运行）
@@ -4236,7 +4559,7 @@ class DataManager {
 
     // 获取下载的游戏列表（过滤掉已删除的，可按手机ID筛选）
     static getDownloadedGames(phoneId = null) {
-        const games = localStorage.getItem(DOWNLOADED_GAMES_KEY);
+        const games = localStorage.getItem(getSystemKey(DOWNLOADED_GAMES_KEY));
         if (!games) return [];
         const allGames = JSON.parse(games);
         // 只返回未删除的游戏
@@ -4252,7 +4575,7 @@ class DataManager {
     
     // 获取所有游戏（包括已删除的，用于判断是否是重新下载）
     static getAllGames() {
-        const games = localStorage.getItem(DOWNLOADED_GAMES_KEY);
+        const games = localStorage.getItem(getSystemKey(DOWNLOADED_GAMES_KEY));
         return games ? JSON.parse(games) : [];
     }
     
@@ -4265,7 +4588,7 @@ class DataManager {
 
     // 保存下载的游戏列表
     static saveDownloadedGames(games) {
-        localStorage.setItem(DOWNLOADED_GAMES_KEY, JSON.stringify(games));
+        localStorage.setItem(getSystemKey(DOWNLOADED_GAMES_KEY), JSON.stringify(games));
     }
     
     // 更新下载的游戏名称
@@ -4804,18 +5127,12 @@ class DataManager {
 
     static clearAllData() {
         // 清除旧的存储键
-        localStorage.removeItem(DATA_KEY);
-        localStorage.removeItem('expandedPhones');
-        
-        // 清除新的分片存储键
-        localStorage.removeItem(PHONES_KEY);
-        localStorage.removeItem(INSTALLMENTS_KEY);
-        localStorage.removeItem(EXPENSES_KEY);
-        localStorage.removeItem(SETTINGS_KEY);
+        localStorage.removeItem(getSystemKey(DATA_KEY));
+        localStorage.removeItem(SYS_KEYS.dailyGapRecords());
         
         // 清除提醒相关的存储键
-        localStorage.removeItem('withdraw_reminder');
-        localStorage.removeItem('daily_goal_reminder');
+        localStorage.removeItem(SYS_KEYS.withdrawReminder());
+        localStorage.removeItem(SYS_KEYS.dailyGoalReminder());
         
         // 清除所有分期提醒键
         const keysToRemove = [];
@@ -4828,11 +5145,11 @@ class DataManager {
         keysToRemove.forEach(key => localStorage.removeItem(key));
         
         // 清除游戏管理相关的存储键
-        localStorage.removeItem(DOWNLOADED_GAMES_KEY);
-        localStorage.removeItem(GAME_DRAW_HISTORY_KEY);
+        localStorage.removeItem(getSystemKey(DOWNLOADED_GAMES_KEY));
+        localStorage.removeItem(SYS_KEYS.gameDrawHistory());
     }
     
-    // 主题相关方法
+    // 主题相关方法（全局共享，不按系统隔离）
     static getTheme() {
         return localStorage.getItem('app-theme') || 'default';
     }
@@ -5883,8 +6200,11 @@ function showPhoneDrawResultById(id) {
 
 // 初始化
 function init() {
+    // 初始化导航栏标题（双系统）
+    updateNavbarTitle();
+    
     // 加载展开状态
-    const savedExpanded = localStorage.getItem('expandedPhones');
+    const savedExpanded = localStorage.getItem(SYS_KEYS.expandedPhones());
     if (savedExpanded) {
         expandedPhones = JSON.parse(savedExpanded);
     }
@@ -6490,27 +6810,37 @@ function renderDashboard() {
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                     <div>
                         <div style="font-size: 14px; font-weight: 600; color: #3b82f6;">💎 可高档提现</div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">达到高档提现金额的软件</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">按提现档位分类查看</div>
                     </div>
                     <div style="text-align: right;">
                         <div style="font-size: 22px; font-weight: 700; color: #3b82f6;">¥${highWithdrawData.total.toFixed(2)}</div>
                         <div style="font-size: 11px; color: var(--text-muted);">${highWithdrawData.appCount} 个软件可提现</div>
                     </div>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                    ${highWithdrawData.apps.slice(0, 5).map(app => `
-                        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px;">
-                            <div>
-                                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</span>
-                                <span style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">${app.phoneName}</span>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    ${highWithdrawData.tiers.map(tier => `
+                        <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${tier.tierName}</span>
+                                    <span style="font-size: 11px; color: var(--text-muted);">${tier.appCount} 个软件</span>
+                                </div>
+                                <div style="font-size: 15px; font-weight: 700; color: #3b82f6;">¥${tier.total.toFixed(2)}</div>
                             </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 13px; font-weight: 600; color: #3b82f6;">¥${app.balance.toFixed(2)}</div>
-                                <div style="font-size: 10px; color: var(--text-muted);">高档¥${app.highWithdraw.toFixed(2)}</div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                ${tier.apps.slice(0, 5).map(app => `
+                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
+                                        <div>
+                                            <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${app.name}</span>
+                                            <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${app.phoneName}</span>
+                                        </div>
+                                        <div style="font-size: 12px; font-weight: 600; color: #3b82f6;">¥${app.balance.toFixed(2)}</div>
+                                    </div>
+                                `).join('')}
+                                ${tier.appCount > 5 ? `<div style="font-size: 10px; color: var(--text-muted); text-align: center; padding-top: 2px;">还有 ${tier.appCount - 5} 个软件...</div>` : ''}
                             </div>
                         </div>
                     `).join('')}
-                    ${highWithdrawData.appCount > 5 ? `<div style="font-size: 11px; color: var(--text-muted); text-align: center;">还有 ${highWithdrawData.appCount - 5} 个软件...</div>` : ''}
                 </div>
             </div>
             ` : ''}
@@ -6532,9 +6862,6 @@ function renderDashboard() {
 
     // 渲染软件到期提醒
     renderExpiringApps();
-
-    // 渲染收益趋势图表
-    renderEarningsChart();
 
     // 更新今日收益显示
     updateTodayEarnings();
@@ -6871,8 +7198,8 @@ function renderActivityPage() {
     
     // 为每个软件添加短剧状态
     const appsWithDramaInfo = activeApps.map(app => {
-        const dramaRecords = DataManager.getDramaRecords(app.phoneId, app.id);
-        const todayRecords = dramaRecords.filter(r => r.date === today);
+        const dramaRecords = DataManager.getActiveDramaRecords(app.phoneId, app.id);
+        const todayRecords = dramaRecords;
         
         let appWatched = 0;
         let appTotal = 0;
@@ -9130,7 +9457,7 @@ function getCurrentYear() {
 // 切换手机展开/折叠
 function togglePhoneExpand(phoneId) {
     expandedPhones[phoneId] = !expandedPhones[phoneId];
-    localStorage.setItem('expandedPhones', JSON.stringify(expandedPhones));
+    localStorage.setItem(SYS_KEYS.expandedPhones(), JSON.stringify(expandedPhones));
     renderPhones();
 }
 
@@ -9529,7 +9856,13 @@ function openAddAppModal(phoneId) {
         <div class="form-group">
             <label class="form-label">高档提现额度 (元)</label>
             <input type="number" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
-            <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
+            <div class="form-hint">默认高档提现金额，不设置则使用最小提现金额</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">多档位提现额度</label>
+            <div id="add-tiers-container" style="display: flex; flex-direction: column; gap: 6px;"></div>
+            <button type="button" onclick="addAddTier()" style="margin-top: 6px; background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px dashed rgba(59,130,246,0.3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; width: 100%;">+ 添加档位</button>
+            <div class="form-hint">添加多个提现档位，首页将按档位分类显示可提现总额</div>
         </div>
         <div class="form-group">
             <label class="form-label">清零周期 (天)</label>
@@ -9547,6 +9880,16 @@ function openAddAppModal(phoneId) {
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
                 const clearPeriod = parseInt(document.getElementById('app-clear-period').value) || 0;
+                
+                // 收集多档位提现额度
+                const highWithdrawTiers = [];
+                document.querySelectorAll('#add-tiers-container > div').forEach(tierDiv => {
+                    const tierName = tierDiv.querySelector('.add-tier-name')?.value.trim() || '';
+                    const tierAmount = parseFloat(tierDiv.querySelector('.add-tier-amount')?.value) || 0;
+                    if (tierAmount > 0) {
+                        highWithdrawTiers.push({ name: tierName, amount: tierAmount });
+                    }
+                });
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -9563,7 +9906,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, clearPeriod });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, highWithdrawTiers, clearPeriod });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -9577,7 +9920,33 @@ function openAddAppModal(phoneId) {
     ]);
 }
 
+function addAddTier() {
+    const container = document.getElementById('add-tiers-container');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+    div.innerHTML = `
+        <input type="text" class="form-input add-tier-name" placeholder="档位名称(如:1元档)" value="" style="flex: 1; font-size: 13px;">
+        <input type="number" class="form-input add-tier-amount" placeholder="金额" value="" step="0.01" style="width: 90px; font-size: 13px;">
+        <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; flex-shrink: 0;">✕</button>
+    `;
+    container.appendChild(div);
+}
+
 // 打开编辑软件模态框
+function addEditTier() {
+    const container = document.getElementById('edit-tiers-container');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+    div.innerHTML = `
+        <input type="text" class="form-input edit-tier-name" placeholder="档位名称(如:1元档)" value="" style="flex: 1; font-size: 13px;">
+        <input type="number" class="form-input edit-tier-amount" placeholder="金额" value="" step="0.01" style="width: 90px; font-size: 13px;">
+        <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; flex-shrink: 0;">✕</button>
+    `;
+    container.appendChild(div);
+}
+
 function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
     console.log('openEditAppModal called with:', phoneId, appId, 'fromQuickEdit:', fromQuickEdit);
     // 先关闭当前模态框
@@ -9642,7 +10011,21 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         <div class="form-group">
             <label class="form-label">高档提现额度 (元)</label>
             <input type="number" id="edit-app-high-withdraw" class="form-input" value="${(app.highWithdraw || 0).toFixed(2)}" step="0.01">
-            <div class="form-hint">推荐的高档提现金额，不设置则使用最小提现金额</div>
+            <div class="form-hint">默认高档提现金额，不设置则使用最小提现金额</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">多档位提现额度</label>
+            <div id="edit-tiers-container" style="display: flex; flex-direction: column; gap: 6px;">
+                ${(app.highWithdrawTiers || []).map((tier, i) => `
+                    <div style="display: flex; gap: 6px; align-items: center;" data-tier-index="${i}">
+                        <input type="text" class="form-input edit-tier-name" placeholder="档位名称(如:1元档)" value="${tier.name || ''}" style="flex: 1; font-size: 13px;">
+                        <input type="number" class="form-input edit-tier-amount" placeholder="金额" value="${tier.amount || ''}" step="0.01" style="width: 90px; font-size: 13px;">
+                        <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; flex-shrink: 0;">✕</button>
+                    </div>
+                `).join('')}
+            </div>
+            <button type="button" onclick="addEditTier()" style="margin-top: 6px; background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px dashed rgba(59,130,246,0.3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; width: 100%;">+ 添加档位</button>
+            <div class="form-hint">添加多个提现档位，首页将按档位分类显示可提现总额</div>
         </div>
         <div class="form-group">
             <label class="form-label">清零周期 (天)</label>
@@ -9683,6 +10066,16 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
                 const clearPeriod = parseInt(document.getElementById('edit-app-clear-period').value) || 0;
                 const historicalWithdrawn = parseFloat(document.getElementById('edit-app-historical').value) || 0;
+                
+                // 收集多档位提现额度
+                const highWithdrawTiers = [];
+                document.querySelectorAll('#edit-tiers-container > div').forEach(tierDiv => {
+                    const tierName = tierDiv.querySelector('.edit-tier-name')?.value.trim() || '';
+                    const tierAmount = parseFloat(tierDiv.querySelector('.edit-tier-amount')?.value) || 0;
+                    if (tierAmount > 0) {
+                        highWithdrawTiers.push({ name: tierName, amount: tierAmount });
+                    }
+                });
 
                 if (name) {
                     try {
@@ -9713,6 +10106,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
+                            highWithdrawTiers,
                             clearPeriod,
                             historicalWithdrawn
                         });
@@ -9745,6 +10139,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             balance: newBalance,
                             minWithdraw,
                             highWithdraw,
+                            highWithdrawTiers,
                             clearPeriod,
                             historicalWithdrawn
                         });
@@ -10158,7 +10553,7 @@ function openQuickEditModal() {
     }
     
     // 加载保存的排序顺序
-    const savedOrder = JSON.parse(localStorage.getItem('quickEditAppOrder') || '[]');
+    const savedOrder = JSON.parse(localStorage.getItem(SYS_KEYS.quickEditAppOrder()) || '[]');
     const allAppNames = Array.from(appNameMap.keys());
     
     // 根据保存的顺序排序
@@ -10244,7 +10639,7 @@ function openQuickEditModal() {
                     // 保存新顺序
                     const items = appList.querySelectorAll('.app-select-item');
                     const newOrder = Array.from(items).map(it => it.getAttribute('data-app-name'));
-                    localStorage.setItem('quickEditAppOrder', JSON.stringify(newOrder));
+                    localStorage.setItem(SYS_KEYS.quickEditAppOrder(), JSON.stringify(newOrder));
                 });
             });
         }
@@ -10277,7 +10672,7 @@ function handleDrop(event, targetElement) {
     window.quickEditAppNames = itemsArr.map(it => it.getAttribute('data-app-name'));
     
     // 保存到localStorage
-    localStorage.setItem('quickEditAppOrder', JSON.stringify(window.quickEditAppNames));
+    localStorage.setItem(SYS_KEYS.quickEditAppNames(), JSON.stringify(window.quickEditAppNames));
     
     window.dragIndex = null;
     appList.querySelectorAll('.app-select-item').forEach(it => {
@@ -13024,7 +13419,7 @@ function editDownloadedGameName(gameId, currentName) {
 // 渲染抽签历史（显示所有历史记录）
 function renderGameDrawHistoryList() {
     // 直接读取 localStorage
-    const historyStr = localStorage.getItem('moneyApp_gameDrawHistory');
+    const historyStr = localStorage.getItem(SYS_KEYS.gameDrawHistory());
     let history = historyStr ? JSON.parse(historyStr) : [];
     const container = document.getElementById('game-draw-history');
     
@@ -13077,7 +13472,7 @@ function renderGameDrawHistoryList() {
 
 // 标记抽签历史今日完成
 function completeDrawHistoryItem(date, gameId) {
-    const historyStr = localStorage.getItem('moneyApp_gameDrawHistory');
+    const historyStr = localStorage.getItem(SYS_KEYS.gameDrawHistory());
     const history = historyStr ? JSON.parse(historyStr) : [];
     
     // 根据日期和游戏ID查找记录
@@ -13125,7 +13520,7 @@ function completeDrawHistoryItem(date, gameId) {
         
         showToast('🎉 恭喜完成今日游戏任务！');
         
-        localStorage.setItem('moneyApp_gameDrawHistory', JSON.stringify(history));
+        localStorage.setItem(SYS_KEYS.gameDrawHistory(), JSON.stringify(history));
         renderGameDrawHistoryList();
         
         // 同时更新今日抽签区域的显示

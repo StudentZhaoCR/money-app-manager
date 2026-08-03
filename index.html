@@ -32,7 +32,11 @@
 <body>
     <!-- 导航栏 -->
     <nav class="navbar">
-        <div class="nav-title">赚钱软件管理系统</div>
+        <div class="nav-title" onclick="openSystemSwitchModal()" style="cursor: pointer; gap: 6px;">
+            <span id="nav-system-icon">📱</span>
+            <span id="nav-system-name">赚钱软件管理系统</span>
+            <span style="font-size: 11px; opacity: 0.6;">🔀</span>
+        </div>
     </nav>
 
     <!-- 主内容区域 -->
@@ -56,17 +60,6 @@
                 </div>
                 <div id="expiring-apps-content">
                     <!-- 提醒内容将由JS生成 -->
-                </div>
-            </div>
-
-            <!-- 收益趋势图表 -->
-            <div class="card mt-4" id="earnings-chart-card">
-                <div class="section-header">
-                    <div class="section-title">📈 收益趋势</div>
-                    <div class="section-divider"></div>
-                </div>
-                <div id="earnings-chart-content">
-                    <!-- 图表内容将由JS生成 -->
                 </div>
             </div>
 
