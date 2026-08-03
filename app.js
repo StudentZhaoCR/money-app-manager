@@ -582,6 +582,16 @@ function showVoiceEditConfirm(match, parsed, balance) {
                     renderPhones();
                     renderTotalEarnings();
                     renderYearlyGoal();
+                    
+                    // 检查本次赚取金额是否达到最小提现金额，如果没有则提示活跃
+                    const oldBalance = app.balance || 0;
+                    const earnedAmount = balance - oldBalance;
+                    const minWithdraw = app.minWithdraw || 0;
+                    if (earnedAmount > 0 && earnedAmount < minWithdraw) {
+                        setTimeout(() => {
+                            showActiveReminderModal(app.name, earnedAmount, minWithdraw, phone.id, app.id);
+                        }, 100);
+                    }
                 } catch (error) {
                     showToast('保存失败：' + error.message, 'error');
                 }
@@ -9947,6 +9957,79 @@ function addEditTier() {
     container.appendChild(div);
 }
 
+// 显示活跃提醒模态框
+function showActiveReminderModal(appName, earnedAmount, minWithdraw, phoneId, appId) {
+    const remaining = (minWithdraw - earnedAmount).toFixed(2);
+    const progressPercent = Math.round((earnedAmount / minWithdraw) * 100);
+    
+    const html = `
+        <div style="padding: 8px 0;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 48px; margin-bottom: 12px;">📺</div>
+                <div style="font-weight: 700; font-size: 16px; color: var(--text-primary); margin-bottom: 8px;">${appName}</div>
+                <div style="font-size: 13px; color: var(--text-secondary);">本次赚取金额尚未达到最小提现金额</div>
+            </div>
+            
+            <!-- 进度卡片 -->
+            <div style="background: linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(59,130,246,0.1) 100%); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">本次赚取</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #10b981;">+¥${earnedAmount.toFixed(2)}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">最小提现金额</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #3b82f6;">¥${minWithdraw.toFixed(2)}</div>
+                    </div>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                    <div style="background: linear-gradient(90deg, #10b981, #3b82f6); height: 100%; width: ${progressPercent}%; border-radius: 4px; transition: width 0.3s;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                    <span style="color: var(--text-secondary);">进度 ${progressPercent}%</span>
+                    <span style="color: #f59e0b; font-weight: 600;">还差 ¥${remaining}</span>
+                </div>
+            </div>
+            
+            <!-- 建议操作 -->
+            <div style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span style="font-size: 18px;">💡</span>
+                    <span style="font-weight: 600; font-size: 13px; color: #f59e0b;">建议进行活跃操作</span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                    本次赚取 ¥${earnedAmount.toFixed(2)} 不足一次提现（需 ¥${minWithdraw.toFixed(2)}）。
+                    <br>观看短剧可以帮助维持软件活跃度，同时也可能获得额外收益。
+                </div>
+            </div>
+        </div>
+    `;
+    
+    showModal('📺 活跃提醒', html, [
+        { text: '稍后再说', class: 'btn-secondary', action: closeModal },
+        {
+            text: '去活跃',
+            class: 'btn-primary',
+            action: () => {
+                closeModal();
+                setTimeout(() => {
+                    showPage('activity');
+                }, 100);
+            }
+        },
+        {
+            text: '观看短剧',
+            class: 'btn-primary',
+            action: () => {
+                closeModal();
+                setTimeout(() => {
+                    openDramaModal(phoneId, appId);
+                }, 200);
+            }
+        }
+    ], { forceReplace: true });
+}
+
 function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
     console.log('openEditAppModal called with:', phoneId, appId, 'fromQuickEdit:', fromQuickEdit);
     // 先关闭当前模态框
@@ -10154,8 +10237,13 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         // 立即更新年度目标
                         renderYearlyGoal();
                         
-                        // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
-                        if (fromQuickEdit) {
+                        // 检查本次赚取金额是否达到最小提现金额，如果没有则提示活跃
+                        if (earnedAmount > 0 && earnedAmount < minWithdraw) {
+                            setTimeout(() => {
+                                showActiveReminderModal(name, earnedAmount, minWithdraw, phoneId, appId);
+                            }, 100);
+                        } else if (fromQuickEdit) {
+                            // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
                             setTimeout(() => {
                                 openQuickEditModal();
                             }, 100);
@@ -15501,6 +15589,14 @@ function quickEditBalanceFromGoal() {
                         
                         // 刷新日历显示
                         renderDailyGoalContent();
+                        
+                        // 检查本次赚取金额是否达到最小提现金额，如果没有则提示活跃
+                        if (earnedAmount > 0 && earnedAmount < minWithdraw) {
+                            setTimeout(() => {
+                                showActiveReminderModal(app.name, earnedAmount, minWithdraw, currentDailyGoalPhoneId, currentDailyGoalAppId);
+                            }, 100);
+                            return; // 不关闭模态框，让活跃提醒显示
+                        }
                     }
                     
                     closeModal();
