@@ -6711,6 +6711,23 @@ function restorePageState(pageName) {
     console.log(`恢复页面状态: ${pageName}`, state);
 }
 
+// 展开/收起高档提现档位的软件列表
+function toggleHighWithdrawTier(tierIdx) {
+    const appsContainer = document.getElementById(`tier-apps-${tierIdx}`);
+    const arrow = document.getElementById(`tier-arrow-${tierIdx}`);
+    if (!appsContainer || !arrow) return;
+    
+    if (appsContainer.style.display === 'none') {
+        appsContainer.style.display = 'flex';
+        arrow.style.transform = 'rotate(0deg)';
+        arrow.textContent = '▼';
+    } else {
+        appsContainer.style.display = 'none';
+        arrow.style.transform = 'rotate(-90deg)';
+        arrow.textContent = '▶';
+    }
+}
+
 // 渲染仪表盘
 function renderDashboard() {
     const data = DataManager.loadData();
@@ -6828,17 +6845,20 @@ function renderDashboard() {
                     </div>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
-                    ${highWithdrawData.tiers.map(tier => `
+                    ${highWithdrawData.tiers.map((tier, tierIdx) => `
                         <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer;" onclick="toggleHighWithdrawTier(${tierIdx})">
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${tier.tierName}</span>
                                     <span style="font-size: 11px; color: var(--text-muted);">${tier.appCount} 个软件</span>
                                 </div>
-                                <div style="font-size: 15px; font-weight: 700; color: #3b82f6;">¥${tier.total.toFixed(2)}</div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="font-size: 15px; font-weight: 700; color: #3b82f6;">¥${tier.total.toFixed(2)}</div>
+                                    <span id="tier-arrow-${tierIdx}" style="font-size: 12px; color: var(--text-muted); transition: transform 0.2s;">▼</span>
+                                </div>
                             </div>
-                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                ${tier.apps.slice(0, 5).map(app => `
+                            <div id="tier-apps-${tierIdx}" style="display: flex; flex-direction: column; gap: 4px;">
+                                ${tier.apps.map(app => `
                                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
                                         <div>
                                             <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${app.name}</span>
@@ -6847,7 +6867,6 @@ function renderDashboard() {
                                         <div style="font-size: 12px; font-weight: 600; color: #3b82f6;">¥${app.balance.toFixed(2)}</div>
                                     </div>
                                 `).join('')}
-                                ${tier.appCount > 5 ? `<div style="font-size: 10px; color: var(--text-muted); text-align: center; padding-top: 2px;">还有 ${tier.appCount - 5} 个软件...</div>` : ''}
                             </div>
                         </div>
                     `).join('')}
