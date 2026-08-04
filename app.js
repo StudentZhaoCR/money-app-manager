@@ -29,7 +29,8 @@ const SYS_KEYS = {
     dailyGoalReminder: () => getSystemKey('daily_goal_reminder'),
     quickEditAppOrder: () => getSystemKey('quickEditAppOrder'),
     quickEditAppNames: () => getSystemKey('quickEditAppNames'),
-    dailyGapRecords: () => getSystemKey('moneyApp_dailyGapRecords')
+    dailyGapRecords: () => getSystemKey('moneyApp_dailyGapRecords'),
+    shoppingRecords: () => getSystemKey('moneyApp_shoppingRecords')
 };
 
 function getSystemsList() {
@@ -53,6 +54,9 @@ function switchSystem(systemId) {
     if (systemId === currentSystem) return;
     currentSystem = systemId;
     localStorage.setItem('moneyApp_currentSystem', systemId);
+    
+    // 金币自动结算（跨天补算）
+    DataManager.settlePendingCoins();
     
     // 添加切换动画
     const mainContent = document.querySelector('.main-content');
@@ -171,6 +175,7 @@ function openSystemSwitchModal() {
                 localStorage.setItem(getSystemKeyFor(SETTINGS_KEY, newId), JSON.stringify({}));
                 localStorage.setItem(getSystemKeyFor(DATA_KEY, newId), JSON.stringify({ phones: [], installments: [], expenses: [], settings: {} }));
                 localStorage.setItem(getSystemKeyFor('moneyApp_dailyGapRecords', newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor('moneyApp_shoppingRecords', newId), JSON.stringify([]));
                 localStorage.setItem(getSystemKeyFor('moneyApp_downloadedGames', newId), JSON.stringify([]));
                 // 初始化其他隔离的存储键
                 localStorage.setItem(getSystemKeyFor('expandedPhones', newId), JSON.stringify([]));
@@ -529,9 +534,16 @@ function parseTextInput() {
 function showVoiceEditConfirm(match, parsed, balance) {
     const { phone, app } = match;
     const currentBalance = app.balance || 0;
-    const change = balance - currentBalance;
+    const exchangeRate = app.exchangeRate || 0;
+    const today = getCurrentDate();
+    const todayCoinRecord = (app.dailyCoins || []).find(c => c.date === today);
+    const currentTodayCoins = todayCoinRecord ? todayCoinRecord.coins : 0;
+    // 语音输入的余额视为金币数
+    const newCoins = parseInt(balance) || 0;
+    const coinChange = newCoins - currentTodayCoins;
+    const preview = exchangeRate > 0 ? Math.round((newCoins / exchangeRate) * 100) / 100 : 0;
     
-    showModal('确认修改余额', `
+    showModal('确认金币数量', `
         <div style="padding: 10px 0;">
             <div class="form-group">
                 <label class="form-label">手机名称</label>
@@ -548,18 +560,26 @@ function showVoiceEditConfirm(match, parsed, balance) {
                 <input type="text" class="form-input" value="¥${currentBalance.toFixed(2)}" disabled>
             </div>
             <div class="form-group">
-                <label class="form-label">新余额</label>
-                <input type="text" class="form-input" value="¥${balance.toFixed(2)}" disabled>
+                <label class="form-label">兑换比例</label>
+                <input type="text" class="form-input" value="${exchangeRate > 0 ? exchangeRate + ' 金币 = 1元' : '未设置'}" disabled>
+            </div>
+            <div class="form-group">
+                <label class="form-label">今日金币（原: ${currentTodayCoins}）</label>
+                <input type="text" class="form-input" value="${newCoins}" disabled>
                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">语音识别：${parsed.balance}</div>
             </div>
-            <div style="padding: 12px; background: ${change >= 0 ? '#f0fdf4' : '#fef2f2'}; border-radius: 8px; margin-top: 8px;">
-                <div style="font-size: 14px; font-weight: 600; color: ${change >= 0 ? '#166534' : '#991b1b'};">
-                    ${change >= 0 ? '+' : ''}¥${change.toFixed(2)}
+            ${exchangeRate > 0 ? `
+            <div style="padding: 12px; background: #f0fdf4; border-radius: 8px; margin-top: 8px;">
+                <div style="font-size: 14px; font-weight: 600; color: #166534;">
+                    预计收益: ¥${preview.toFixed(2)}
                 </div>
                 <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                    ${change >= 0 ? '余额增加' : '余额减少'}
+                    ${newCoins} ÷ ${exchangeRate} = ¥${preview.toFixed(2)}（次日自动结算）
                 </div>
-            </div>
+            </div>` : `
+            <div style="padding: 12px; background: #fef3c7; border-radius: 8px; margin-top: 8px;">
+                <div style="font-size: 13px; color: #92400e;">⚠️ 未设置兑换比例，请先在编辑软件中设置</div>
+            </div>`}
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -570,7 +590,8 @@ function showVoiceEditConfirm(match, parsed, balance) {
                 try {
                     DataManager.editApp(phone.id, app.id, {
                         name: app.name,
-                        balance: balance,
+                        exchangeRate: exchangeRate,
+                        todayCoins: newCoins,
                         minWithdraw: app.minWithdraw || 0,
                         highWithdraw: app.highWithdraw || 0,
                         clearPeriod: app.clearPeriod || 0,
@@ -578,20 +599,10 @@ function showVoiceEditConfirm(match, parsed, balance) {
                     });
                     
                     closeModal();
-                    showToast('余额修改成功', 'success');
+                    showToast('今日金币已更新', 'success');
                     renderPhones();
                     renderTotalEarnings();
-                    renderYearlyGoal();
-                    
-                    // 检查本次赚取金额是否达到最小提现金额，如果没有则提示活跃
-                    const oldBalance = app.balance || 0;
-                    const earnedAmount = balance - oldBalance;
-                    const minWithdraw = app.minWithdraw || 0;
-                    if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                        setTimeout(() => {
-                            showActiveReminderModal(app.name, earnedAmount, minWithdraw, phone.id, app.id);
-                        }, 100);
-                    }
+                    renderDashboard();
                 } catch (error) {
                     showToast('保存失败：' + error.message, 'error');
                 }
@@ -3161,10 +3172,27 @@ class DataManager {
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
+                // 从 balanceHistory 获取今日已结算的收益
                 if (app.balanceHistory && app.balanceHistory.length > 0) {
                     const todayRecord = app.balanceHistory.find(record => record.date === today);
                     if (todayRecord && todayRecord.change > 0) {
                         totalEarned += parseFloat(todayRecord.change) || 0;
+                    }
+                }
+                
+                // 从 dailyEarnings 获取今日收益
+                if (app.dailyEarnings && app.dailyEarnings[today]) {
+                    totalEarned += parseFloat(app.dailyEarnings[today]) || 0;
+                }
+                
+                // 今日待结算金币的预估收益
+                if (app.dailyCoins && app.exchangeRate > 0) {
+                    const todayCoinsRecord = app.dailyCoins.find(c => c.date === today);
+                    if (todayCoinsRecord && todayCoinsRecord.coins > 0) {
+                        const preview = Math.round((todayCoinsRecord.coins / app.exchangeRate) * 100) / 100;
+                        if (preview > 0) {
+                            totalEarned += preview;
+                        }
                     }
                 }
             });
@@ -3213,6 +3241,7 @@ class DataManager {
         
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
+                // 从 balanceHistory 获取历史收益（已结算的）
                 if (app.balanceHistory && app.balanceHistory.length > 0) {
                     app.balanceHistory.forEach(record => {
                         if (record.date <= today && record.change > 0) {
@@ -3222,6 +3251,32 @@ class DataManager {
                             dailyTotals[record.date] += parseFloat(record.change) || 0;
                         }
                     });
+                }
+                
+                // 从 dailyEarnings 获取收益
+                if (app.dailyEarnings) {
+                    Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
+                        if (date <= today && amount > 0) {
+                            if (!dailyTotals[date]) {
+                                dailyTotals[date] = 0;
+                            }
+                            dailyTotals[date] += parseFloat(amount) || 0;
+                        }
+                    });
+                }
+                
+                // 今日待结算金币的预估收益
+                if (app.dailyCoins && app.exchangeRate > 0) {
+                    const todayCoinsRecord = app.dailyCoins.find(c => c.date === today);
+                    if (todayCoinsRecord && todayCoinsRecord.coins > 0) {
+                        const preview = Math.round((todayCoinsRecord.coins / app.exchangeRate) * 100) / 100;
+                        if (preview > 0) {
+                            if (!dailyTotals[today]) {
+                                dailyTotals[today] = 0;
+                            }
+                            dailyTotals[today] += preview;
+                        }
+                    }
                 }
             });
         });
@@ -4141,6 +4196,8 @@ class DataManager {
                 highWithdraw: parseFloat(appData.highWithdraw) || 0,
                 highWithdrawTiers: appData.highWithdrawTiers || [],
                 clearPeriod: parseInt(appData.clearPeriod) || 0,
+                exchangeRate: parseFloat(appData.exchangeRate) || 0, // 兑换比例：X金币=1元
+                dailyCoins: [], // 每日金币记录 [{ date: 'YYYY-MM-DD', coins: 12345, settled: false }]
                 lastLoginDate: today,
                 withdrawn: 0,
                 historicalWithdrawn: 0,
@@ -4168,105 +4225,26 @@ class DataManager {
                     throw new Error('最小提现金额必须大于0');
                 }
                 
-                const oldBalance = app.balance || 0;
-                const newBalance = appData.balance || 0;
-                const lastUpdatedStr = app.lastUpdated || null;
-                
                 app.name = appData.name;
-                app.balance = newBalance;
                 app.minWithdraw = parseFloat(appData.minWithdraw);
                 app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
                 app.highWithdrawTiers = appData.highWithdrawTiers || [];
                 app.clearPeriod = parseInt(appData.clearPeriod) || 0;
+                app.exchangeRate = parseFloat(appData.exchangeRate) || app.exchangeRate || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
-                
-                if (newBalance !== oldBalance) {
-                    app.lastLoginDate = getCurrentDate();
-                }
-                
-                // 记录余额变化（只记录增加的情况，提现不算）
-                let todayTotalEarnings = 0;
-                if (newBalance > oldBalance) {
-                    const isFirstAddWithBalance = (!app.balanceHistory || app.balanceHistory.length === 0) && oldBalance === 0 && newBalance > 0;
+
+                // 如果传入了当日金币数，更新今日金币记录
+                if (appData.todayCoins !== undefined && appData.todayCoins !== null) {
                     const today = getCurrentDate();
-                    if (!app.earningStartDate) {
-                        app.earningStartDate = today;
-                    }
-                    
-                    if (!app.balanceHistory) {
-                        app.balanceHistory = [];
-                    }
-                    
-                    const now = new Date();
-                    const change = newBalance - oldBalance;
-                    
-                    console.log('记录余额变化:', { oldBalance, newBalance, change, today, isFirstAddWithBalance });
-                    
-                    if (!app.dailyEarnings) {
-                        app.dailyEarnings = {};
-                    }
-                    
-                    if (isFirstAddWithBalance) {
-                        app.balanceHistory.push({
-                            date: today,
-                            balance: newBalance,
-                            change: change,
-                            note: '初始余额'
-                        });
-                        app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
+                    if (!app.dailyCoins) app.dailyCoins = [];
+                    const existing = app.dailyCoins.find(c => c.date === today);
+                    if (existing) {
+                        existing.coins = parseInt(appData.todayCoins) || 0;
                     } else {
-                        app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + change;
-                        
-                        const existingRecord = app.balanceHistory.find(h => h.date === today);
-                        if (existingRecord) {
-                            existingRecord.change += change;
-                            existingRecord.balance = newBalance;
-                        } else {
-                            app.balanceHistory.push({
-                                date: today,
-                                balance: newBalance,
-                                change: change,
-                                note: '收益记录'
-                            });
-                        }
-                        
-                        app.balanceHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
+                        app.dailyCoins.push({ date: today, coins: parseInt(appData.todayCoins) || 0, settled: false });
                     }
-                    
-                    if (!isFirstAddWithBalance) {
-                        todayTotalEarnings = app.dailyEarnings[today] || 0;
-                        
-                        console.log('更新 dailyEarnings:', app.dailyEarnings);
-                        
-                        let allAppsTodayEarnings = 0;
-                        data.phones.forEach(p => {
-                            p.apps.forEach(a => {
-                                if (a.dailyEarnings && a.dailyEarnings[today]) {
-                                    allAppsTodayEarnings += a.dailyEarnings[today];
-                                }
-                            });
-                        });
-                        
-                        const yearlyDailyTarget = this.calculateYearlyDailyTarget();
-                        const dailyTargetAmount = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
-                        
-                        console.log('检查日目标:', { allAppsTodayEarnings, dailyTarget: dailyTargetAmount });
-                        
-                        console.log('今日总收益:', allAppsTodayEarnings);
-                        if (dailyTargetAmount > 0) {
-                            console.log('日目标:', dailyTargetAmount);
-                            if (allAppsTodayEarnings >= dailyTargetAmount) {
-                                console.log('达到日目标！');
-                            } else {
-                                console.log('未达到日目标');
-                            }
-                        }
-                    } else {
-                        console.log('首次添加软件且有余额，不计入当日收益');
-                    }
-                } else {
-                    console.log('余额未增加，不记录:', { oldBalance, newBalance });
+                    app.lastLoginDate = today;
                 }
 
                 this.saveData(data);
@@ -4275,6 +4253,205 @@ class DataManager {
         return data;
     }
     
+    // 金币自动结算：将历史未结算的金币按兑换比例转为余额和收益
+    static settlePendingCoins() {
+        const data = this.loadData();
+        const today = getCurrentDate();
+        let settledCount = 0;
+
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (!app.dailyCoins || app.dailyCoins.length === 0) return;
+                if (!app.exchangeRate || app.exchangeRate <= 0) return;
+
+                // 找到所有日期小于今天且未结算的记录
+                const pending = app.dailyCoins.filter(c => !c.settled && c.date < today);
+                if (pending.length === 0) return;
+
+                if (!app.dailyEarnings) app.dailyEarnings = {};
+                if (!app.balanceHistory) app.balanceHistory = [];
+
+                pending.forEach(record => {
+                    // 按兑换比例计算收益，保留两位小数，四舍五入
+                    const earned = Math.round((record.coins / app.exchangeRate) * 100) / 100;
+                    if (earned <= 0) {
+                        record.settled = true;
+                        return;
+                    }
+
+                    // 加到余额
+                    const oldBalance = app.balance || 0;
+                    app.balance = oldBalance + earned;
+
+                    // 记录当日收益
+                    app.dailyEarnings[record.date] = (app.dailyEarnings[record.date] || 0) + earned;
+
+                    // 记录余额历史
+                    const existingRecord = app.balanceHistory.find(h => h.date === record.date);
+                    if (existingRecord) {
+                        existingRecord.change += earned;
+                        existingRecord.balance = app.balance;
+                    } else {
+                        app.balanceHistory.push({
+                            date: record.date,
+                            balance: app.balance,
+                            change: earned,
+                            note: '金币结算'
+                        });
+                    }
+
+                    // 设置收益起始日期
+                    if (!app.earningStartDate) {
+                        app.earningStartDate = record.date;
+                    }
+
+                    // 标记为已结算
+                    record.settled = true;
+                    settledCount++;
+                });
+
+                app.balanceHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
+                app.lastUpdated = new Date().toISOString();
+            });
+        });
+
+        if (settledCount > 0) {
+            this.saveData(data);
+            console.log(`金币自动结算完成，共结算 ${settledCount} 条记录`);
+        }
+
+        return { settledCount, data };
+    }
+
+    // 获取今日金币收益预览（未结算的）
+    static getTodayCoinsPreview() {
+        const data = this.loadData();
+        const today = getCurrentDate();
+        const result = {
+            totalCoins: 0,
+            totalPreview: 0,
+            phones: []
+        };
+
+        data.phones.forEach(phone => {
+            const phoneData = { phoneName: phone.name, phoneId: phone.id, apps: [], totalCoins: 0, totalPreview: 0 };
+            phone.apps.forEach(app => {
+                if (app.isDeleted) return;
+                if (!app.dailyCoins || app.dailyCoins.length === 0) return;
+                const todayRecord = app.dailyCoins.find(c => c.date === today);
+                if (!todayRecord || todayRecord.coins <= 0) return;
+
+                const rate = app.exchangeRate || 0;
+                const preview = rate > 0 ? Math.round((todayRecord.coins / rate) * 100) / 100 : 0;
+                phoneData.apps.push({
+                    appName: app.name,
+                    appId: app.id,
+                    coins: todayRecord.coins,
+                    exchangeRate: rate,
+                    preview: preview
+                });
+                phoneData.totalCoins += todayRecord.coins;
+                phoneData.totalPreview += preview;
+            });
+            if (phoneData.apps.length > 0) {
+                result.phones.push(phoneData);
+                result.totalCoins += phoneData.totalCoins;
+                result.totalPreview += phoneData.totalPreview;
+            }
+        });
+
+        return result;
+    }
+
+    // ==================== 购物记录功能 ====================
+
+    // 获取所有购物记录
+    static getShoppingRecords() {
+        const stored = localStorage.getItem(SYS_KEYS.shoppingRecords());
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    // 保存购物记录
+    static saveShoppingRecords(records) {
+        localStorage.setItem(SYS_KEYS.shoppingRecords(), JSON.stringify(records));
+    }
+
+    // 添加购物记录
+    static addShoppingRecord(recordData) {
+        const records = this.getShoppingRecords();
+        const record = {
+            id: 'shop_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+            phoneId: recordData.phoneId,
+            phoneName: recordData.phoneName,
+            appId: recordData.appId,
+            appName: recordData.appName,
+            exchangeRate: parseFloat(recordData.exchangeRate) || 0,
+            productName: recordData.productName,
+            paymentAmount: parseFloat(recordData.paymentAmount) || 0,
+            rebateCoins: parseInt(recordData.rebateCoins) || 0,
+            orderDate: recordData.orderDate,
+            receiveDate: recordData.receiveDate || '',
+            createdAt: new Date().toISOString()
+        };
+        // 计算实际付款金额 = 付款金额 - 返还金币兑换的现金
+        record.actualAmount = record.exchangeRate > 0
+            ? Math.round((record.paymentAmount - record.rebateCoins / record.exchangeRate) * 100) / 100
+            : record.paymentAmount;
+        
+        records.push(record);
+        this.saveShoppingRecords(records);
+        return records;
+    }
+
+    // 编辑购物记录
+    static editShoppingRecord(id, recordData) {
+        const records = this.getShoppingRecords();
+        const record = records.find(r => r.id === id);
+        if (!record) return records;
+
+        record.phoneId = recordData.phoneId;
+        record.phoneName = recordData.phoneName;
+        record.appId = recordData.appId;
+        record.appName = recordData.appName;
+        record.exchangeRate = parseFloat(recordData.exchangeRate) || 0;
+        record.productName = recordData.productName;
+        record.paymentAmount = parseFloat(recordData.paymentAmount) || 0;
+        record.rebateCoins = parseInt(recordData.rebateCoins) || 0;
+        record.orderDate = recordData.orderDate;
+        record.receiveDate = recordData.receiveDate || '';
+        record.actualAmount = record.exchangeRate > 0
+            ? Math.round((record.paymentAmount - record.rebateCoins / record.exchangeRate) * 100) / 100
+            : record.paymentAmount;
+
+        this.saveShoppingRecords(records);
+        return records;
+    }
+
+    // 删除购物记录
+    static deleteShoppingRecord(id) {
+        const records = this.getShoppingRecords().filter(r => r.id !== id);
+        this.saveShoppingRecords(records);
+        return records;
+    }
+
+    // 获取购物统计看板数据
+    static getShoppingStats() {
+        const records = this.getShoppingRecords();
+        const totalPayment = records.reduce((sum, r) => sum + (r.paymentAmount || 0), 0);
+        const totalRebate = records.reduce((sum, r) => {
+            const cash = r.exchangeRate > 0 ? r.rebateCoins / r.exchangeRate : 0;
+            return sum + cash;
+        }, 0);
+        const totalActual = records.reduce((sum, r) => sum + (r.actualAmount || 0), 0);
+
+        return {
+            count: records.length,
+            totalPayment: Math.round(totalPayment * 100) / 100,
+            totalRebate: Math.round(totalRebate * 100) / 100,
+            totalActual: Math.round(totalActual * 100) / 100
+        };
+    }
+
     // 获取软件的收益统计
     static getAppEarningsStats(app) {
         const now = new Date();
@@ -4388,6 +4565,8 @@ class DataManager {
         let totalEarned = 0;
         let totalWithdrawn = 0;
         let totalBalance = 0;
+        let pendingEarnings = 0;
+        const today = getCurrentDate();
         
         // 遍历所有手机和软件
         data.phones.forEach(phone => {
@@ -4400,15 +4579,27 @@ class DataManager {
                 const balance = app.balance || 0;
                 totalBalance += balance;
                 
-                // 总赚取 = 已提现 + 当前余额
-                totalEarned += withdrawn + balance;
+                // 今日待结算金币的预估收益
+                if (app.dailyCoins && app.exchangeRate > 0) {
+                    const todayCoinsRecord = app.dailyCoins.find(c => c.date === today);
+                    if (todayCoinsRecord && todayCoinsRecord.coins > 0) {
+                        const preview = Math.round((todayCoinsRecord.coins / app.exchangeRate) * 100) / 100;
+                        if (preview > 0) {
+                            pendingEarnings += preview;
+                        }
+                    }
+                }
             });
         });
+        
+        // 总赚取 = 已提现 + 当前余额 + 待结算收益
+        totalEarned = totalWithdrawn + totalBalance + pendingEarnings;
         
         return {
             totalEarned: totalEarned,
             totalWithdrawn: totalWithdrawn,
             totalBalance: totalBalance,
+            pendingEarnings: pendingEarnings,
             appCount: data.phones.reduce((sum, p) => sum + p.apps.length, 0),
             phoneCount: data.phones.length
         };
@@ -5139,6 +5330,7 @@ class DataManager {
         // 清除旧的存储键
         localStorage.removeItem(getSystemKey(DATA_KEY));
         localStorage.removeItem(SYS_KEYS.dailyGapRecords());
+        localStorage.removeItem(SYS_KEYS.shoppingRecords());
         
         // 清除提醒相关的存储键
         localStorage.removeItem(SYS_KEYS.withdrawReminder());
@@ -6213,6 +6405,12 @@ function init() {
     // 初始化导航栏标题（双系统）
     updateNavbarTitle();
     
+    // 金币自动结算（跨天补算）
+    const settleResult = DataManager.settlePendingCoins();
+    if (settleResult.settledCount > 0) {
+        console.log(`自动结算了 ${settleResult.settledCount} 条金币记录`);
+    }
+
     // 加载展开状态
     const savedExpanded = localStorage.getItem(SYS_KEYS.expandedPhones());
     if (savedExpanded) {
@@ -6262,6 +6460,16 @@ function migrateOldData() {
             // 初始化 dailyEarnedHistory
             if (!app.dailyEarnedHistory) {
                 app.dailyEarnedHistory = {};
+                hasChanges = true;
+            }
+
+            // 初始化金币相关字段
+            if (app.exchangeRate === undefined) {
+                app.exchangeRate = 0;
+                hasChanges = true;
+            }
+            if (app.dailyCoins === undefined) {
+                app.dailyCoins = [];
                 hasChanges = true;
             }
 
@@ -6526,6 +6734,7 @@ function showPage(pageName) {
     if (pageName === 'app-details') renderAppDetailsPage();
     if (pageName === 'phone-earnings') renderPhoneEarningsPage();
     if (pageName === 'activity') renderActivityPage();
+    if (pageName === 'shopping') renderShoppingPage();
     
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
@@ -6711,6 +6920,424 @@ function restorePageState(pageName) {
     console.log(`恢复页面状态: ${pageName}`, state);
 }
 
+// ==================== 购物记录功能 ====================
+
+// 渲染购物记录页面
+function renderShoppingPage() {
+    const container = document.getElementById('shopping-page-content');
+    if (!container) return;
+
+    // 更新日期显示
+    const dateEl = document.getElementById('shopping-current-date');
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('zh-CN');
+
+    const stats = DataManager.getShoppingStats();
+    const records = DataManager.getShoppingRecords().sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
+
+    let html = `
+        <div style="padding: 16px;">
+            <!-- 看板 -->
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%); border-radius: 16px; padding: 20px; margin-bottom: 16px; color: white; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);">
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">购物总实际付款</div>
+                <div style="font-size: 32px; font-weight: 700; margin-bottom: 12px;">¥${stats.totalActual.toFixed(2)}</div>
+                <div style="display: flex; gap: 16px; font-size: 12px; opacity: 0.85;">
+                    <div>总付款: ¥${stats.totalPayment.toFixed(2)}</div>
+                    <div>总返还: ¥${stats.totalRebate.toFixed(2)}</div>
+                    <div>记录: ${stats.count}条</div>
+                </div>
+            </div>
+
+            <!-- 添加按钮 -->
+            <button onclick="openAddShoppingModal()" style="width: 100%; padding: 12px; margin-bottom: 16px; background: var(--primary-color); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;">
+                + 添加购物记录
+            </button>
+
+            <!-- 记录列表 -->
+            ${records.length === 0 ? `
+                <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                    <div style="font-size: 36px; margin-bottom: 12px; opacity: 0.3;">🛒</div>
+                    <div style="font-size: 14px;">暂无购物记录</div>
+                    <div style="font-size: 12px; margin-top: 4px;">点击上方按钮添加第一条记录</div>
+                </div>
+            ` : `
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    ${records.map(r => `
+                        <div style="background: var(--card-bg); border-radius: 12px; padding: 14px; border: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                                <div style="flex: 1;">
+                                    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">${r.productName}</div>
+                                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">${r.phoneName} · ${r.appName}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 16px; font-weight: 700; color: #6366f1;">¥${r.actualAmount.toFixed(2)}</div>
+                                    <div style="font-size: 10px; color: var(--text-muted);">实际付款</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-secondary);">
+                                <span style="background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px;">付款 ¥${r.paymentAmount.toFixed(2)}</span>
+                                <span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 2px 8px; border-radius: 10px;">返还 ${r.rebateCoins.toLocaleString()}金币 ${r.exchangeRate > 0 ? `(¥${(r.rebateCoins / r.exchangeRate).toFixed(2)})` : ''}</span>
+                                <span style="background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px;">下单 ${r.orderDate}</span>
+                                ${r.receiveDate ? `<span style="background: rgba(16,185,129,0.1); color: #10b981; padding: 2px 8px; border-radius: 10px;">签收 ${r.receiveDate}</span>` : '<span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 2px 8px; border-radius: 10px;">未签收</span>'}
+                            </div>
+                            <div style="display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end;">
+                                <button onclick="openEditShoppingModal('${r.id}')" style="padding: 4px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 12px; cursor: pointer; color: var(--text-primary);">编辑</button>
+                                <button onclick="deleteShoppingRecord('${r.id}')" style="padding: 4px 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; font-size: 12px; cursor: pointer; color: #ef4444;">删除</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `}
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+// 打开添加购物记录模态框
+function openAddShoppingModal() {
+    const data = DataManager.loadData();
+    const today = getCurrentDate();
+
+    // 手机列表（只显示有软件的手机）
+    const phones = data.phones.filter(p => p.apps.some(a => !a.isDeleted));
+
+    if (phones.length === 0) {
+        showToast('请先添加手机和软件', 'error');
+        return;
+    }
+
+    // 生成每个手机的软件选项HTML，用data属性存储
+    const phoneOptionsHtml = phones.map(phone => {
+        const appsHtml = phone.apps.filter(a => !a.isDeleted).map(a =>
+            `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
+        ).join('');
+        // 存储到隐藏区域
+        const appsDiv = `<div id="apps-${phone.id}" style="display:none">${appsHtml}</div>`;
+        return `<option value="${phone.id}">${phone.name}</option>` + appsDiv;
+    }).join('');
+
+    const firstPhone = phones[0];
+    const firstApps = firstPhone.apps.filter(a => !a.isDeleted);
+    const firstApp = firstApps[0];
+
+    showModal('添加购物记录', `
+        <div class="form-group">
+            <label class="form-label">选择手机</label>
+            <select id="shop-phone" class="form-input" onchange="onShopPhoneChange()">
+                ${phones.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">选择软件</label>
+            <select id="shop-app" class="form-input" onchange="updateShopRateFromApp()">
+                ${firstApps.map(a => `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`).join('')}
+            </select>
+        </div>
+        ${phones.map(phone => `
+            <div id="apps-${phone.id}" style="display:none">
+                ${phone.apps.filter(a => !a.isDeleted).map(a =>
+                    `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
+                ).join('')}
+            </div>
+        `).join('')}
+        <div class="form-group">
+            <label class="form-label">产品名称</label>
+            <input type="text" id="shop-product-name" class="form-input" placeholder="如：纸巾、零食...">
+        </div>
+        <div class="form-group">
+            <label class="form-label">付款金额 (元)</label>
+            <input type="number" id="shop-payment" class="form-input" step="0.01" min="0" placeholder="0.00" oninput="calcShopActual()">
+        </div>
+        <div class="form-group">
+            <label class="form-label">返还金币数量</label>
+            <input type="number" id="shop-rebate-coins" class="form-input" step="1" min="0" placeholder="0" oninput="calcShopActual()">
+            <div class="form-hint">购物返还的金币数，按兑换比例折算为现金</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">兑换比例</label>
+            <input type="text" id="shop-rate-display" class="form-input" value="${firstApp && firstApp.exchangeRate > 0 ? firstApp.exchangeRate + ' 金币 = 1元' : '未设置'}" disabled>
+        </div>
+        <div class="form-group">
+            <label class="form-label">下单日期</label>
+            <input type="date" id="shop-order-date" class="form-input" value="${today}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">签收日期</label>
+            <input type="date" id="shop-receive-date" class="form-input" value="">
+            <div class="form-hint">未签收可留空</div>
+        </div>
+        <div id="shop-actual-preview" style="padding: 12px; background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; margin-top: 8px;">
+            <div style="font-size: 12px; color: var(--text-secondary);">实际付款金额</div>
+            <div style="font-size: 22px; font-weight: 700; color: #6366f1;">¥0.00</div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '添加',
+            class: 'btn-primary',
+            action: function() {
+                const phoneId = document.getElementById('shop-phone').value;
+                const appId = document.getElementById('shop-app').value;
+                const appSelect = document.getElementById('shop-app');
+                const exchangeRate = parseFloat(appSelect.options[appSelect.selectedIndex].dataset.rate) || 0;
+
+                const productName = document.getElementById('shop-product-name').value.trim();
+                const paymentAmount = parseFloat(document.getElementById('shop-payment').value) || 0;
+                const rebateCoins = parseInt(document.getElementById('shop-rebate-coins').value) || 0;
+                const orderDate = document.getElementById('shop-order-date').value;
+                const receiveDate = document.getElementById('shop-receive-date').value;
+
+                if (!productName) { showToast('请输入产品名称'); return; }
+                if (paymentAmount <= 0) { showToast('请输入付款金额'); return; }
+                if (!orderDate) { showToast('请选择下单日期'); return; }
+
+                const data = DataManager.loadData();
+                const phone = data.phones.find(p => p.id === phoneId);
+                const app = phone ? phone.apps.find(a => a.id === appId) : null;
+
+                DataManager.addShoppingRecord({
+                    phoneId, phoneName: phone ? phone.name : '',
+                    appId, appName: app ? app.name : '',
+                    exchangeRate,
+                    productName,
+                    paymentAmount,
+                    rebateCoins,
+                    orderDate,
+                    receiveDate
+                });
+
+                closeModal();
+                renderShoppingPage();
+                showToast('购物记录已添加', 'success');
+            }
+        }
+    ]);
+}
+
+// 打开编辑购物记录模态框
+function openEditShoppingModal(id) {
+    const records = DataManager.getShoppingRecords();
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+
+    const data = DataManager.loadData();
+    const phones = data.phones.filter(p => p.apps.some(a => !a.isDeleted));
+
+    // 找到当前手机和软件
+    const currentPhone = data.phones.find(p => p.id === record.phoneId);
+    const currentPhoneApps = currentPhone ? currentPhone.apps.filter(a => !a.isDeleted) : [];
+
+    showModal('编辑购物记录', `
+        <div class="form-group">
+            <label class="form-label">选择手机</label>
+            <select id="shop-phone" class="form-input" onchange="onShopPhoneChange()">
+                ${phones.map(p => `<option value="${p.id}" ${p.id === record.phoneId ? 'selected' : ''}>${p.name}</option>`).join('')}
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">选择软件</label>
+            <select id="shop-app" class="form-input" onchange="updateShopRateFromApp()">
+                ${currentPhoneApps.map(a => `<option value="${a.id}" data-rate="${a.exchangeRate || 0}" ${a.id === record.appId ? 'selected' : ''}>${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`).join('')}
+            </select>
+        </div>
+        ${phones.map(phone => `
+            <div id="apps-${phone.id}" style="display:none">
+                ${phone.apps.filter(a => !a.isDeleted).map(a =>
+                    `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
+                ).join('')}
+            </div>
+        `).join('')}
+        <div class="form-group">
+            <label class="form-label">产品名称</label>
+            <input type="text" id="shop-product-name" class="form-input" value="${record.productName}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">付款金额 (元)</label>
+            <input type="number" id="shop-payment" class="form-input" step="0.01" min="0" value="${record.paymentAmount}" oninput="calcShopActual()">
+        </div>
+        <div class="form-group">
+            <label class="form-label">返还金币数量</label>
+            <input type="number" id="shop-rebate-coins" class="form-input" step="1" min="0" value="${record.rebateCoins}" oninput="calcShopActual()">
+        </div>
+        <div class="form-group">
+            <label class="form-label">兑换比例</label>
+            <input type="text" id="shop-rate-display" class="form-input" value="${record.exchangeRate > 0 ? record.exchangeRate + ' 金币 = 1元' : '未设置'}" disabled>
+        </div>
+        <div class="form-group">
+            <label class="form-label">下单日期</label>
+            <input type="date" id="shop-order-date" class="form-input" value="${record.orderDate}">
+        </div>
+        <div class="form-group">
+            <label class="form-label">签收日期</label>
+            <input type="date" id="shop-receive-date" class="form-input" value="${record.receiveDate || ''}">
+        </div>
+        <div id="shop-actual-preview" style="padding: 12px; background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; margin-top: 8px;">
+            <div style="font-size: 12px; color: var(--text-secondary);">实际付款金额</div>
+            <div style="font-size: 22px; font-weight: 700; color: #6366f1;">¥${record.actualAmount.toFixed(2)}</div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '保存',
+            class: 'btn-primary',
+            action: function() {
+                const phoneId = document.getElementById('shop-phone').value;
+                const appId = document.getElementById('shop-app').value;
+                const appSelect = document.getElementById('shop-app');
+                const exchangeRate = parseFloat(appSelect.options[appSelect.selectedIndex].dataset.rate) || 0;
+
+                const productName = document.getElementById('shop-product-name').value.trim();
+                const paymentAmount = parseFloat(document.getElementById('shop-payment').value) || 0;
+                const rebateCoins = parseInt(document.getElementById('shop-rebate-coins').value) || 0;
+                const orderDate = document.getElementById('shop-order-date').value;
+                const receiveDate = document.getElementById('shop-receive-date').value;
+
+                if (!productName) { showToast('请输入产品名称'); return; }
+                if (paymentAmount <= 0) { showToast('请输入付款金额'); return; }
+                if (!orderDate) { showToast('请选择下单日期'); return; }
+
+                const data = DataManager.loadData();
+                const phone = data.phones.find(p => p.id === phoneId);
+                const app = phone ? phone.apps.find(a => a.id === appId) : null;
+
+                DataManager.editShoppingRecord(id, {
+                    phoneId, phoneName: phone ? phone.name : '',
+                    appId, appName: app ? app.name : '',
+                    exchangeRate,
+                    productName,
+                    paymentAmount,
+                    rebateCoins,
+                    orderDate,
+                    receiveDate
+                });
+
+                closeModal();
+                renderShoppingPage();
+                showToast('购物记录已更新', 'success');
+            }
+        }
+    ]);
+}
+
+// 删除购物记录
+function deleteShoppingRecord(id) {
+    showModal('确认删除', `
+        <div style="text-align: center; padding: 20px 0;">
+            <div style="font-size: 36px; margin-bottom: 12px;">🗑️</div>
+            <div style="font-size: 14px; color: var(--text-secondary);">确定删除这条购物记录吗？</div>
+        </div>
+    `, [
+        { text: '取消', class: 'btn-secondary', action: closeModal },
+        {
+            text: '删除',
+            class: 'btn-primary',
+            action: function() {
+                DataManager.deleteShoppingRecord(id);
+                closeModal();
+                renderShoppingPage();
+                showToast('记录已删除', 'success');
+            }
+        }
+    ]);
+}
+
+// 手机改变时，更新软件下拉框
+function onShopPhoneChange() {
+    const phoneSelect = document.getElementById('shop-phone');
+    const appSelect = document.getElementById('shop-app');
+    if (!phoneSelect || !appSelect) return;
+
+    const phoneId = phoneSelect.value;
+    const appsDiv = document.getElementById('apps-' + phoneId);
+
+    if (appsDiv) {
+        // 复制隐藏div中的option到软件select
+        appSelect.innerHTML = appsDiv.innerHTML;
+    }
+
+    updateShopRateFromApp();
+}
+
+// 软件改变时，更新兑换比例显示
+function updateShopRateFromApp() {
+    const appSelect = document.getElementById('shop-app');
+    if (!appSelect) return;
+    const selectedOption = appSelect.options[appSelect.selectedIndex];
+    const rate = parseFloat(selectedOption.dataset.rate) || 0;
+    const display = document.getElementById('shop-rate-display');
+    if (display) {
+        display.value = rate > 0 ? `${rate} 金币 = 1元` : '未设置';
+    }
+    calcShopActual();
+}
+
+// 实时计算实际付款金额
+function calcShopActual() {
+    const payment = parseFloat(document.getElementById('shop-payment')?.value) || 0;
+    const coins = parseInt(document.getElementById('shop-rebate-coins')?.value) || 0;
+    const appSelect = document.getElementById('shop-app');
+    const rate = appSelect ? parseFloat(appSelect.options[appSelect.selectedIndex].dataset.rate) || 0 : 0;
+
+    const rebateCash = rate > 0 ? coins / rate : 0;
+    const actual = Math.round((payment - rebateCash) * 100) / 100;
+
+    const preview = document.getElementById('shop-actual-preview');
+    if (preview) {
+        preview.innerHTML = `
+            <div style="font-size: 12px; color: var(--text-secondary);">实际付款金额</div>
+            <div style="font-size: 22px; font-weight: 700; color: #6366f1;">¥${actual.toFixed(2)}</div>
+            ${rate > 0 && coins > 0 ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${payment.toFixed(2)} - ${coins.toLocaleString()}÷${rate} = ${actual.toFixed(2)}</div>` : ''}
+        `;
+    }
+}
+
+// 渲染今日金币收益预览卡片
+function renderCoinsPreviewCard() {
+    const preview = DataManager.getTodayCoinsPreview();
+    if (preview.totalCoins === 0) return '';
+
+    let phonesHtml = preview.phones.map(phone => `
+        <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">📱 ${phone.phoneName}</span>
+                <span style="font-size: 13px; font-weight: 700; color: #f59e0b;">¥${phone.totalPreview.toFixed(2)}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 3px;">
+                ${phone.apps.map(app => `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 3px 0;">
+                        <div>
+                            <span style="font-size: 12px; font-weight: 500; color: var(--text-primary);">${app.appName}</span>
+                            <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${app.coins.toLocaleString()}金币 / ${app.exchangeRate}:1</span>
+                        </div>
+                        <span style="font-size: 12px; font-weight: 600; color: #10b981;">¥${app.preview.toFixed(2)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    return `
+        <div class="card" style="margin-top: 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 15px; font-weight: 700;">¥</div>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600; color: #f59e0b;">今日金币收益</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">按兑换比例预估，次日自动结算</div>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 22px; font-weight: 700; color: #f59e0b;">¥${preview.totalPreview.toFixed(2)}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${preview.totalCoins.toLocaleString()} 金币</div>
+                </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${phonesHtml}
+            </div>
+        </div>
+    `;
+}
+
 // 展开/收起高档提现档位的软件列表
 function toggleHighWithdrawTier(tierIdx) {
     const appsContainer = document.getElementById(`tier-apps-${tierIdx}`);
@@ -6873,6 +7500,8 @@ function renderDashboard() {
                 </div>
             </div>
             ` : ''}
+
+            ${renderCoinsPreviewCard()}
 
         `;
     }
@@ -8258,14 +8887,18 @@ function showTotalEarningsDetail() {
                 <div style="font-size: 32px; font-weight: 700;">¥${earnings.totalEarned.toFixed(2)}</div>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">已提现</div>
-                    <div style="font-size: 18px; font-weight: 600; color: var(--success-color);">¥${earnings.totalWithdrawn.toFixed(2)}</div>
+                    <div style="font-size: 16px; font-weight: 600; color: var(--success-color);">¥${earnings.totalWithdrawn.toFixed(2)}</div>
                 </div>
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前余额</div>
-                    <div style="font-size: 18px; font-weight: 600; color: var(--primary-color);">¥${earnings.totalBalance.toFixed(2)}</div>
+                    <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${earnings.totalBalance.toFixed(2)}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05)); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 16px; text-align: center;">
+                    <div style="font-size: 12px; color: #f59e0b; margin-bottom: 4px;">¥ 待结算</div>
+                    <div style="font-size: 16px; font-weight: 600; color: #f59e0b;">¥${earnings.pendingEarnings.toFixed(2)}</div>
                 </div>
             </div>
 
@@ -9875,7 +10508,12 @@ function openAddAppModal(phoneId) {
         <div class="form-group">
             <label class="form-label">默认余额 (元)</label>
             <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
-            <div class="form-hint">批量添加时所有软件的默认余额</div>
+            <div class="form-hint">批量添加时所有软件的默认余额（已有的余额，后续通过金币自动结算）</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">兑换比例 (金币数 = 1元)</label>
+            <input type="number" id="app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
+            <div class="form-hint">例如填10000表示10000金币=1元，33000表示33000金币=1元</div>
         </div>
         <div class="form-group">
             <label class="form-label">提现门槛 (元) <span style="color: #ef4444;">*</span></label>
@@ -9906,6 +10544,7 @@ function openAddAppModal(phoneId) {
             action: () => {
                 const input = document.getElementById('app-names').value.trim();
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
+                const exchangeRate = parseFloat(document.getElementById('app-exchange-rate').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
                 const clearPeriod = parseInt(document.getElementById('app-clear-period').value) || 0;
@@ -9935,7 +10574,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, highWithdrawTiers, clearPeriod });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, highWithdrawTiers, clearPeriod, exchangeRate });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -10077,17 +10716,12 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         return;
     }
     
-    // 计算预测每日收益
-    const predictedDailyEarnings = DataManager.calculatePredictedDailyEarnings(app);
     const currentBalance = app.balance || 0;
-    const predictedBalance = currentBalance + predictedDailyEarnings;
-    
-    // 获取历史收益数据用于显示
-    const dailyEarnings = app.dailyEarnings || {};
-    const earningsCount = Object.keys(dailyEarnings).length;
-    const avgEarnings = earningsCount > 0 
-        ? (Object.values(dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0) / earningsCount).toFixed(2)
-        : '0.00';
+    const exchangeRate = app.exchangeRate || 0;
+    const today = getCurrentDate();
+    const todayCoinRecord = (app.dailyCoins || []).find(c => c.date === today);
+    const todayCoins = todayCoinRecord ? todayCoinRecord.coins : 0;
+    const todayPreview = exchangeRate > 0 ? Math.round((todayCoins / exchangeRate) * 100) / 100 : 0;
     
     showModal('编辑软件', `
         <div class="form-group">
@@ -10095,14 +10729,21 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             <input type="text" id="edit-app-name" class="form-input" value="${app.name}">
         </div>
         <div class="form-group">
-            <label class="form-label">当前余额 (元) <span style="color: var(--text-secondary); font-size: 12px;">(预测今日: ¥${predictedBalance.toFixed(2)})</span></label>
-            <div style="position: relative;">
-                <input type="number" id="edit-app-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" style="padding-right: 40px;" onclick="this.select();" onfocus="this.select();">
-                <button type="button" onclick="document.getElementById('edit-app-balance').value=''; document.getElementById('edit-app-balance').focus();" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; padding: 4px;">✕</button>
-            </div>
+            <label class="form-label">当前余额 (元)</label>
+            <input type="text" class="form-input" value="¥${currentBalance.toFixed(2)}" disabled>
+            <div class="form-hint">余额由金币自动结算，次日0点自动转入</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">兑换比例 (金币数 = 1元)</label>
+            <input type="number" id="edit-app-exchange-rate" class="form-input" value="${exchangeRate || ''}" step="1" min="0" placeholder="如10000">
+            <div class="form-hint">例如填10000表示10000金币=1元，33000表示33000金币=1元</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">今日金币数量</label>
+            <input type="number" id="edit-app-today-coins" class="form-input" value="${todayCoins || ''}" step="1" min="0" placeholder="0" onclick="this.select();" onfocus="this.select();">
             <div class="form-hint">
-                软件账户中当前可提现的金额
-                ${earningsCount > 0 ? `<br><span style="color: #10b981;">📊 基于${earningsCount}天历史数据，平均日收益¥${avgEarnings}，预测今日¥${predictedDailyEarnings.toFixed(2)}</span>` : '<br><span style="color: var(--text-secondary);">暂无历史数据，使用最小提现金额作为预测</span>'}
+                今日获得的金币数，系统将根据兑换比例自动计算收益
+                ${exchangeRate > 0 ? `<br><span style="color: #10b981;">📊 预计收益: ¥${todayPreview.toFixed(2)}（${todayCoins} ÷ ${exchangeRate}）</span>` : '<br><span style="color: #f59e0b;">⚠️ 请先设置兑换比例</span>'}
             </div>
         </div>
         <div class="form-group">
@@ -10163,7 +10804,8 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 }
                 
                 const name = document.getElementById('edit-app-name').value.trim();
-                const newBalance = parseFloat(document.getElementById('edit-app-balance').value) || 0;
+                const exchangeRateVal = parseFloat(document.getElementById('edit-app-exchange-rate').value) || 0;
+                const todayCoinsVal = parseInt(document.getElementById('edit-app-today-coins').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
                 const clearPeriod = parseInt(document.getElementById('edit-app-clear-period').value) || 0;
@@ -10184,61 +10826,15 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         // 确保最小提现金额大于0
                         if (minWithdraw <= 0) {
                             showToast('最小提现金额必须大于0', 'error');
-                            // 恢复按钮状态
-                            if (saveBtn) {
-                                saveBtn.disabled = false;
-                                saveBtn.textContent = '保存';
-                            }
+                            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
                             releaseLock(lockKey);
                             return;
                         }
                         
-                        // 获取原余额
-                        const oldBalance = app.balance || 0;
-                        // 计算本次赚取金额（余额增量）
-                        const earnedAmount = newBalance - oldBalance;
-                        
-                        // 验证：如果本次赚取金额大于0且小于最小提现金额，先保存余额再跳转到提现模态框
-                        if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                            console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw, '先保存余额再跳转');
-                            
-                            // 先保存余额
-                            const result = DataManager.editApp(phoneId, appId, {
+                        DataManager.editApp(phoneId, appId, {
                             name,
-                            balance: newBalance,
-                            minWithdraw,
-                            highWithdraw,
-                            highWithdrawTiers,
-                            clearPeriod,
-                            historicalWithdrawn
-                        });
-                            if (saveBtn) {
-                                saveBtn.disabled = false;
-                                saveBtn.textContent = '保存';
-                            }
-                            releaseLock(lockKey);
-                            
-                            // 关闭当前模态框
-                            closeModal();
-                            
-                            // 刷新页面数据
-                            renderPhones();
-                            renderTotalEarnings();
-                            renderYearlyGoal();
-                            renderAppEarningsRanking();
-                            
-                            // 跳转到提现模态框（增加延迟确保模态框完全关闭）
-                            setTimeout(() => {
-                                console.log('验证通过，打开提现模态框', phoneId, appId);
-                                openWithdrawModal(phoneId, appId);
-                            }, 200);
-                            
-                            return;
-                        }
-                        
-                        const result = DataManager.editApp(phoneId, appId, {
-                            name,
-                            balance: newBalance,
+                            exchangeRate: exchangeRateVal,
+                            todayCoins: todayCoinsVal,
                             minWithdraw,
                             highWithdraw,
                             highWithdrawTiers,
@@ -10246,46 +10842,26 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                             historicalWithdrawn
                         });
                         
-                        // 先关闭模态框
+                        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
+                        releaseLock(lockKey);
+                        
                         closeModal();
                         renderPhones();
-                        
-                        // 立即更新首页总赚取金额
                         renderTotalEarnings();
-                        
-                        // 立即更新年度目标
                         renderYearlyGoal();
+                        renderDashboard();
                         
-                        // 检查本次赚取金额是否达到最小提现金额，如果没有则提示活跃
-                        if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                            setTimeout(() => {
-                                showActiveReminderModal(name, earnedAmount, minWithdraw, phoneId, appId);
-                            }, 100);
-                        } else if (fromQuickEdit) {
-                            // 如果是从快速编辑进入的，返回到软件选择页面（第一级）
-                            setTimeout(() => {
-                                openQuickEditModal();
-                            }, 100);
+                        if (fromQuickEdit) {
+                            setTimeout(() => { openQuickEditModal(); }, 100);
                         }
-    
                     } catch (error) {
                         console.error('编辑软件失败:', error);
-
-                        // 恢复按钮状态
-                        if (saveBtn) {
-                            saveBtn.disabled = false;
-                            saveBtn.textContent = '保存';
-                        }
+                        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
                     } finally {
-                        // 延迟释放锁
                         setTimeout(() => releaseLock(lockKey), LOCK_DURATION);
                     }
                 } else {
-                    // 恢复按钮状态
-                    if (saveBtn) {
-                        saveBtn.disabled = false;
-                        saveBtn.textContent = '保存';
-                    }
+                    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
                     releaseLock(lockKey);
                 }
             }
@@ -10399,6 +10975,11 @@ function openBatchAddAppsModal() {
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
         <div class="form-group">
+            <label class="form-label">兑换比例 (金币数 = 1元)</label>
+            <input type="number" id="batch-app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
+            <div class="form-hint">例如填10000表示10000金币=1元</div>
+        </div>
+        <div class="form-group">
             <label class="form-label">提现门槛 (元) <span style="color: #ef4444;">*</span></label>
             <input type="number" id="batch-app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
             <div class="form-hint">批量添加时所有软件的默认提现门槛，必须大于0</div>
@@ -10421,6 +11002,7 @@ function openBatchAddAppsModal() {
             action: () => {
                 const input = document.getElementById('batch-app-names').value.trim();
                 const balance = parseFloat(document.getElementById('batch-app-balance').value) || 0;
+                const exchangeRate = parseFloat(document.getElementById('batch-app-exchange-rate').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('batch-app-high-withdraw').value) || 0;
 
@@ -10446,7 +11028,7 @@ function openBatchAddAppsModal() {
                 currentData.phones.forEach(phone => {
                     names.forEach(name => {
                         try {
-                            DataManager.addApp(phone.id, { name, balance, minWithdraw, highWithdraw });
+                            DataManager.addApp(phone.id, { name, balance, minWithdraw, highWithdraw, exchangeRate });
                             totalAddedCount++;
                         } catch (error) {
                             showToast(error.message);
@@ -10704,18 +11286,7 @@ function openQuickEditModal() {
         <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">
             选择要编辑的软件（同名软件合并显示）
         </div>
-        <button onclick="startVoiceInput()" style="width: 100%; padding: 12px; margin-bottom: 8px; background: linear-gradient(135deg, #f59e0b, #fbbf24); border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;" 
-                onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
-            🎤 语音输入余额
-        </button>
-        <div style="margin-bottom: 16px;">
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">⌨️ 或直接输入：手机名称，软件名称，余额</div>
-            <div style="display: flex; gap: 8px;">
-                <input type="text" id="quick-text-input" class="form-input" placeholder="例如：小米手机，抖音，35.5" style="flex: 1;">
-                <button onclick="parseTextInput()" class="btn btn-secondary" style="white-space: nowrap;">解析</button>
-            </div>
-        </div>
-        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">💡 拖动左侧 ⋮⋮ 图标可调整顺序</div>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">💡 点击软件卡片进行编辑</div>
         <div id="quick-edit-app-list" style="max-height: 50vh; overflow-y: auto;">
             ${appListHtml}
         </div>
@@ -10808,6 +11379,11 @@ function selectAppForEdit(appName) {
         const phoneListHtml = appInstances.map((instance, index) => {
             const balance = instance.app.balance || 0;
             const totalWithdrawn = (instance.app.withdrawn || 0) + (instance.app.historicalWithdrawn || 0);
+            const exchangeRate = instance.app.exchangeRate || 0;
+            const today = getCurrentDate();
+            const todayCoinRecord = (instance.app.dailyCoins || []).find(c => c.date === today);
+            const todayCoins = todayCoinRecord ? todayCoinRecord.coins : 0;
+            const todayPreview = exchangeRate > 0 ? Math.round((todayCoins / exchangeRate) * 100) / 100 : 0;
             // 对phoneName进行HTML转义
             const htmlEscapedPhoneName = instance.phoneName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             // 检查是否可以提现（余额大于0即可提现，不限制最小金额）
@@ -10820,7 +11396,7 @@ function selectAppForEdit(appName) {
                         <div>
                             <div style="font-weight: 600;">${htmlEscapedPhoneName}</div>
                             <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                余额: ¥${balance.toFixed(2)} | 累计提现: ¥${totalWithdrawn.toFixed(2)}
+                                余额: ¥${balance.toFixed(2)} | 今日: ${todayCoins.toLocaleString()}金币${exchangeRate > 0 ? ` (¥${todayPreview.toFixed(2)})` : ''}
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center;">
@@ -11018,6 +11594,11 @@ function returnToQuickEditPhoneSelection(appName) {
         const phoneListHtml = updatedAppInstances.map((instance, index) => {
             const balance = instance.app.balance || 0;
             const totalWithdrawn = (instance.app.withdrawn || 0) + (instance.app.historicalWithdrawn || 0);
+            const exchangeRate = instance.app.exchangeRate || 0;
+            const today = getCurrentDate();
+            const todayCoinRecord = (instance.app.dailyCoins || []).find(c => c.date === today);
+            const todayCoins = todayCoinRecord ? todayCoinRecord.coins : 0;
+            const todayPreview = exchangeRate > 0 ? Math.round((todayCoins / exchangeRate) * 100) / 100 : 0;
             // 对phoneName进行HTML转义
             const htmlEscapedPhoneName = instance.phoneName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
             return `
@@ -11028,7 +11609,7 @@ function returnToQuickEditPhoneSelection(appName) {
                         <div>
                             <div style="font-weight: 600;">${htmlEscapedPhoneName}</div>
                             <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                余额: ¥${balance.toFixed(2)} | 累计提现: ¥${totalWithdrawn.toFixed(2)}
+                                余额: ¥${balance.toFixed(2)} | 今日: ${todayCoins.toLocaleString()}金币${exchangeRate > 0 ? ` (¥${todayPreview.toFixed(2)})` : ''}
                             </div>
                         </div>
                         <span style="font-size: 20px;">→</span>
@@ -14774,14 +15355,41 @@ function showDailyEarningDetail(date) {
     
     // 获取该日期所有软件的赚取详情
     let appEarnings = [];
+    const today = getCurrentDate();
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
+            // 已结算的历史收益
             if (app.dailyEarnings && app.dailyEarnings[date]) {
                 appEarnings.push({
                     phoneName: phone.name,
                     appName: app.name,
-                    amount: parseFloat(app.dailyEarnings[date]) || 0
+                    amount: parseFloat(app.dailyEarnings[date]) || 0,
+                    type: '已结算'
                 });
+            }
+            
+            // 今日待结算金币收益
+            if (date === today && app.dailyCoins && app.exchangeRate > 0) {
+                const todayCoinsRecord = app.dailyCoins.find(c => c.date === today);
+                if (todayCoinsRecord && todayCoinsRecord.coins > 0) {
+                    const preview = Math.round((todayCoinsRecord.coins / app.exchangeRate) * 100) / 100;
+                    if (preview > 0) {
+                        // 检查是否已有该软件的记录（避免重复）
+                        const existing = appEarnings.find(e => e.appName === app.name && e.phoneName === phone.name);
+                        if (existing) {
+                            existing.amount += preview;
+                        } else {
+                            appEarnings.push({
+                                phoneName: phone.name,
+                                appName: app.name,
+                                amount: preview,
+                                type: '待结算',
+                                coins: todayCoinsRecord.coins,
+                                exchangeRate: app.exchangeRate
+                            });
+                        }
+                    }
+                }
             }
         });
     });
@@ -14810,15 +15418,15 @@ function showDailyEarningDetail(date) {
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px;">
                 ${appEarnings.map((item, index) => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid ${item.type === '待结算' ? 'rgba(245,158,11,0.3)' : 'var(--border-color)'};">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 11px; color: var(--text-secondary); width: 20px;">${index + 1}</span>
                             <div>
-                                <div style="font-size: 13px; font-weight: 500; color: var(--text-primary);">${item.appName}</div>
-                                <div style="font-size: 10px; color: var(--text-secondary);">${item.phoneName}</div>
+                                <div style="font-size: 13px; font-weight: 500; color: var(--text-primary);">${item.appName} ${item.type === '待结算' ? '<span style="font-size: 10px; color: #f59e0b; margin-left: 4px;">待结算</span>' : ''}</div>
+                                <div style="font-size: 10px; color: var(--text-secondary);">${item.phoneName}${item.coins ? ` · ${item.coins.toLocaleString()}金币/${item.exchangeRate}:1` : ''}</div>
                             </div>
                         </div>
-                        <div style="font-size: 14px; font-weight: 600; color: var(--success-color);">+¥${item.amount.toFixed(2)}</div>
+                        <div style="font-size: 14px; font-weight: 600; color: ${item.type === '待结算' ? '#f59e0b' : 'var(--success-color)'};">+¥${item.amount.toFixed(2)}</div>
                     </div>
                 `).join('')}
             </div>
@@ -15487,14 +16095,14 @@ function markTodayAchievement(achieved) {
     renderDailyGoalContent();
 }
 
-// 从达标日历弹窗快速编辑余额
+// 从达标日历弹窗快速编辑金币
 function quickEditBalanceFromGoal() {
     if (!currentDailyGoalAppId || !currentDailyGoalPhoneId) {
-        showToast('无法编辑余额：缺少软件或手机信息', 'error');
+        showToast('无法编辑：缺少软件或手机信息', 'error');
         return;
     }
     
-    // 获取当前余额
+    // 获取当前数据
     const data = DataManager.loadData();
     const phone = data.phones.find(p => p.id === currentDailyGoalPhoneId);
     const app = phone ? phone.apps.find(a => a.id === currentDailyGoalAppId) : null;
@@ -15505,28 +16113,28 @@ function quickEditBalanceFromGoal() {
     }
     
     const currentBalance = app.balance || 0;
+    const exchangeRate = app.exchangeRate || 0;
+    const today = getCurrentDate();
+    const todayCoinRecord = (app.dailyCoins || []).find(c => c.date === today);
+    const todayCoins = todayCoinRecord ? todayCoinRecord.coins : 0;
+    const todayPreview = exchangeRate > 0 ? Math.round((todayCoins / exchangeRate) * 100) / 100 : 0;
     
-    // 计算预测每日收益
-    const predictedDailyEarnings = DataManager.calculatePredictedDailyEarnings(app);
-    const predictedBalance = currentBalance + predictedDailyEarnings;
-    
-    // 获取历史收益数据用于显示
-    const dailyEarnings = app.dailyEarnings || {};
-    const earningsCount = Object.keys(dailyEarnings).length;
-    const avgEarnings = earningsCount > 0 
-        ? (Object.values(dailyEarnings).reduce((sum, val) => sum + (parseFloat(val) || 0), 0) / earningsCount).toFixed(2)
-        : '0.00';
-    
-    // 显示编辑余额弹窗
+    // 显示编辑金币弹窗
     showModal(
-        '💰 快速编辑余额',
+        '💰 快速编辑金币',
         `
             <div class="form-group">
-                <label class="form-label">当前余额: ¥${currentBalance.toFixed(2)} <span style="color: var(--text-secondary); font-size: 12px;">(预测今日: ¥${predictedBalance.toFixed(2)})</span></label>
-                <input type="number" id="quick-edit-balance-input" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" placeholder="输入新余额">
+                <label class="form-label">当前余额: ¥${currentBalance.toFixed(2)}</label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">兑换比例: ${exchangeRate > 0 ? exchangeRate + ' 金币 = 1元' : '未设置'}</label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">今日金币数量</label>
+                <input type="number" id="quick-edit-coins-input" class="form-input" value="${todayCoins || ''}" step="1" min="0" placeholder="0" onclick="this.select();" onfocus="this.select();">
                 <div class="form-hint">
-                    修改余额后会自动计算今日收益
-                    ${earningsCount > 0 ? `<br><span style="color: #10b981;">📊 基于${earningsCount}天历史数据，平均日收益¥${avgEarnings}，预测今日¥${predictedDailyEarnings.toFixed(2)}</span>` : '<br><span style="color: var(--text-secondary);">暂无历史数据，使用最小提现金额作为预测</span>'}
+                    输入今日获得的金币数，系统将根据兑换比例自动计算收益
+                    ${exchangeRate > 0 ? `<br><span style="color: #10b981;">📊 预计收益: ¥${todayPreview.toFixed(2)}（次日自动结算到余额）</span>` : '<br><span style="color: #f59e0b;">⚠️ 请先在编辑软件中设置兑换比例</span>'}
                 </div>
             </div>
         `,
@@ -15540,85 +16148,21 @@ function quickEditBalanceFromGoal() {
                 text: '保存',
                 class: 'btn-primary',
                 action: () => {
-                    const newBalance = parseFloat(document.getElementById('quick-edit-balance-input').value) || 0;
-                    const minWithdraw = app.minWithdraw || 0;
+                    const newCoins = parseInt(document.getElementById('quick-edit-coins-input').value) || 0;
                     
-                    // 计算本次赚取金额（余额增量）
-                    const earnedAmount = newBalance - currentBalance;
-                    
-                    // 验证：如果本次赚取金额大于0且小于最小提现金额，先保存余额再跳转到提现模态框
-                    if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                        console.log('本次赚取金额', earnedAmount, '小于最小提现金额', minWithdraw, '先保存余额再跳转');
-                        
-                        // 先保存余额
-                        DataManager.editApp(currentDailyGoalPhoneId, currentDailyGoalAppId, {
-                            name: app.name,
-                            balance: newBalance,
-                            minWithdraw: app.minWithdraw || 0,
-                            historicalWithdrawn: app.historicalWithdrawn || 0
-                        });
-                        
-                        // 关闭快速编辑余额的模态框
-                        closeModal();
-                        // 同时关闭每日目标弹窗
-                        closeDailyGoalModal();
-                        
-                        // 刷新页面数据
-                        renderPhones();
-                        renderDailyGoalContent();
-                        
-                        // 增加延迟确保模态框完全关闭
-                        setTimeout(() => {
-                            console.log('打开提现模态框', currentDailyGoalPhoneId, currentDailyGoalAppId);
-                            openWithdrawModal(currentDailyGoalPhoneId, currentDailyGoalAppId);
-                        }, 250);
-                        return;
-                    }
-                    
-                    if (newBalance !== currentBalance) {
-                        const result = DataManager.editApp(currentDailyGoalPhoneId, currentDailyGoalAppId, {
-                            name: app.name,
-                            balance: newBalance,
-                            minWithdraw: app.minWithdraw || 0,
-                            historicalWithdrawn: app.historicalWithdrawn || 0
-                        });
-                        
-                        // 检查是否达到日目标
-                        const updatedPhone = result.phones.find(p => p.id === currentDailyGoalPhoneId);
-                        const updatedApp = updatedPhone ? updatedPhone.apps.find(a => a.id === currentDailyGoalAppId) : null;
-                        
-                        if (updatedApp && updatedApp._todayEarnings !== undefined) {
-                            if (updatedApp._dailyTargetAchieved) {
-                                showToast(`🎉 恭喜！今日收益¥${updatedApp._todayEarnings.toFixed(2)}，已达到日目标¥${updatedApp._dailyTarget.toFixed(2)}！`, 'success');
-                            } else if (updatedApp._dailyTarget) {
-                                const remaining = updatedApp._dailyTarget - updatedApp._todayEarnings;
-                                showToast(`今日收益¥${updatedApp._todayEarnings.toFixed(2)}，距离日目标¥${updatedApp._dailyTarget.toFixed(2)}还差¥${remaining.toFixed(2)}`, 'info');
-                            } else {
-                                showToast(`今日收益¥${updatedApp._todayEarnings.toFixed(2)}`, 'info');
-                            }
-                            
-                            // 清除标记
-                            delete updatedApp._dailyTargetAchieved;
-                            delete updatedApp._todayEarnings;
-                            delete updatedApp._dailyTarget;
-                            DataManager.saveData(result);
-                        } else {
-                            showToast('余额已更新！');
-                        }
-                        
-                        // 刷新日历显示
-                        renderDailyGoalContent();
-                        
-                        // 检查本次赚取金额是否达到最小提现金额，如果没有则提示活跃
-                        if (earnedAmount > 0 && earnedAmount < minWithdraw) {
-                            setTimeout(() => {
-                                showActiveReminderModal(app.name, earnedAmount, minWithdraw, currentDailyGoalPhoneId, currentDailyGoalAppId);
-                            }, 100);
-                            return; // 不关闭模态框，让活跃提醒显示
-                        }
-                    }
+                    DataManager.editApp(currentDailyGoalPhoneId, currentDailyGoalAppId, {
+                        name: app.name,
+                        exchangeRate: exchangeRate,
+                        todayCoins: newCoins,
+                        minWithdraw: app.minWithdraw || 0,
+                        historicalWithdrawn: app.historicalWithdrawn || 0
+                    });
                     
                     closeModal();
+                    showToast('今日金币已更新', 'success');
+                    renderPhones();
+                    renderDailyGoalContent();
+                    renderDashboard();
                 }
             }
         ]
