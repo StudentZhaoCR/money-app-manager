@@ -8120,7 +8120,7 @@ function renderActivityPage() {
     let inProgressCount = 0;
     let completedCount = 0;
     
-    // 为每个软件添加短剧状态
+    // 为每个软件添加短剧状态和今日金币收益
     const appsWithDramaInfo = activeApps.map(app => {
         const dramaRecords = DataManager.getActiveDramaRecords(app.phoneId, app.id);
         const todayRecords = dramaRecords;
@@ -8147,18 +8147,69 @@ function renderActivityPage() {
         } else if (todayRecords.length > 0) {
             completedCount++;
         }
+
+        // 获取今日金币收益（含待结算金币）
+        const phone = data.phones.find(p => p.id === app.phoneId);
+        const fullApp = phone ? phone.apps.find(a => a.id === app.id) : null;
+        let todayCoinEarning = 0;
+        let todayCoins = 0;
+        if (fullApp) {
+            // 已结算收益
+            todayCoinEarning = parseFloat(fullApp.dailyEarnings && fullApp.dailyEarnings[today]) || 0;
+            // 待结算金币收益
+            if (fullApp.dailyCoins && fullApp.exchangeRate > 0) {
+                const todayCoinRecord = fullApp.dailyCoins.find(c => c.date === today);
+                if (todayCoinRecord && todayCoinRecord.coins > 0) {
+                    todayCoinEarning += Math.round((todayCoinRecord.coins / fullApp.exchangeRate) * 100) / 100;
+                    todayCoins = todayCoinRecord.coins;
+                }
+            }
+        }
         
         return {
             ...app,
             dramaRecords: todayRecords,
             dramaWatched: appWatched,
             dramaTotal: appTotal,
-            hasUnfinished: hasUnfinished
+            hasUnfinished: hasUnfinished,
+            todayCoinEarning: todayCoinEarning,
+            todayCoins: todayCoins
         };
     });
     
-    // 排序：有未完成短剧的排最前，然后按优先级
+    // 每部手机选出收益最低的软件
+    const phoneGroups = {};
+    appsWithDramaInfo.forEach(app => {
+        if (!phoneGroups[app.phoneId]) {
+            phoneGroups[app.phoneId] = { phoneName: app.phoneName, apps: [] };
+        }
+        phoneGroups[app.phoneId].apps.push(app);
+    });
+
+    const lowestEarningAppIds = new Set();
+    Object.values(phoneGroups).forEach(group => {
+        if (group.apps.length === 0) return;
+        // 找收益最低的（排除已删除）
+        let lowest = null;
+        group.apps.forEach(app => {
+            if (app.isDeleted) return;
+            if (!lowest || app.todayCoinEarning < lowest.todayCoinEarning) {
+                lowest = app;
+            }
+        });
+        if (lowest) {
+            lowestEarningAppIds.add(lowest.id);
+        }
+    });
+
+    // 标记最低收益软件
+    appsWithDramaInfo.forEach(app => {
+        app.isLowestEarning = lowestEarningAppIds.has(app.id);
+    });
+    
+    // 排序：最低收益优先 > 有未完成短剧 > 按优先级
     appsWithDramaInfo.sort((a, b) => {
+        if (a.isLowestEarning !== b.isLowestEarning) return a.isLowestEarning ? -1 : 1;
         if (a.hasUnfinished !== b.hasUnfinished) return a.hasUnfinished ? -1 : 1;
         if (a.priority !== b.priority) return b.priority - a.priority;
         return a.daysUntilNextPlay - b.daysUntilNextPlay;
@@ -8203,6 +8254,10 @@ function renderActivityPage() {
             
             <!-- 短剧统计卡片 -->
             <div style="display: flex; gap: 8px; margin-bottom: 16px; padding: 0 8px;">
+                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(239,68,68,0.1); border-radius: 10px;">
+                    <div style="font-size: 18px; font-weight: 700; color: #ef4444;">${lowestEarningAppIds.size}</div>
+                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">最低收益</div>
+                </div>
                 <div style="flex: 1; text-align: center; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 10px;">
                     <div style="font-size: 18px; font-weight: 700; color: #8b5cf6;">${totalDramas}</div>
                     <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">今日短剧</div>
@@ -8210,10 +8265,6 @@ function renderActivityPage() {
                 <div style="flex: 1; text-align: center; padding: 10px; background: rgba(245,158,11,0.1); border-radius: 10px;">
                     <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">${inProgressCount}</div>
                     <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">进行中</div>
-                </div>
-                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(59,130,246,0.1); border-radius: 10px;">
-                    <div style="font-size: 18px; font-weight: 700; color: #3b82f6;">${totalWatchedToday}</div>
-                    <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">已看集数</div>
                 </div>
                 <div style="flex: 1; text-align: center; padding: 10px; background: rgba(16,185,129,0.1); border-radius: 10px;">
                     <div style="font-size: 18px; font-weight: 700; color: #10b981;">${completionRate}%</div>
@@ -8254,6 +8305,12 @@ function renderActivityPage() {
             belowAvgBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚡ 需多活跃</span>';
         }
 
+        // 最低收益徽章
+        let lowestBadge = '';
+        if (app.isLowestEarning) {
+            lowestBadge = '<span style="background: rgba(239,68,68,0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">🔻 今日最低收益</span>';
+        }
+
         // 短剧徽章
         const dramaBadges = [];
         if (app.hasUnfinished) {
@@ -8263,27 +8320,39 @@ function renderActivityPage() {
             dramaBadges.push(`<span style="background: rgba(139,92,246,0.15); color: #8b5cf6; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${app.dramaRecords.length}部短剧</span>`);
         }
         
-        // 如果有未完成短剧，加一个高亮边框
-        const highlightStyle = app.hasUnfinished ? 'border-left: 3px solid #f59e0b; background: rgba(245,158,11,0.03);' : '';
+        // 高亮样式：最低收益用红色左边框，有未完成短剧用橙色
+        let highlightStyle = '';
+        if (app.isLowestEarning) {
+            highlightStyle = 'border-left: 3px solid #ef4444; background: rgba(239,68,68,0.03);';
+        } else if (app.hasUnfinished) {
+            highlightStyle = 'border-left: 3px solid #f59e0b; background: rgba(245,158,11,0.03);';
+        }
+
+        // 今日收益信息
+        const earningInfo = app.todayCoinEarning > 0 
+            ? `<span style="font-size: 11px; color: var(--text-muted);">今日 ¥${app.todayCoinEarning.toFixed(2)}${app.todayCoins > 0 ? ` (${app.todayCoins.toLocaleString()}金币)` : ''}</span>`
+            : '<span style="font-size: 11px; color: var(--text-muted);">今日暂无收益</span>';
         
         return `
             <div data-card-phone="${app.phoneId}" data-card-app="${app.id}" style="display: flex; flex-direction: column; padding: 12px; border-bottom: 1px solid var(--border-color); gap: 8px; ${highlightStyle}">
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
-                    <div style="flex-shrink: 0; width: 44px; height: 44px; background: ${app.hasUnfinished ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)'}; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">${app.hasUnfinished ? '📺' : '📱'}</div>
+                    <div style="flex-shrink: 0; width: 44px; height: 44px; background: ${app.isLowestEarning ? 'rgba(239,68,68,0.1)' : app.hasUnfinished ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)'}; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">${app.isLowestEarning ? '🔻' : app.hasUnfinished ? '📺' : '📱'}</div>
                     <div style="flex: 1; min-width: 0;">
                         <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                             <span style="font-weight: 600; font-size: 14px;">${app.name}</span>
                             <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
+                            ${lowestBadge}
                             ${belowAvgBadge}
                             ${dramaBadges.join('')}
                         </div>
+                        <div style="margin-top: 2px;">${earningInfo}</div>
                         ${dramaInfo}
                     </div>
                 </div>
                 
                 <button class="drama-btn" data-phone="${app.phoneId}" data-app="${app.id}" onclick="openDramaModal('${app.phoneId}', '${app.id}')"
-                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 16px; font-size: 14px; background: ${app.hasUnfinished ? 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)'}; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; box-shadow: 0 2px 8px ${app.hasUnfinished ? 'rgba(245,158,11,0.3)' : 'rgba(139,92,246,0.3)'}; transition: all 0.2s; letter-spacing: 1px;">
-                    <span style="font-size: 16px;">${app.hasUnfinished ? '▶' : '📺'}</span>
+                    style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 16px; font-size: 14px; background: ${app.isLowestEarning ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : app.hasUnfinished ? 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)'}; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; box-shadow: 0 2px 8px ${app.isLowestEarning ? 'rgba(239,68,68,0.3)' : app.hasUnfinished ? 'rgba(245,158,11,0.3)' : 'rgba(139,92,246,0.3)'}; transition: all 0.2s; letter-spacing: 1px;">
+                    <span style="font-size: 16px;">${app.isLowestEarning ? '🔻' : app.hasUnfinished ? '▶' : '📺'}</span>
                     <span>${app.hasUnfinished ? '继续观看' : '观看短剧'}</span>
                 </button>
             </div>
