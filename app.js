@@ -4442,13 +4442,24 @@ class DataManager {
             const cash = r.exchangeRate > 0 ? r.rebateCoins / r.exchangeRate : 0;
             return sum + cash;
         }, 0);
-        const totalActual = records.reduce((sum, r) => sum + (r.actualAmount || 0), 0);
+
+        // 区分支出和收入
+        const expenseRecords = records.filter(r => r.actualAmount > 0);
+        const incomeRecords = records.filter(r => r.actualAmount < 0);
+        const totalExpense = expenseRecords.reduce((sum, r) => sum + r.actualAmount, 0);
+        const totalIncome = incomeRecords.reduce((sum, r) => sum + Math.abs(r.actualAmount), 0);
+        const netAmount = totalExpense - totalIncome;
 
         return {
             count: records.length,
             totalPayment: Math.round(totalPayment * 100) / 100,
             totalRebate: Math.round(totalRebate * 100) / 100,
-            totalActual: Math.round(totalActual * 100) / 100
+            totalActual: Math.round((totalExpense - totalIncome) * 100) / 100,
+            totalExpense: Math.round(totalExpense * 100) / 100,
+            totalIncome: Math.round(totalIncome * 100) / 100,
+            netAmount: Math.round(netAmount * 100) / 100,
+            expenseCount: expenseRecords.length,
+            incomeCount: incomeRecords.length
         };
     }
 
@@ -6934,16 +6945,44 @@ function renderShoppingPage() {
     const stats = DataManager.getShoppingStats();
     const records = DataManager.getShoppingRecords().sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
 
+    // 按日期分组用于抵消明细
+    const dateGroups = {};
+    records.forEach(r => {
+        if (!dateGroups[r.orderDate]) dateGroups[r.orderDate] = [];
+        dateGroups[r.orderDate].push(r);
+    });
+    const sortedDates = Object.keys(dateGroups).sort((a, b) => new Date(b) - new Date(a));
+
     let html = `
         <div style="padding: 16px;">
             <!-- 看板 -->
             <div style="background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%); border-radius: 16px; padding: 20px; margin-bottom: 16px; color: white; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);">
-                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">购物总实际付款</div>
-                <div style="font-size: 32px; font-weight: 700; margin-bottom: 12px;">¥${stats.totalActual.toFixed(2)}</div>
-                <div style="display: flex; gap: 16px; font-size: 12px; opacity: 0.85;">
-                    <div>总付款: ¥${stats.totalPayment.toFixed(2)}</div>
-                    <div>总返还: ¥${stats.totalRebate.toFixed(2)}</div>
-                    <div>记录: ${stats.count}条</div>
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">净实际支出</div>
+                <div style="font-size: 32px; font-weight: 700; margin-bottom: 16px;">¥${stats.netAmount.toFixed(2)}</div>
+                <!-- 抵消流程 -->
+                <div style="background: rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; font-size: 12px;">
+                    ${stats.totalExpense > 0 ? `
+                        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                            <span style="opacity: 0.85;">总支出 (${stats.expenseCount}笔)</span>
+                            <span style="font-weight: 600; color: #fca5a5;">-¥${stats.totalExpense.toFixed(2)}</span>
+                        </div>
+                    ` : ''}
+                    ${stats.totalIncome > 0 ? `
+                        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                            <span style="opacity: 0.85;">总收入 (${stats.incomeCount}笔)</span>
+                            <span style="font-weight: 600; color: #86efac;">+¥${stats.totalIncome.toFixed(2)}</span>
+                        </div>
+                        <div style="border-top: 1px solid rgba(255,255,255,0.2); margin: 4px 0;"></div>
+                        <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                            <span style="opacity: 0.85;">抵消后净支出</span>
+                            <span style="font-weight: 700;">¥${stats.netAmount.toFixed(2)}</span>
+                        </div>
+                    ` : ''}
+                    <div style="display: flex; gap: 12px; margin-top: 8px; opacity: 0.7; font-size: 11px;">
+                        <span>总付款 ¥${stats.totalPayment.toFixed(2)}</span>
+                        <span>总返还 ¥${stats.totalRebate.toFixed(2)}</span>
+                        <span>共 ${stats.count}条</span>
+                    </div>
                 </div>
             </div>
 
@@ -6961,16 +7000,18 @@ function renderShoppingPage() {
                 </div>
             ` : `
                 <div style="display: flex; flex-direction: column; gap: 10px;">
-                    ${records.map(r => `
-                        <div style="background: var(--card-bg); border-radius: 12px; padding: 14px; border: 1px solid var(--border-color);">
+                    ${records.map(r => {
+                        const isIncome = r.actualAmount < 0;
+                        return `
+                        <div style="background: var(--card-bg); border-radius: 12px; padding: 14px; border: 1px solid ${isIncome ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}; ${isIncome ? 'border-left: 3px solid #10b981;' : ''}">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                                 <div style="flex: 1;">
-                                    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">${r.productName}</div>
+                                    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">${r.productName} ${isIncome ? '<span style="font-size: 10px; color: #10b981; background: rgba(16,185,129,0.1); padding: 1px 6px; border-radius: 8px; margin-left: 4px;">收入</span>' : ''}</div>
                                     <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">${r.phoneName} · ${r.appName}</div>
                                 </div>
                                 <div style="text-align: right;">
-                                    <div style="font-size: 16px; font-weight: 700; color: #6366f1;">¥${r.actualAmount.toFixed(2)}</div>
-                                    <div style="font-size: 10px; color: var(--text-muted);">实际付款</div>
+                                    <div style="font-size: 16px; font-weight: 700; color: ${isIncome ? '#10b981' : '#6366f1'};">${isIncome ? '+' : ''}¥${r.actualAmount.toFixed(2)}</div>
+                                    <div style="font-size: 10px; color: var(--text-muted);">${isIncome ? '净收入' : '实际付款'}</div>
                                 </div>
                             </div>
                             <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-secondary);">
@@ -6979,12 +7020,18 @@ function renderShoppingPage() {
                                 <span style="background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px;">下单 ${r.orderDate}</span>
                                 ${r.receiveDate ? `<span style="background: rgba(16,185,129,0.1); color: #10b981; padding: 2px 8px; border-radius: 10px;">签收 ${r.receiveDate}</span>` : '<span style="background: rgba(245,158,11,0.1); color: #f59e0b; padding: 2px 8px; border-radius: 10px;">未签收</span>'}
                             </div>
+                            ${isIncome ? `
+                                <div style="margin-top: 8px; padding: 8px 10px; background: rgba(16,185,129,0.06); border-radius: 8px; font-size: 11px; color: #10b981;">
+                                    返还金币价值 (¥${(r.rebateCoins / r.exchangeRate).toFixed(2)}) 超过付款金额 (¥${r.paymentAmount.toFixed(2)})，产生净收入 ¥${Math.abs(r.actualAmount).toFixed(2)}
+                                </div>
+                            ` : ''}
                             <div style="display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end;">
                                 <button onclick="openEditShoppingModal('${r.id}')" style="padding: 4px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 12px; cursor: pointer; color: var(--text-primary);">编辑</button>
                                 <button onclick="deleteShoppingRecord('${r.id}')" style="padding: 4px 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; font-size: 12px; cursor: pointer; color: #ef4444;">删除</button>
                             </div>
                         </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             `}
         </div>
@@ -7280,13 +7327,15 @@ function calcShopActual() {
 
     const rebateCash = rate > 0 ? coins / rate : 0;
     const actual = Math.round((payment - rebateCash) * 100) / 100;
+    const isIncome = actual < 0;
 
     const preview = document.getElementById('shop-actual-preview');
     if (preview) {
         preview.innerHTML = `
-            <div style="font-size: 12px; color: var(--text-secondary);">实际付款金额</div>
-            <div style="font-size: 22px; font-weight: 700; color: #6366f1;">¥${actual.toFixed(2)}</div>
+            <div style="font-size: 12px; color: var(--text-secondary);">${isIncome ? '净收入金额' : '实际付款金额'}</div>
+            <div style="font-size: 22px; font-weight: 700; color: ${isIncome ? '#10b981' : '#6366f1'};">${isIncome ? '+' : ''}¥${actual.toFixed(2)}</div>
             ${rate > 0 && coins > 0 ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${payment.toFixed(2)} - ${coins.toLocaleString()}÷${rate} = ${actual.toFixed(2)}</div>` : ''}
+            ${isIncome ? `<div style="font-size: 11px; color: #10b981; margin-top: 4px;">返还金币价值超过付款金额，产生收入</div>` : ''}
         `;
     }
 }
