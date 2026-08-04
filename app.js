@@ -4252,21 +4252,74 @@ class DataManager {
                 app.highWithdraw = parseFloat(appData.highWithdraw) || 0;
                 app.highWithdrawTiers = appData.highWithdrawTiers || [];
                 app.clearPeriod = parseInt(appData.clearPeriod) || 0;
-                app.exchangeRate = parseFloat(appData.exchangeRate) || app.exchangeRate || 0;
                 app.historicalWithdrawn = appData.historicalWithdrawn || 0;
                 app.lastUpdated = new Date().toISOString();
 
-                // 如果传入了当日金币数，更新今日金币记录
-                if (appData.todayCoins !== undefined && appData.todayCoins !== null) {
-                    const today = getCurrentDate();
-                    if (!app.dailyCoins) app.dailyCoins = [];
-                    const existing = app.dailyCoins.find(c => c.date === today);
-                    if (existing) {
-                        existing.coins = parseInt(appData.todayCoins) || 0;
-                    } else {
-                        app.dailyCoins.push({ date: today, coins: parseInt(appData.todayCoins) || 0, settled: false });
+                // 更新收益类型
+                const earningType = appData.earningType || app.earningType || 'coin';
+                app.earningType = earningType;
+
+                if (earningType === 'coin') {
+                    // 金币兑换型：处理金币记录
+                    app.exchangeRate = parseFloat(appData.exchangeRate) || app.exchangeRate || 0;
+                    
+                    // 如果传入了当日金币数，更新今日金币记录
+                    if (appData.todayCoins !== undefined && appData.todayCoins !== null) {
+                        const today = getCurrentDate();
+                        if (!app.dailyCoins) app.dailyCoins = [];
+                        const existing = app.dailyCoins.find(c => c.date === today);
+                        if (existing) {
+                            existing.coins = parseInt(appData.todayCoins) || 0;
+                        } else {
+                            app.dailyCoins.push({ date: today, coins: parseInt(appData.todayCoins) || 0, settled: false });
+                        }
+                        app.lastLoginDate = today;
                     }
-                    app.lastLoginDate = today;
+                } else if (earningType === 'direct') {
+                    // 直接转换型：处理余额变化
+                    if (appData.newBalance !== undefined && appData.newBalance !== null) {
+                        const today = getCurrentDate();
+                        const oldBalance = app.lastRecordedBalance || app.balance || 0;
+                        const newBalance = parseFloat(appData.newBalance) || 0;
+                        const diff = newBalance - oldBalance;
+                        
+                        // 更新余额
+                        app.balance = newBalance;
+                        
+                        // 记录收益（只有增加才记录）
+                        if (diff > 0) {
+                            if (!app.dailyDirectEarnings) app.dailyDirectEarnings = {};
+                            app.dailyDirectEarnings[today] = (app.dailyDirectEarnings[today] || 0) + diff;
+                            
+                            // 同时记录到 dailyEarnings 用于统一统计
+                            if (!app.dailyEarnings) app.dailyEarnings = {};
+                            app.dailyEarnings[today] = (app.dailyEarnings[today] || 0) + diff;
+                            
+                            // 记录余额历史
+                            if (!app.balanceHistory) app.balanceHistory = [];
+                            const existingRecord = app.balanceHistory.find(h => h.date === today);
+                            if (existingRecord) {
+                                existingRecord.change += diff;
+                                existingRecord.balance = newBalance;
+                            } else {
+                                app.balanceHistory.push({
+                                    date: today,
+                                    balance: newBalance,
+                                    change: diff,
+                                    note: '直接收益'
+                                });
+                            }
+                            
+                            // 设置收益起始日期
+                            if (!app.earningStartDate) {
+                                app.earningStartDate = today;
+                            }
+                        }
+                        
+                        // 更新上次记录余额
+                        app.lastRecordedBalance = newBalance;
+                        app.lastLoginDate = today;
+                    }
                 }
 
                 this.saveData(data);
@@ -4359,21 +4412,42 @@ class DataManager {
             const phoneData = { phoneName: phone.name, phoneId: phone.id, apps: [], totalCoins: 0, totalPreview: 0 };
             phone.apps.forEach(app => {
                 if (app.isDeleted) return;
-                if (!app.dailyCoins || app.dailyCoins.length === 0) return;
-                const todayRecord = app.dailyCoins.find(c => c.date === today);
-                if (!todayRecord || todayRecord.coins <= 0) return;
+                
+                const earningType = app.earningType || 'coin';
+                
+                if (earningType === 'coin') {
+                    // 金币兑换型
+                    if (!app.dailyCoins || app.dailyCoins.length === 0) return;
+                    const todayRecord = app.dailyCoins.find(c => c.date === today);
+                    if (!todayRecord || todayRecord.coins <= 0) return;
 
-                const rate = app.exchangeRate || 0;
-                const preview = rate > 0 ? Math.round((todayRecord.coins / rate) * 100) / 100 : 0;
-                phoneData.apps.push({
-                    appName: app.name,
-                    appId: app.id,
-                    coins: todayRecord.coins,
-                    exchangeRate: rate,
-                    preview: preview
-                });
-                phoneData.totalCoins += todayRecord.coins;
-                phoneData.totalPreview += preview;
+                    const rate = app.exchangeRate || 0;
+                    const preview = rate > 0 ? Math.round((todayRecord.coins / rate) * 100) / 100 : 0;
+                    phoneData.apps.push({
+                        appName: app.name,
+                        appId: app.id,
+                        coins: todayRecord.coins,
+                        exchangeRate: rate,
+                        preview: preview,
+                        earningType: 'coin'
+                    });
+                    phoneData.totalCoins += todayRecord.coins;
+                    phoneData.totalPreview += preview;
+                } else if (earningType === 'direct') {
+                    // 直接转换型
+                    const todayEarning = parseFloat(app.dailyDirectEarnings && app.dailyDirectEarnings[today]) || 0;
+                    if (todayEarning <= 0) return;
+                    
+                    phoneData.apps.push({
+                        appName: app.name,
+                        appId: app.id,
+                        coins: 0,
+                        exchangeRate: 0,
+                        preview: todayEarning,
+                        earningType: 'direct'
+                    });
+                    phoneData.totalPreview += todayEarning;
+                }
             });
             if (phoneData.apps.length > 0) {
                 result.phones.push(phoneData);
@@ -4393,38 +4467,72 @@ class DataManager {
 
         data.phones.forEach(phone => {
             phone.apps.forEach(app => {
-                if (!app.dailyCoins || app.dailyCoins.length === 0) return;
-                const rate = app.exchangeRate || 0;
+                const earningType = app.earningType || 'coin';
+                
+                if (earningType === 'coin') {
+                    // 金币兑换型
+                    if (!app.dailyCoins || app.dailyCoins.length === 0) return;
+                    const rate = app.exchangeRate || 0;
 
-                app.dailyCoins.forEach(record => {
-                    const date = record.date;
-                    if (!result[date]) {
-                        result[date] = {
-                            date,
-                            totalCoins: 0,
-                            totalAmount: 0,
-                            settledAmount: 0,
-                            pendingAmount: 0,
-                            apps: []
-                        };
-                    }
-                    const amount = rate > 0 ? Math.round((record.coins / rate) * 100) / 100 : 0;
-                    result[date].totalCoins += record.coins;
-                    result[date].totalAmount += amount;
-                    if (record.settled) {
-                        result[date].settledAmount += amount;
-                    } else {
-                        result[date].pendingAmount += amount;
-                    }
-                    result[date].apps.push({
-                        phoneName: phone.name,
-                        appName: app.name,
-                        coins: record.coins,
-                        exchangeRate: rate,
-                        amount,
-                        settled: record.settled
+                    app.dailyCoins.forEach(record => {
+                        const date = record.date;
+                        if (!result[date]) {
+                            result[date] = {
+                                date,
+                                totalCoins: 0,
+                                totalAmount: 0,
+                                settledAmount: 0,
+                                pendingAmount: 0,
+                                apps: []
+                            };
+                        }
+                        const amount = rate > 0 ? Math.round((record.coins / rate) * 100) / 100 : 0;
+                        result[date].totalCoins += record.coins;
+                        result[date].totalAmount += amount;
+                        if (record.settled) {
+                            result[date].settledAmount += amount;
+                        } else {
+                            result[date].pendingAmount += amount;
+                        }
+                        result[date].apps.push({
+                            phoneName: phone.name,
+                            appName: app.name,
+                            coins: record.coins,
+                            exchangeRate: rate,
+                            amount,
+                            settled: record.settled,
+                            earningType: 'coin'
+                        });
                     });
-                });
+                } else if (earningType === 'direct') {
+                    // 直接转换型
+                    if (!app.dailyDirectEarnings) return;
+                    
+                    Object.entries(app.dailyDirectEarnings).forEach(([date, amount]) => {
+                        if (!result[date]) {
+                            result[date] = {
+                                date,
+                                totalCoins: 0,
+                                totalAmount: 0,
+                                settledAmount: 0,
+                                pendingAmount: 0,
+                                apps: []
+                            };
+                        }
+                        const earning = parseFloat(amount) || 0;
+                        result[date].totalAmount += earning;
+                        result[date].settledAmount += earning; // 直接型已立即结算
+                        result[date].apps.push({
+                            phoneName: phone.name,
+                            appName: app.name,
+                            coins: 0,
+                            exchangeRate: 0,
+                            amount: earning,
+                            settled: true,
+                            earningType: 'direct'
+                        });
+                    });
+                }
             });
         });
 
@@ -8148,20 +8256,30 @@ function renderActivityPage() {
             completedCount++;
         }
 
-        // 获取今日金币收益（含待结算金币）
-        const phone = data.phones.find(p => p.id === app.phoneId);
-        const fullApp = phone ? phone.apps.find(a => a.id === app.id) : null;
+        // 获取今日收益（金币型 + 直接型）
         let todayCoinEarning = 0;
         let todayCoins = 0;
+        let earningType = 'coin';
+        
         if (fullApp) {
-            // 已结算收益
-            todayCoinEarning = parseFloat(fullApp.dailyEarnings && fullApp.dailyEarnings[today]) || 0;
-            // 待结算金币收益
-            if (fullApp.dailyCoins && fullApp.exchangeRate > 0) {
-                const todayCoinRecord = fullApp.dailyCoins.find(c => c.date === today);
-                if (todayCoinRecord && todayCoinRecord.coins > 0) {
-                    todayCoinEarning += Math.round((todayCoinRecord.coins / fullApp.exchangeRate) * 100) / 100;
-                    todayCoins = todayCoinRecord.coins;
+            earningType = fullApp.earningType || 'coin';
+            
+            if (earningType === 'coin') {
+                // 金币兑换型：从 dailyEarnings 和待结算金币计算
+                todayCoinEarning = parseFloat(fullApp.dailyEarnings && fullApp.dailyEarnings[today]) || 0;
+                if (fullApp.dailyCoins && fullApp.exchangeRate > 0) {
+                    const todayCoinRecord = fullApp.dailyCoins.find(c => c.date === today);
+                    if (todayCoinRecord && todayCoinRecord.coins > 0) {
+                        todayCoinEarning += Math.round((todayCoinRecord.coins / fullApp.exchangeRate) * 100) / 100;
+                        todayCoins = todayCoinRecord.coins;
+                    }
+                }
+            } else if (earningType === 'direct') {
+                // 直接转换型：从 dailyDirectEarnings 和 dailyEarnings 计算
+                todayCoinEarning = parseFloat(fullApp.dailyDirectEarnings && fullApp.dailyDirectEarnings[today]) || 0;
+                if (todayCoinEarning === 0) {
+                    // 兼容：如果 dailyDirectEarnings 没有，尝试从 dailyEarnings 获取
+                    todayCoinEarning = parseFloat(fullApp.dailyEarnings && fullApp.dailyEarnings[today]) || 0;
                 }
             }
         }
@@ -10837,11 +10955,19 @@ function openAddAppModal(phoneId) {
             <div class="form-hint">支持批量添加，每行一个或用逗号分隔</div>
         </div>
         <div class="form-group">
-            <label class="form-label">默认余额 (元)</label>
-            <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
-            <div class="form-hint">批量添加时所有软件的默认余额（已有的余额，后续通过金币自动结算）</div>
+            <label class="form-label">收益类型</label>
+            <select id="app-earning-type" class="form-input" onchange="toggleEarningTypeFields('add')">
+                <option value="coin">金币兑换型 - 金币按比例兑换成现金</option>
+                <option value="direct">直接转换型 - 金币/积分直接变成余额</option>
+            </select>
+            <div class="form-hint">金币兑换型需要设置兑换比例；直接转换型记录余额变化即可</div>
         </div>
         <div class="form-group">
+            <label class="form-label">默认余额 (元)</label>
+            <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <div class="form-hint" id="balance-hint-add">批量添加时所有软件的默认余额（已有的余额，后续通过金币自动结算）</div>
+        </div>
+        <div id="exchange-rate-group" class="form-group">
             <label class="form-label">兑换比例 (金币数 = 1元)</label>
             <input type="number" id="app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
             <div class="form-hint">例如填10000表示10000金币=1元，33000表示33000金币=1元</div>
@@ -10874,8 +11000,9 @@ function openAddAppModal(phoneId) {
             class: 'btn-primary',
             action: () => {
                 const input = document.getElementById('app-names').value.trim();
+                const earningType = document.getElementById('app-earning-type').value;
                 const balance = parseFloat(document.getElementById('app-balance').value) || 0;
-                const exchangeRate = parseFloat(document.getElementById('app-exchange-rate').value) || 0;
+                const exchangeRate = earningType === 'coin' ? (parseFloat(document.getElementById('app-exchange-rate').value) || 0) : 0;
                 const minWithdraw = parseFloat(document.getElementById('app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('app-high-withdraw').value) || 0;
                 const clearPeriod = parseInt(document.getElementById('app-clear-period').value) || 0;
@@ -10905,7 +11032,7 @@ function openAddAppModal(phoneId) {
                 let addedCount = 0;
                 names.forEach(name => {
                     try {
-                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, highWithdrawTiers, clearPeriod, exchangeRate });
+                        DataManager.addApp(phoneId, { name, balance, minWithdraw, highWithdraw, highWithdrawTiers, clearPeriod, exchangeRate, earningType });
                         addedCount++;
                     } catch (error) {
                         showToast(error.message);
@@ -10917,6 +11044,25 @@ function openAddAppModal(phoneId) {
             }
         }
     ]);
+}
+
+// 切换收益类型时显示/隐藏兑换比例字段
+function toggleEarningTypeFields(mode) {
+    const earningTypeSelect = document.getElementById('app-earning-type') || document.getElementById('edit-earning-type');
+    const exchangeRateGroup = document.getElementById('exchange-rate-group') || document.getElementById('edit-exchange-rate-group');
+    const balanceHint = document.getElementById('balance-hint-add') || document.getElementById('balance-hint-edit');
+    
+    if (!earningTypeSelect) return;
+    
+    const isCoin = earningTypeSelect.value === 'coin';
+    if (exchangeRateGroup) {
+        exchangeRateGroup.style.display = isCoin ? 'block' : 'none';
+    }
+    if (balanceHint) {
+        balanceHint.textContent = isCoin 
+            ? '批量添加时所有软件的默认余额（后续通过金币自动结算）'
+            : '当前余额，编辑时输入新余额记录收益变化';
+    }
 }
 
 function addAddTier() {
@@ -11049,10 +11195,15 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
     
     const currentBalance = app.balance || 0;
     const exchangeRate = app.exchangeRate || 0;
+    const earningType = app.earningType || 'coin'; // 默认金币型
     const today = getCurrentDate();
     const todayCoinRecord = (app.dailyCoins || []).find(c => c.date === today);
     const todayCoins = todayCoinRecord ? todayCoinRecord.coins : 0;
     const todayPreview = exchangeRate > 0 ? Math.round((todayCoins / exchangeRate) * 100) / 100 : 0;
+    
+    // 直接型的今日收益：从dailyEarnings获取或记录上次余额
+    const lastRecordedBalance = app.lastRecordedBalance || currentBalance;
+    const todayDirectEarning = (app.dailyDirectEarnings && app.dailyDirectEarnings[today]) || 0;
     
     showModal('编辑软件', `
         <div class="form-group">
@@ -11060,21 +11211,38 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             <input type="text" id="edit-app-name" class="form-input" value="${app.name}">
         </div>
         <div class="form-group">
-            <label class="form-label">当前余额 (元)</label>
-            <input type="text" class="form-input" value="¥${currentBalance.toFixed(2)}" disabled>
-            <div class="form-hint">余额由金币自动结算，次日0点自动转入</div>
+            <label class="form-label">收益类型</label>
+            <select id="edit-earning-type" class="form-input" onchange="toggleEditEarningType()">
+                <option value="coin" ${earningType === 'coin' ? 'selected' : ''}>金币兑换型 - 金币按比例兑换成现金</option>
+                <option value="direct" ${earningType === 'direct' ? 'selected' : ''}>直接转换型 - 金币/积分直接变成余额</option>
+            </select>
+            <div class="form-hint">金币型需设置兑换比例；直接型记录余额变化作为收益</div>
         </div>
         <div class="form-group">
+            <label class="form-label" id="balance-label">当前余额 (元)</label>
+            <input type="text" class="form-input" value="¥${currentBalance.toFixed(2)}" disabled>
+            <div class="form-hint" id="balance-hint-edit">${earningType === 'coin' ? '余额由金币自动结算，次日0点自动转入' : '当前余额'}</div>
+        </div>
+        <div id="edit-exchange-rate-group" class="form-group" style="display: ${earningType === 'coin' ? 'block' : 'none'};">
             <label class="form-label">兑换比例 (金币数 = 1元)</label>
             <input type="number" id="edit-app-exchange-rate" class="form-input" value="${exchangeRate || ''}" step="1" min="0" placeholder="如10000">
             <div class="form-hint">例如填10000表示10000金币=1元，33000表示33000金币=1元</div>
         </div>
-        <div class="form-group">
+        <div id="edit-today-coins-group" class="form-group" style="display: ${earningType === 'coin' ? 'block' : 'none'};">
             <label class="form-label">今日金币数量</label>
             <input type="number" id="edit-app-today-coins" class="form-input" value="${todayCoins || ''}" step="1" min="0" placeholder="0" onclick="this.select();" onfocus="this.select();">
             <div class="form-hint">
                 今日获得的金币数，系统将根据兑换比例自动计算收益
                 ${exchangeRate > 0 ? `<br><span style="color: #10b981;">📊 预计收益: ¥${todayPreview.toFixed(2)}（${todayCoins} ÷ ${exchangeRate}）</span>` : '<br><span style="color: #f59e0b;">⚠️ 请先设置兑换比例</span>'}
+            </div>
+        </div>
+        <div id="edit-direct-earning-group" class="form-group" style="display: ${earningType === 'direct' ? 'block' : 'none'};">
+            <label class="form-label">新余额 (元)</label>
+            <input type="number" id="edit-app-new-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" min="0" placeholder="输入新的余额">
+            <div class="form-hint">
+                输入当前实际余额，系统会计算与上次记录的差额作为今日收益
+                ${currentBalance !== lastRecordedBalance ? `<br><span style="color: var(--text-muted);">上次记录: ¥${lastRecordedBalance.toFixed(2)}</span>` : ''}
+                ${todayDirectEarning > 0 ? `<br><span style="color: #10b981;">📊 今日已记录收益: ¥${todayDirectEarning.toFixed(2)}</span>` : ''}
             </div>
         </div>
         <div class="form-group">
@@ -11135,8 +11303,10 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 }
                 
                 const name = document.getElementById('edit-app-name').value.trim();
-                const exchangeRateVal = parseFloat(document.getElementById('edit-app-exchange-rate').value) || 0;
-                const todayCoinsVal = parseInt(document.getElementById('edit-app-today-coins').value) || 0;
+                const newEarningType = document.getElementById('edit-earning-type').value;
+                const exchangeRateVal = newEarningType === 'coin' ? (parseFloat(document.getElementById('edit-app-exchange-rate').value) || 0) : 0;
+                const todayCoinsVal = newEarningType === 'coin' ? (parseInt(document.getElementById('edit-app-today-coins').value) || 0) : 0;
+                const newBalanceVal = newEarningType === 'direct' ? (parseFloat(document.getElementById('edit-app-new-balance').value) || currentBalance) : currentBalance;
                 const minWithdraw = parseFloat(document.getElementById('edit-app-min-withdraw').value) || 0;
                 const highWithdraw = parseFloat(document.getElementById('edit-app-high-withdraw').value) || 0;
                 const clearPeriod = parseInt(document.getElementById('edit-app-clear-period').value) || 0;
@@ -11164,8 +11334,10 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                         
                         DataManager.editApp(phoneId, appId, {
                             name,
+                            earningType: newEarningType,
                             exchangeRate: exchangeRateVal,
                             todayCoins: todayCoinsVal,
+                            newBalance: newBalanceVal,
                             minWithdraw,
                             highWithdraw,
                             highWithdrawTiers,
@@ -11198,6 +11370,27 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
             }
         }
     ]);
+}
+
+// 切换编辑时的收益类型显示
+function toggleEditEarningType() {
+    const earningTypeSelect = document.getElementById('edit-earning-type');
+    const exchangeRateGroup = document.getElementById('edit-exchange-rate-group');
+    const todayCoinsGroup = document.getElementById('edit-today-coins-group');
+    const directEarningGroup = document.getElementById('edit-direct-earning-group');
+    const balanceHint = document.getElementById('balance-hint-edit');
+    
+    if (!earningTypeSelect) return;
+    
+    const isCoin = earningTypeSelect.value === 'coin';
+    if (exchangeRateGroup) exchangeRateGroup.style.display = isCoin ? 'block' : 'none';
+    if (todayCoinsGroup) todayCoinsGroup.style.display = isCoin ? 'block' : 'none';
+    if (directEarningGroup) directEarningGroup.style.display = isCoin ? 'none' : 'block';
+    if (balanceHint) {
+        balanceHint.textContent = isCoin 
+            ? '余额由金币自动结算，次日0点自动转入'
+            : '输入新余额，系统计算差额作为今日收益';
+    }
 }
 
 // 打开提现模态框
