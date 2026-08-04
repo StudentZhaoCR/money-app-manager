@@ -4145,15 +4145,37 @@ class DataManager {
 
     // 清空所有数据
     static clearAllData() {
+        // 主数据
         localStorage.removeItem(getSystemKey(PHONES_KEY));
         localStorage.removeItem(getSystemKey(INSTALLMENTS_KEY));
         localStorage.removeItem(getSystemKey(EXPENSES_KEY));
         localStorage.removeItem(getSystemKey(SETTINGS_KEY));
         localStorage.removeItem(getSystemKey(DATA_KEY));
-        
+        localStorage.removeItem(getSystemKey(DOWNLOADED_GAMES_KEY));
+
+        // 系统隔离键
         localStorage.removeItem(SYS_KEYS.gameDrawHistory());
         localStorage.removeItem(SYS_KEYS.gameTimers());
         localStorage.removeItem(SYS_KEYS.dailyGaps());
+        localStorage.removeItem(SYS_KEYS.dailyGapRecords());
+        localStorage.removeItem(SYS_KEYS.shoppingRecords());
+        localStorage.removeItem(SYS_KEYS.personalFinance());
+        localStorage.removeItem(SYS_KEYS.withdrawReminder());
+        localStorage.removeItem(SYS_KEYS.dailyGoalReminder());
+        localStorage.removeItem(SYS_KEYS.quickEditAppOrder());
+        localStorage.removeItem(SYS_KEYS.quickEditAppNames());
+        localStorage.removeItem(SYS_KEYS.expandedPhones());
+
+        // 清除所有分期提醒键
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('installment_reminder_')) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+
         return { phones: [], installments: [], expenses: [], settings: {} };
     }
 
@@ -5337,31 +5359,7 @@ class DataManager {
         return phone ? (phone.games || []) : [];
     }
 
-    static clearAllData() {
-        // 清除旧的存储键
-        localStorage.removeItem(getSystemKey(DATA_KEY));
-        localStorage.removeItem(SYS_KEYS.dailyGapRecords());
-        localStorage.removeItem(SYS_KEYS.shoppingRecords());
-        
-        // 清除提醒相关的存储键
-        localStorage.removeItem(SYS_KEYS.withdrawReminder());
-        localStorage.removeItem(SYS_KEYS.dailyGoalReminder());
-        
-        // 清除所有分期提醒键
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('installment_reminder_')) {
-                keysToRemove.push(key);
-            }
-        }
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        
-        // 清除游戏管理相关的存储键
-        localStorage.removeItem(getSystemKey(DOWNLOADED_GAMES_KEY));
-        localStorage.removeItem(SYS_KEYS.gameDrawHistory());
-    }
-    
+
     // 主题相关方法（全局共享，不按系统隔离）
     static getTheme() {
         return localStorage.getItem('app-theme') || 'default';
@@ -13589,11 +13587,16 @@ function clearAllData() {
         expandedPhones = {};
         todayDrawResult = null;
         currentGamePhoneId = null;
-        renderDashboard();
-        renderPhones();
-        renderStats();
-        renderSettings();
-        renderGamesPage();
+        if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof renderDashboardV2 === 'function') renderDashboardV2();
+        if (typeof renderPhones === 'function') renderPhones();
+        if (typeof renderStats === 'function') renderStats();
+        if (typeof renderSettings === 'function') renderSettings();
+        if (typeof renderGamesPage === 'function') renderGamesPage();
+        if (typeof renderShoppingPage === 'function') renderShoppingPage();
+        if (typeof renderActivityPlan === 'function') renderActivityPlan();
+        if (typeof updateTodayEarnings === 'function') updateTodayEarnings();
+        if (typeof renderTotalEarnings === 'function') renderTotalEarnings();
         showToast('数据已清空！');
     }
 }
