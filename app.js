@@ -4385,7 +4385,107 @@ class DataManager {
         return result;
     }
 
-    // ==================== 购物记录功能 ====================
+    // 获取金币收益历史记录（按日期分组）
+    static getCoinEarningsHistory(days = 30) {
+        const data = this.loadData();
+        const today = getCurrentDate();
+        const result = {}; // { date: { totalCoins, totalAmount, settled, apps: [...] } }
+
+        data.phones.forEach(phone => {
+            phone.apps.forEach(app => {
+                if (!app.dailyCoins || app.dailyCoins.length === 0) return;
+                const rate = app.exchangeRate || 0;
+
+                app.dailyCoins.forEach(record => {
+                    const date = record.date;
+                    if (!result[date]) {
+                        result[date] = {
+                            date,
+                            totalCoins: 0,
+                            totalAmount: 0,
+                            settledAmount: 0,
+                            pendingAmount: 0,
+                            apps: []
+                        };
+                    }
+                    const amount = rate > 0 ? Math.round((record.coins / rate) * 100) / 100 : 0;
+                    result[date].totalCoins += record.coins;
+                    result[date].totalAmount += amount;
+                    if (record.settled) {
+                        result[date].settledAmount += amount;
+                    } else {
+                        result[date].pendingAmount += amount;
+                    }
+                    result[date].apps.push({
+                        phoneName: phone.name,
+                        appName: app.name,
+                        coins: record.coins,
+                        exchangeRate: rate,
+                        amount,
+                        settled: record.settled
+                    });
+                });
+            });
+        });
+
+        // 转为数组并按日期倒序
+        const arr = Object.values(result).map(d => {
+            d.totalAmount = Math.round(d.totalAmount * 100) / 100;
+            d.settledAmount = Math.round(d.settledAmount * 100) / 100;
+            d.pendingAmount = Math.round(d.pendingAmount * 100) / 100;
+            return d;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        return arr;
+    }
+
+    // 获取金币收益周对比数据
+    static getCoinEarningsWeeklyComparison() {
+        const history = this.getCoinEarningsHistory(14);
+        const today = new Date();
+        const todayStr = getCurrentDate();
+
+        // 本周（周一到今天）
+        const thisWeekStart = new Date(today);
+        const dayOfWeek = today.getDay() || 7; // 周日=7
+        thisWeekStart.setDate(today.getDate() - dayOfWeek + 1);
+
+        // 上周
+        const lastWeekStart = new Date(thisWeekStart);
+        lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+        const lastWeekEnd = new Date(thisWeekStart);
+        lastWeekEnd.setDate(thisWeekStart.getDate() - 1);
+
+        const formatDate = (d) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+        };
+
+        let thisWeekTotal = 0, lastWeekTotal = 0;
+        let thisWeekDays = 0, lastWeekDays = 0;
+        const thisWeekDaily = [];
+        const lastWeekDaily = [];
+
+        history.forEach(d => {
+            if (d.date >= formatDate(thisWeekStart) && d.date <= todayStr) {
+                thisWeekTotal += d.totalAmount;
+                thisWeekDays++;
+                thisWeekDaily.push(d);
+            } else if (d.date >= formatDate(lastWeekStart) && d.date <= formatDate(lastWeekEnd)) {
+                lastWeekTotal += d.totalAmount;
+                lastWeekDays++;
+                lastWeekDaily.push(d);
+            }
+        });
+
+        return {
+            thisWeek: { total: Math.round(thisWeekTotal * 100) / 100, days: thisWeekDays, daily: thisWeekDaily },
+            lastWeek: { total: Math.round(lastWeekTotal * 100) / 100, days: lastWeekDays, daily: lastWeekDaily },
+            diff: Math.round((thisWeekTotal - lastWeekTotal) * 100) / 100
+        };
+    }
 
     // 获取所有购物记录
     static getShoppingRecords() {
@@ -4598,8 +4698,6 @@ class DataManager {
         let totalEarned = 0;
         let totalWithdrawn = 0;
         let totalBalance = 0;
-        let pendingEarnings = 0;
-        const today = getCurrentDate();
         
         // 遍历所有手机和软件
         data.phones.forEach(phone => {
@@ -4611,28 +4709,16 @@ class DataManager {
                 // 当前余额
                 const balance = app.balance || 0;
                 totalBalance += balance;
-                
-                // 今日待结算金币的预估收益
-                if (app.dailyCoins && app.exchangeRate > 0) {
-                    const todayCoinsRecord = app.dailyCoins.find(c => c.date === today);
-                    if (todayCoinsRecord && todayCoinsRecord.coins > 0) {
-                        const preview = Math.round((todayCoinsRecord.coins / app.exchangeRate) * 100) / 100;
-                        if (preview > 0) {
-                            pendingEarnings += preview;
-                        }
-                    }
-                }
             });
         });
         
-        // 总赚取 = 已提现 + 当前余额 + 待结算收益
-        totalEarned = totalWithdrawn + totalBalance + pendingEarnings;
+        // 总赚取 = 已提现 + 当前余额（不含待结算金币，次日结算后才计入）
+        totalEarned = totalWithdrawn + totalBalance;
         
         return {
             totalEarned: totalEarned,
             totalWithdrawn: totalWithdrawn,
             totalBalance: totalBalance,
-            pendingEarnings: pendingEarnings,
             appCount: data.phones.reduce((sum, p) => sum + p.apps.length, 0),
             phoneCount: data.phones.length
         };
@@ -7364,13 +7450,13 @@ function renderCoinsPreviewCard() {
     `).join('');
 
     return `
-        <div class="card" style="margin-top: 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 14px;">
+        <div class="card" style="margin-top: 16px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 14px; cursor: pointer;" onclick="showCoinEarningsDetail()">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="width: 32px; height: 32px; background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 15px; font-weight: 700;">¥</div>
                     <div>
                         <div style="font-size: 14px; font-weight: 600; color: #f59e0b;">今日金币收益</div>
-                        <div style="font-size: 12px; color: var(--text-secondary);">按兑换比例预估，次日自动结算</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">点击查看详情与收益对比</div>
                     </div>
                 </div>
                 <div style="text-align: right;">
@@ -7383,6 +7469,139 @@ function renderCoinsPreviewCard() {
             </div>
         </div>
     `;
+}
+
+// 显示金币收益详情（今日 + 历史 + 对比）
+function showCoinEarningsDetail() {
+    const todayPreview = DataManager.getTodayCoinsPreview();
+    const history = DataManager.getCoinEarningsHistory(30);
+    const weeklyComp = DataManager.getCoinEarningsWeeklyComparison();
+    const today = getCurrentDate();
+
+    // 今日详情
+    const todayDetailHtml = todayPreview.phones.length > 0 ? todayPreview.phones.map(phone => `
+        <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${phone.phoneName}</span>
+                <span style="font-size: 13px; font-weight: 700; color: #f59e0b;">¥${phone.totalPreview.toFixed(2)}</span>
+            </div>
+            ${phone.apps.map(app => `
+                <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px;">
+                    <div>
+                        <span style="color: var(--text-primary);">${app.appName}</span>
+                        <span style="color: var(--text-muted); margin-left: 6px;">${app.coins.toLocaleString()}金币 / ${app.exchangeRate}:1</span>
+                    </div>
+                    <span style="color: #10b981; font-weight: 600;">¥${app.preview.toFixed(2)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('') : '<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">今日暂无金币记录</div>';
+
+    // 历史记录（排除今天）
+    const historyHtml = history.filter(d => d.date !== today).slice(0, 14).map(d => `
+        <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;" onclick="showCoinDayDetail('${d.date}')">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${d.date}</span>
+                    <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">${d.totalCoins.toLocaleString()}金币</span>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 14px; font-weight: 700; color: ${d.pendingAmount > 0 ? '#f59e0b' : '#10b981'};">¥${d.totalAmount.toFixed(2)}</span>
+                    ${d.pendingAmount > 0 ? `<span style="font-size: 10px; color: #f59e0b; margin-left: 4px;">待结算</span>` : `<span style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">已结算</span>`}
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    // 周对比
+    const diff = weeklyComp.diff;
+    const diffPercent = weeklyComp.lastWeek.total > 0 ? Math.round((diff / weeklyComp.lastWeek.total) * 100) : 0;
+    const weeklyHtml = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 10px; padding: 12px; text-align: center;">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">本周</div>
+                <div style="font-size: 18px; font-weight: 700; color: #6366f1;">¥${weeklyComp.thisWeek.total.toFixed(2)}</div>
+                <div style="font-size: 10px; color: var(--text-muted);">${weeklyComp.thisWeek.days}天</div>
+            </div>
+            <div style="background: rgba(100,116,139,0.08); border: 1px solid rgba(100,116,139,0.2); border-radius: 10px; padding: 12px; text-align: center;">
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">上周</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--text-secondary);">¥${weeklyComp.lastWeek.total.toFixed(2)}</div>
+                <div style="font-size: 10px; color: var(--text-muted);">${weeklyComp.lastWeek.days}天</div>
+            </div>
+        </div>
+        <div style="background: ${diff >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)'}; border-radius: 10px; padding: 10px 12px; text-align: center;">
+            <span style="font-size: 12px; color: var(--text-secondary);">对比上周 </span>
+            <span style="font-size: 14px; font-weight: 700; color: ${diff >= 0 ? '#10b981' : '#ef4444'};">${diff >= 0 ? '+' : ''}¥${diff.toFixed(2)}</span>
+            ${weeklyComp.lastWeek.total > 0 ? `<span style="font-size: 11px; color: ${diff >= 0 ? '#10b981' : '#ef4444'}; margin-left: 4px;">(${diffPercent >= 0 ? '+' : ''}${diffPercent}%)</span>` : ''}
+        </div>
+    `;
+
+    showModal('金币收益详情', `
+        <div style="padding: 16px; max-height: 85vh; overflow-y: auto;">
+            <!-- 今日详情 -->
+            <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 4px; height: 16px; background: #f59e0b; border-radius: 2px;"></span>
+                今日详情 (${today})
+            </div>
+            ${todayDetailHtml}
+
+            <!-- 周对比 -->
+            <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 16px 0 10px; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 4px; height: 16px; background: #6366f1; border-radius: 2px;"></span>
+                收益对比（周）
+            </div>
+            ${weeklyHtml}
+
+            <!-- 历史记录 -->
+            <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 16px 0 10px; display: flex; align-items: center; gap: 6px;">
+                <span style="width: 4px; height: 16px; background: #10b981; border-radius: 2px;"></span>
+                历史记录
+            </div>
+            ${historyHtml || '<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;">暂无历史记录</div>'}
+        </div>
+    `, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
+}
+
+// 显示某日金币详情
+function showCoinDayDetail(date) {
+    const history = DataManager.getCoinEarningsHistory();
+    const dayData = history.find(d => d.date === date);
+    if (!dayData) return;
+
+    const appsHtml = dayData.apps.map((app, idx) => `
+        <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.appName}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${app.phoneName} · ${app.coins.toLocaleString()}金币 / ${app.exchangeRate}:1</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 14px; font-weight: 700; color: ${app.settled ? '#10b981' : '#f59e0b'};">¥${app.amount.toFixed(2)}</div>
+                    <div style="font-size: 10px; color: ${app.settled ? 'var(--text-muted)' : '#f59e0b'};">${app.settled ? '已结算' : '待结算'}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    showModal(`${date} 金币详情`, `
+        <div style="padding: 16px;">
+            <div style="text-align: center; padding: 16px; background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05)); border-radius: 12px; margin-bottom: 16px;">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当日金币总收益</div>
+                <div style="font-size: 28px; font-weight: 700; color: #f59e0b;">¥${dayData.totalAmount.toFixed(2)}</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${dayData.totalCoins.toLocaleString()} 金币</div>
+                <div style="margin-top: 8px; font-size: 11px;">
+                    <span style="color: #10b981;">已结算 ¥${dayData.settledAmount.toFixed(2)}</span>
+                    ${dayData.pendingAmount > 0 ? `<span style="color: #f59e0b; margin-left: 8px;">待结算 ¥${dayData.pendingAmount.toFixed(2)}</span>` : ''}
+                </div>
+            </div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">软件明细 (${dayData.apps.length}个)</div>
+            ${appsHtml}
+        </div>
+    `, [
+        { text: '关闭', class: 'btn-secondary', action: closeModal }
+    ]);
 }
 
 // 展开/收起高档提现档位的软件列表
@@ -8934,7 +9153,7 @@ function showTotalEarningsDetail() {
                 <div style="font-size: 32px; font-weight: 700;">¥${earnings.totalEarned.toFixed(2)}</div>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">已提现</div>
                     <div style="font-size: 16px; font-weight: 600; color: var(--success-color);">¥${earnings.totalWithdrawn.toFixed(2)}</div>
@@ -8942,10 +9161,6 @@ function showTotalEarningsDetail() {
                 <div style="background: var(--bg-cream); border-radius: 8px; padding: 16px; text-align: center;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前余额</div>
                     <div style="font-size: 16px; font-weight: 600; color: var(--primary-color);">¥${earnings.totalBalance.toFixed(2)}</div>
-                </div>
-                <div style="background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05)); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 16px; text-align: center;">
-                    <div style="font-size: 12px; color: #f59e0b; margin-bottom: 4px;">¥ 待结算</div>
-                    <div style="font-size: 16px; font-weight: 600; color: #f59e0b;">¥${earnings.pendingEarnings.toFixed(2)}</div>
                 </div>
             </div>
 
