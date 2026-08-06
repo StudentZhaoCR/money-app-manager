@@ -4132,6 +4132,27 @@ class DataManager {
         return data;
     }
 
+    static findAppByName(name) {
+        const targetName = (name || '').trim().toLowerCase();
+        if (!targetName) return null;
+        const data = this.loadData();
+        for (const phone of data.phones) {
+            for (const app of phone.apps) {
+                if (app.name && app.name.trim().toLowerCase() === targetName) {
+                    return {
+                        minWithdraw: app.minWithdraw || 0,
+                        clearPeriod: app.clearPeriod || 0,
+                        exchangeRate: app.exchangeRate || 0,
+                        highWithdraw: app.highWithdraw || 0,
+                        highWithdrawTiers: app.highWithdrawTiers || [],
+                        phoneName: phone.name
+                    };
+                }
+            }
+        }
+        return null;
+    }
+
     static addApp(phoneId, appData) {
         const data = this.loadData();
         const phone = data.phones.find(p => p.id === phoneId);
@@ -5231,20 +5252,20 @@ class DataManager {
         const theme = this.getTheme();
         const colors = {
             default: {
-                primary: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
-                secondary: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
-                accent: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                success: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
-                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                info: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)'
+                primary: 'linear-gradient(135deg, #7a9e7e 0%, #9ab89c 100%)',
+                secondary: 'linear-gradient(135deg, #8a8278 0%, #a8a096 100%)',
+                accent: 'linear-gradient(135deg, #c8894a 0%, #d9a86c 100%)',
+                success: 'linear-gradient(135deg, #7a9e7e 0%, #9ab89c 100%)',
+                warning: 'linear-gradient(135deg, #c8894a 0%, #d9a86c 100%)',
+                info: 'linear-gradient(135deg, #8a9e8e 0%, #a8b8a8 100%)'
             },
             'dark': {
-                primary: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
-                secondary: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)',
-                accent: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                success: 'linear-gradient(135deg, #34d399 0%, #6ee7b7 100%)',
-                warning: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
-                info: 'linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)'
+                primary: 'linear-gradient(135deg, #5e8262 0%, #7a9e7e 100%)',
+                secondary: 'linear-gradient(135deg, #8a8278 0%, #a8a096 100%)',
+                accent: 'linear-gradient(135deg, #c8894a 0%, #d9a86c 100%)',
+                success: 'linear-gradient(135deg, #5e8262 0%, #7a9e7e 100%)',
+                warning: 'linear-gradient(135deg, #c8894a 0%, #d9a86c 100%)',
+                info: 'linear-gradient(135deg, #6b7a6b 0%, #8a9e8a 100%)'
             }
         };
         return colors[theme] || colors.default;
@@ -7310,11 +7331,11 @@ function renderDashboard() {
             <div class="card" style="margin-top: 16px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); border: 1px solid rgba(59, 130, 246, 0.3);">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                     <div>
-                        <div style="font-size: 14px; font-weight: 600; color: #3b82f6;">💎 可高档提现</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #7a9e7e;">💎 可高档提现</div>
                         <div style="font-size: 12px; color: var(--text-secondary);">按提现档位分类查看</div>
                     </div>
                     <div style="text-align: right;">
-                        <div style="font-size: 22px; font-weight: 700; color: #3b82f6;">¥${highWithdrawData.total.toFixed(2)}</div>
+                        <div style="font-size: 22px; font-weight: 700; color: #7a9e7e;">¥${highWithdrawData.total.toFixed(2)}</div>
                         <div style="font-size: 11px; color: var(--text-muted);">${highWithdrawData.appCount} 个软件可提现</div>
                     </div>
                 </div>
@@ -7323,11 +7344,11 @@ function renderDashboard() {
                         <div style="background: var(--bg-secondary); border-radius: 10px; padding: 10px 12px;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer;" onclick="toggleHighWithdrawTier(${tierIdx})">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${tier.tierName}</span>
+                                    <span style="background: linear-gradient(135deg, #7a9e7e, #9ab89c); color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">${tier.tierName}</span>
                                     <span style="font-size: 11px; color: var(--text-muted);">${tier.appCount} 个软件</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <div style="font-size: 15px; font-weight: 700; color: #3b82f6;">¥${tier.total.toFixed(2)}</div>
+                                    <div style="font-size: 15px; font-weight: 700; color: #7a9e7e;">¥${tier.total.toFixed(2)}</div>
                                     <span id="tier-arrow-${tierIdx}" style="font-size: 12px; color: var(--text-muted); transition: transform 0.2s;">▼</span>
                                 </div>
                             </div>
@@ -7338,7 +7359,7 @@ function renderDashboard() {
                                             <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${app.name}</span>
                                             <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${app.phoneName}</span>
                                         </div>
-                                        <div style="font-size: 12px; font-weight: 600; color: #3b82f6;">¥${app.balance.toFixed(2)}</div>
+                                        <div style="font-size: 12px; font-weight: 600; color: #7a9e7e;">¥${app.balance.toFixed(2)}</div>
                                     </div>
                                 `).join('')}
                             </div>
@@ -7410,12 +7431,12 @@ function renderActivityPlanCard() {
                     <div style="font-size: 20px; font-weight: 700; color: #f59e0b;">${warningCount}</div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">3天内</div>
                 </div>
-                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(59,130,246,0.1); border-radius: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #3b82f6;">${activityStats.avgDailyActive}</div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(122,158,126,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #7a9e7e;">${activityStats.avgDailyActive}</div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">日均活跃</div>
                 </div>
-                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(16,185,129,0.1); border-radius: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #10b981;">${activityStats.activeRate}%</div>
+                <div style="flex: 1; text-align: center; padding: 12px; background: rgba(200,137,74,0.1); border-radius: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #c8894a;">${activityStats.activeRate}%</div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">活跃率</div>
                 </div>
             </div>
@@ -7487,7 +7508,7 @@ function renderActivityPlanCard() {
                         余额: ¥${app.balance.toFixed(2)} | 今日赚取: ¥${app.todayEarning.toFixed(2)}
                         ${app.averageEarning > 0 ? `| 平均: ¥${app.averageEarning.toFixed(2)}` : ''}
                     </div>
-                    <div style="font-size: 11px; color: #3b82f6; margin-top: 2px;">
+                    <div style="font-size: 11px; color: #7a9e7e; margin-top: 2px;">
                         ⏱️ 推荐活跃: ${app.recommendedDuration}分钟 ${durationBreakdownText}
                     </div>
                 </div>
@@ -7495,7 +7516,7 @@ function renderActivityPlanCard() {
                     ${activityBadge}
                     ${app.isActiveToday ? `
                         <div style="display: flex; gap: 4px;">
-                            <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', ${app.recommendedDuration})" style="font-size: 10px; background: rgba(59,130,246,0.2); color: #3b82f6;">推荐</button>
+                            <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', ${app.recommendedDuration})" style="font-size: 10px; background: rgba(122,158,126,0.2); color: #7a9e7e;">推荐</button>
                             <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', 5)" style="font-size: 10px;">5分钟</button>
                             <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', 10)" style="font-size: 10px;">10分钟</button>
                             <button class="btn btn-xs" onclick="setActivityDuration('${app.phoneId}', '${app.id}', 15)" style="font-size: 10px;">15分钟</button>
@@ -7790,8 +7811,8 @@ function renderActivityPage() {
                     <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">${inProgressCount}</div>
                     <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">进行中</div>
                 </div>
-                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(59,130,246,0.1); border-radius: 10px;">
-                    <div style="font-size: 18px; font-weight: 700; color: #3b82f6;">${totalWatchedToday}</div>
+                <div style="flex: 1; text-align: center; padding: 10px; background: rgba(122,158,126,0.1); border-radius: 10px;">
+                    <div style="font-size: 18px; font-weight: 700; color: #7a9e7e;">${totalWatchedToday}</div>
                     <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">已看集数</div>
                 </div>
                 <div style="flex: 1; text-align: center; padding: 10px; background: rgba(16,185,129,0.1); border-radius: 10px;">
@@ -8040,7 +8061,7 @@ function renderNextPlay() {
             <button class="btn btn-sm btn-secondary active" onclick="filterNextPlayByStatus(0)" id="filter-all">全部</button>
             <button class="btn btn-sm" onclick="filterNextPlayByStatus(1)" id="filter-urgent" style="background: rgba(239,68,68,0.1); color: #ef4444; border-color: rgba(239,68,68,0.2);">⚠️ 立即玩</button>
             <button class="btn btn-sm" onclick="filterNextPlayByStatus(2)" id="filter-warning" style="background: rgba(245,158,11,0.1); color: #f59e0b; border-color: rgba(245,158,11,0.2);">⏳ 3天内</button>
-            <button class="btn btn-sm" onclick="filterNextPlayByStatus(3)" id="filter-soon" style="background: rgba(59,130,246,0.1); color: #3b82f6; border-color: rgba(59,130,246,0.2);">📅 7天内</button>
+            <button class="btn btn-sm" onclick="filterNextPlayByStatus(3)" id="filter-soon" style="background: rgba(122,158,126,0.1); color: #7a9e7e; border-color: rgba(122,158,126,0.2);">📅 7天内</button>
             <button class="btn btn-sm" onclick="filterNextPlayByStatus(4)" id="filter-relax" style="background: rgba(16,185,129,0.1); color: #10b981; border-color: rgba(16,185,129,0.2);">✓ 7天后</button>
         </div>
     `;
@@ -9847,7 +9868,7 @@ function renderPhones() {
                             <span class="stat-icon">💳</span>
                             <div class="stat-content">
                                 <span class="stat-label">当前余额</span>
-                                <span class="stat-value" style="color: #3b82f6;">¥${totalBalance.toFixed(2)}</span>
+                                <span class="stat-value" style="color: #7a9e7e;">¥${totalBalance.toFixed(2)}</span>
                             </div>
                         </div>
                         <div class="phone-stat-item">
@@ -10080,7 +10101,7 @@ function renderPhoneEarningsPage() {
             <div style="background: var(--card-bg); border-radius: 12px; padding: 14px; border: 1px solid var(--border-color);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); color: white; padding: 5px 10px; border-radius: 16px; font-size: 12px; font-weight: 600;">
+                        <span style="background: linear-gradient(135deg, #7a9e7e 0%, #9ab89c 100%); color: white; padding: 5px 10px; border-radius: 16px; font-size: 12px; font-weight: 600;">
                             📱 ${phone.phoneName}
                         </span>
                     </div>
@@ -10207,7 +10228,7 @@ function renderAppDetailsPage() {
                 
                 // 提现明细卡片（右侧）
                 html += `<div style="flex: 1; cursor: pointer; border: 2px solid ${hasWithdrawals ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)'}; border-radius: 12px; padding: 12px; background: ${hasWithdrawals ? 'rgba(59, 130, 246, 0.05)' : 'rgba(0,0,0,0.02)'}; transition: all 0.2s ease;" onclick="toggleAppDetail('${appIdSafe}', 'withdrawals')">`;
-                html += `<div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 600; color: #3b82f6;">`;
+                html += `<div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; font-weight: 600; color: #7a9e7e;">`;
                 html += `<span>💰</span>`;
                 html += `<span>提现明细</span>`;
                 html += `</div>`;
@@ -10238,7 +10259,7 @@ function renderAppDetailsPage() {
                 
                 // 提现明细详情（默认隐藏）
                 html += `<div id="withdrawals_${appIdSafe}" style="display: none; margin-top: 12px; animation: slideDown 0.3s ease;">`;
-                html += `<div style="font-size: 13px; font-weight: 600; color: #3b82f6; margin-bottom: 8px;">💰 提现明细</div>`;
+                html += `<div style="font-size: 13px; font-weight: 600; color: #7a9e7e; margin-bottom: 8px;">💰 提现明细</div>`;
                 if (hasWithdrawals) {
                     html += `<div style="display: flex; flex-direction: column; gap: 6px;">`;
                     app.withdrawals
@@ -10246,7 +10267,7 @@ function renderAppDetailsPage() {
                         .forEach(wd => {
                             html += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(59, 130, 246, 0.05); border-radius: 8px; border-left: 3px solid #3b82f6;">`;
                             html += `<span style="font-size: 13px; color: var(--text-primary);">${wd.date}</span>`;
-                            html += `<span style="font-size: 14px; font-weight: 600; color: #3b82f6;">-¥${parseFloat(wd.amount).toFixed(2)}</span>`;
+                            html += `<span style="font-size: 14px; font-weight: 600; color: #7a9e7e;">-¥${parseFloat(wd.amount).toFixed(2)}</span>`;
                             html += `</div>`;
                         });
                     html += `</div>`;
@@ -10345,6 +10366,7 @@ function openAddAppModal(phoneId) {
 方式2：逗号分隔，如：
 抖音极速版,快手极速版,百度极速版"></textarea>
             <div class="form-hint">支持批量添加，每行一个或用逗号分隔</div>
+            <div id="app-auto-fill-hint" style="display: none; margin-top: 6px; padding: 8px 12px; background: rgba(16,185,129,0.1); color: #059669; border-radius: 6px; font-size: 12px; border: 1px solid rgba(16,185,129,0.2);"></div>
         </div>
         <div class="form-group">
             <label class="form-label">默认余额 (元)</label>
@@ -10369,7 +10391,7 @@ function openAddAppModal(phoneId) {
         <div class="form-group">
             <label class="form-label">多档位提现额度</label>
             <div id="add-tiers-container" style="display: flex; flex-direction: column; gap: 6px;"></div>
-            <button type="button" onclick="addAddTier()" style="margin-top: 6px; background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px dashed rgba(59,130,246,0.3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; width: 100%;">+ 添加档位</button>
+            <button type="button" onclick="addAddTier()" style="margin-top: 6px; background: rgba(122,158,126,0.1); color: #7a9e7e; border: 1px dashed rgba(122,158,126,0.3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; width: 100%;">+ 添加档位</button>
             <div class="form-hint">添加多个提现档位，首页将按档位分类显示可提现总额</div>
         </div>
         <div class="form-group">
@@ -10427,6 +10449,52 @@ function openAddAppModal(phoneId) {
             }
         }
     ]);
+
+    // 自动填充：当用户输入软件名时，从已有同名软件获取设置
+    const nameTextarea = document.getElementById('app-names');
+    if (nameTextarea) {
+        nameTextarea.addEventListener('input', function() {
+            const firstLine = this.value.split(/[\n,]/).map(n => n.trim()).filter(n => n)[0];
+            const hint = document.getElementById('app-auto-fill-hint');
+            if (!firstLine) {
+                if (hint) hint.style.display = 'none';
+                return;
+            }
+            const existing = DataManager.findAppByName(firstLine);
+            if (existing) {
+                if (hint) {
+                    hint.style.display = 'block';
+                    hint.textContent = `💡 已匹配到「${firstLine}」（在「${existing.phoneName}」上），自动填充：提现门槛 ¥${existing.minWithdraw}${existing.clearPeriod > 0 ? `，清零周期 ${existing.clearPeriod}天` : ''}${existing.exchangeRate > 0 ? `，兑换比例 ${existing.exchangeRate}:1` : ''}${existing.highWithdraw > 0 ? `，高档提现 ¥${existing.highWithdraw}` : ''}`;
+                }
+                // 填充字段
+                const minW = document.getElementById('app-min-withdraw');
+                if (minW) minW.value = existing.minWithdraw || 0.3;
+                const cp = document.getElementById('app-clear-period');
+                if (cp) cp.value = existing.clearPeriod || 0;
+                const er = document.getElementById('app-exchange-rate');
+                if (er) er.value = existing.exchangeRate || '';
+                const hw = document.getElementById('app-high-withdraw');
+                if (hw) hw.value = existing.highWithdraw || 3.00;
+                // 填充多档位
+                if (existing.highWithdrawTiers && existing.highWithdrawTiers.length > 0) {
+                    const container = document.getElementById('add-tiers-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        existing.highWithdrawTiers.forEach(tier => {
+                            addAddTier();
+                            const div = container.lastElementChild;
+                            if (div) {
+                                div.querySelector('.add-tier-name').value = tier.name || '';
+                                div.querySelector('.add-tier-amount').value = tier.amount || '';
+                            }
+                        });
+                    }
+                }
+            } else {
+                if (hint) hint.style.display = 'none';
+            }
+        });
+    }
 }
 
 function addAddTier() {
@@ -10470,31 +10538,31 @@ function showActiveReminderModal(appName, earnedAmount, minWithdraw, phoneId, ap
             </div>
             
             <!-- 进度卡片 -->
-            <div style="background: linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(59,130,246,0.1) 100%); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+            <div style="background: linear-gradient(135deg, rgba(122,158,126,0.1) 0%, rgba(154,184,156,0.1) 100%); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <div>
                         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">本次赚取</div>
-                        <div style="font-size: 24px; font-weight: 700; color: #10b981;">+¥${earnedAmount.toFixed(2)}</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #7a9e7e;">+¥${earnedAmount.toFixed(2)}</div>
                     </div>
                     <div style="text-align: right;">
                         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">最小提现金额</div>
-                        <div style="font-size: 24px; font-weight: 700; color: #3b82f6;">¥${minWithdraw.toFixed(2)}</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #7a9e7e;">¥${minWithdraw.toFixed(2)}</div>
                     </div>
                 </div>
                 <div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
-                    <div style="background: linear-gradient(90deg, #10b981, #3b82f6); height: 100%; width: ${progressPercent}%; border-radius: 4px; transition: width 0.3s;"></div>
+                    <div style="background: linear-gradient(90deg, #7a9e7e, #9ab89c); height: 100%; width: ${progressPercent}%; border-radius: 4px; transition: width 0.3s;"></div>
                 </div>
                 <div style="display: flex; justify-content: space-between; font-size: 12px;">
                     <span style="color: var(--text-secondary);">进度 ${progressPercent}%</span>
-                    <span style="color: #f59e0b; font-weight: 600;">还差 ¥${remaining}</span>
+                    <span style="color: #c8894a; font-weight: 600;">还差 ¥${remaining}</span>
                 </div>
             </div>
             
             <!-- 建议操作 -->
-            <div style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+            <div style="background: rgba(200,137,74,0.1); border: 1px solid rgba(200,137,74,0.3); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                     <span style="font-size: 18px;">💡</span>
-                    <span style="font-weight: 600; font-size: 13px; color: #f59e0b;">建议进行活跃操作</span>
+                    <span style="font-weight: 600; font-size: 13px; color: #c8894a;">建议进行活跃操作</span>
                 </div>
                 <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
                     本次赚取 ¥${earnedAmount.toFixed(2)} 不足一次提现（需 ¥${minWithdraw.toFixed(2)}）。
@@ -10596,7 +10664,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                     </div>
                 `).join('')}
             </div>
-            <button type="button" onclick="addEditTier()" style="margin-top: 6px; background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px dashed rgba(59,130,246,0.3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; width: 100%;">+ 添加档位</button>
+            <button type="button" onclick="addEditTier()" style="margin-top: 6px; background: rgba(122,158,126,0.1); color: #7a9e7e; border: 1px dashed rgba(122,158,126,0.3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; width: 100%;">+ 添加档位</button>
             <div class="form-hint">添加多个提现档位，首页将按档位分类显示可提现总额</div>
         </div>
         <div class="form-group">
@@ -10797,6 +10865,7 @@ function openBatchAddAppsModal() {
 方式2：逗号分隔，如：
 抖音极速版,快手极速版,百度极速版"></textarea>
             <div class="form-hint">支持批量添加，每行一个或用逗号分隔</div>
+            <div id="batch-auto-fill-hint" style="display: none; margin-top: 6px; padding: 8px 12px; background: rgba(16,185,129,0.1); color: #059669; border-radius: 6px; font-size: 12px; border: 1px solid rgba(16,185,129,0.2);"></div>
         </div>
         <div class="form-group">
             <label class="form-label">默认余额 (元)</label>
@@ -10819,6 +10888,11 @@ function openBatchAddAppsModal() {
             <div class="form-hint">批量添加时所有软件的默认高档提现额度</div>
         </div>
         <div class="form-group">
+            <label class="form-label">清零周期 (天)</label>
+            <input type="number" id="batch-app-clear-period" class="form-input" placeholder="0" step="1" value="0" min="0">
+            <div class="form-hint">超过此天数未登录将清空余额，0表示无清零规则</div>
+        </div>
+        <div class="form-group">
             <div class="form-hint" style="background: var(--bg-cream); padding: 12px; border-radius: 8px;">
                 <strong>提示：</strong>将为 <strong>${phoneCount}</strong> 部手机各添加这些软件
             </div>
@@ -10834,6 +10908,7 @@ function openBatchAddAppsModal() {
                 const exchangeRate = parseFloat(document.getElementById('batch-app-exchange-rate').value) || 0;
                 const minWithdraw = parseFloat(document.getElementById('batch-app-min-withdraw').value);
                 const highWithdraw = parseFloat(document.getElementById('batch-app-high-withdraw').value) || 0;
+                const clearPeriod = parseInt(document.getElementById('batch-app-clear-period').value) || 0;
 
                 if (!input) {
                     showToast('请输入软件名称');
@@ -10857,7 +10932,7 @@ function openBatchAddAppsModal() {
                 currentData.phones.forEach(phone => {
                     names.forEach(name => {
                         try {
-                            DataManager.addApp(phone.id, { name, balance, minWithdraw, highWithdraw, exchangeRate });
+                            DataManager.addApp(phone.id, { name, balance, minWithdraw, highWithdraw, exchangeRate, clearPeriod });
                             totalAddedCount++;
                         } catch (error) {
                             showToast(error.message);
@@ -10871,6 +10946,36 @@ function openBatchAddAppsModal() {
             }
         }
     ]);
+
+    // 自动填充：当用户输入软件名时，从已有同名软件获取设置
+    const batchNameTextarea = document.getElementById('batch-app-names');
+    if (batchNameTextarea) {
+        batchNameTextarea.addEventListener('input', function() {
+            const firstLine = this.value.split(/[\n,]/).map(n => n.trim()).filter(n => n)[0];
+            const hint = document.getElementById('batch-auto-fill-hint');
+            if (!firstLine) {
+                if (hint) hint.style.display = 'none';
+                return;
+            }
+            const existing = DataManager.findAppByName(firstLine);
+            if (existing) {
+                if (hint) {
+                    hint.style.display = 'block';
+                    hint.textContent = `💡 已匹配到「${firstLine}」（在「${existing.phoneName}」上），自动填充：提现门槛 ¥${existing.minWithdraw}${existing.clearPeriod > 0 ? `，清零周期 ${existing.clearPeriod}天` : ''}${existing.exchangeRate > 0 ? `，兑换比例 ${existing.exchangeRate}:1` : ''}${existing.highWithdraw > 0 ? `，高档提现 ¥${existing.highWithdraw}` : ''}`;
+                }
+                const minW = document.getElementById('batch-app-min-withdraw');
+                if (minW) minW.value = existing.minWithdraw || 0.3;
+                const cp = document.getElementById('batch-app-clear-period');
+                if (cp) cp.value = existing.clearPeriod || 0;
+                const er = document.getElementById('batch-app-exchange-rate');
+                if (er) er.value = existing.exchangeRate || '';
+                const hw = document.getElementById('batch-app-high-withdraw');
+                if (hw) hw.value = existing.highWithdraw || 3.00;
+            } else {
+                if (hint) hint.style.display = 'none';
+            }
+        });
+    }
 }
 
 function openBatchEditHighWithdrawModal() {
@@ -11576,7 +11681,7 @@ function renderActivityHistory(days = 7) {
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-weight: 600;">${dayLabel}</span>
-                        ${isToday ? '<span style="background: rgba(59,130,246,0.15); color: #3b82f6; padding: 2px 6px; border-radius: 4px; font-size: 10px;">今日</span>' : ''}
+                        ${isToday ? '<span style="background: rgba(122,158,126,0.15); color: #7a9e7e; padding: 2px 6px; border-radius: 4px; font-size: 10px;">今日</span>' : ''}
                     </div>
                     <div style="font-size: 12px; color: var(--text-secondary);">
                         ${activeCount}个软件活跃 · ${durationLabel}
@@ -12275,7 +12380,7 @@ function renderDailyRecommendations(apps) {
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">⏰ 预计达标时间</div>
-                            <div style="font-size: 13px; font-weight: 600; color: #3b82f6;">${daysToTarget}天后达到高档额度</div>
+                            <div style="font-size: 13px; font-weight: 600; color: #7a9e7e;">${daysToTarget}天后达到高档额度</div>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">📈 保守日收益</div>
@@ -15077,7 +15182,7 @@ function renderYearlyGoal() {
                 <div style="display: flex; gap: 12px;">
                     <!-- 每日目标 -->
                     <div style="flex: 1; background: rgba(59, 130, 246, 0.08); border-radius: 12px; padding: 14px; border: 1px solid rgba(59, 130, 246, 0.15);">
-                        <div style="font-size: 11px; color: #3b82f6; margin-bottom: 4px;">每日需赚取</div>
+                        <div style="font-size: 11px; color: #7a9e7e; margin-bottom: 4px;">每日需赚取</div>
                         <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${dailyTargetAmount.toFixed(2)}</div>
                     </div>
                     
