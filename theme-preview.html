@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>收益目标 · 风格预览器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  body { background: #0e0e12; color: #e8e8ec; min-height: 100vh; }
+
+  /* 顶部切换栏 */
+  .switcher {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    padding: 14px; background: rgba(14,14,18,.85); backdrop-filter: blur(10px);
+    border-bottom: 1px solid #2a2a32;
+  }
+  .switcher button {
+    border: 1px solid #3a3a44; background: #1a1a20; color: #cfcfd6;
+    padding: 8px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+    transition: all .2s ease;
+  }
+  .switcher button:hover { border-color: #6a6a78; color: #fff; }
+  .switcher button.active { background: #6366f1; border-color: #6366f1; color: #fff; font-weight: 600; }
+
+  .wrap { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; padding: 32px 16px 80px; }
+
+  /* 手机外框 */
+  .phone {
+    width: 360px; min-height: 720px; border-radius: 36px; padding: 14px;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .screen { border-radius: 26px; padding: 18px; min-height: 690px; }
+
+  /* ===== 主题1：霓虹金融终端 ===== */
+  .t-neon .phone { background:#101418; border-color:#1f2a30; }
+  .t-neon .screen { background:#0a0e12; color:#cfe9d8; }
+  .t-neon .h-title { color:#7ef0c0; font-family:"SF Mono",Consolas,monospace; font-size:13px; letter-spacing:2px; opacity:.7; margin-bottom:14px; }
+  .t-neon .hero { border:1px solid #1c3a30; background:#0c1418; border-radius:16px; padding:18px; box-shadow:0 0 0 1px #0c1418, 0 0 24px rgba(40,255,170,.06) inset; }
+  .t-neon .hero .row { display:flex; gap:12px; }
+  .t-neon .cell { flex:1; border:1px solid #16241f; border-radius:12px; padding:14px; background:#0b1216; }
+  .t-neon .label { font-size:11px; color:#5f8a78; font-family:"SF Mono",Consolas,monospace; letter-spacing:1px; }
+  .t-neon .num { font-size:26px; font-weight:700; color:#39ffb0; font-family:"SF Mono",Consolas,monospace; text-shadow:0 0 12px rgba(57,255,176,.5); margin-top:4px; }
+  .t-neon .num.amber { color:#ffc24b; text-shadow:0 0 12px rgba(255,194,75,.45); }
+  .t-neon .gap { font-size:11px; color:#c08a4a; margin-top:6px; font-family:"SF Mono",Consolas,monospace; }
+  .t-neon .rec-title { font-size:13px; color:#7ef0c0; margin:18px 0 10px; font-family:"SF Mono",Consolas,monospace; letter-spacing:1px; }
+  .t-neon .rec { display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; }
+  .t-neon .rec .d { flex:0 0 auto; min-width:62px; background:#0b1216; border:1px solid #16241f; border-radius:10px; padding:8px; text-align:center; }
+  .t-neon .rec .d.today { border-color:#39ffb0; background:#0e1a16; }
+  .t-neon .rec .dt { font-size:10px; color:#5f8a78; font-family:"SF Mono",Consolas,monospace; }
+  .t-neon .rec .dv { font-size:14px; font-weight:700; color:#39ffb0; font-family:"SF Mono",Consolas,monospace; margin-top:4px; }
+
+  /* ===== 主题2：奶油玻璃糖果 ===== */
+  .t-candy .phone { background:linear-gradient(160deg,#ffd9ec,#cfe3ff); border-color:rgba(255,255,255,.6); }
+  .t-candy .screen { background:linear-gradient(160deg,#fff5fb,#eef4ff); color:#5b4a6b; }
+  .t-candy .h-title { font-size:13px; color:#b583c4; font-weight:700; letter-spacing:1px; margin-bottom:14px; }
+  .t-candy .hero { display:flex; gap:12px; }
+  .t-candy .cell { flex:1; border-radius:18px; padding:16px; backdrop-filter:blur(8px); }
+  .t-candy .cell.blue { background:rgba(120,180,255,.22); border:1px solid rgba(120,180,255,.5); }
+  .t-candy .cell.green { background:rgba(120,235,170,.25); border:1px solid rgba(80,220,150,.55); }
+  .t-candy .label { font-size:11px; color:#7a6a8a; font-weight:600; }
+  .t-candy .num { font-size:26px; font-weight:800; color:#4a8cff; margin-top:4px; }
+  .t-candy .num.greenv { color:#1bbf7a; }
+  .t-candy .gap { font-size:11px; color:#e08a3c; margin-top:6px; font-weight:600; }
+  .t-candy .rec-title { font-size:13px; color:#b070c9; font-weight:700; margin:18px 0 10px; }
+  .t-candy .rec { display:flex; gap:8px; overflow-x:auto; }
+  .t-candy .rec .d { flex:0 0 auto; min-width:62px; background:rgba(255,255,255,.7); border:1px solid rgba(180,160,220,.4); border-radius:14px; padding:9px; text-align:center; box-shadow:0 4px 12px rgba(150,130,200,.12); }
+  .t-candy .rec .d.today { background:linear-gradient(160deg,#9bffce,#7ad0ff); border-color:#fff; }
+  .t-candy .rec .dt { font-size:10px; color:#8a7a9a; font-weight:600; }
+  .t-candy .rec .dv { font-size:14px; font-weight:800; color:#3a9c6a; margin-top:4px; }
+
+  /* ===== 主题3：新粗野主义 ===== */
+  .t-brut .phone { background:#ffe14d; border:4px solid #111; }
+  .t-brut .screen { background:#fff8d6; color:#111; }
+  .t-brut .h-title { font-size:13px; font-weight:900; letter-spacing:1px; text-transform:uppercase; margin-bottom:14px; color:#111; }
+  .t-brut .hero { display:flex; gap:12px; }
+  .t-brut .cell { flex:1; border:3px solid #111; border-radius:4px; padding:14px; box-shadow:4px 4px 0 #111; }
+  .t-brut .cell.blue { background:#7ab8ff; }
+  .t-brut .cell.green { background:#5cf0a0; }
+  .t-brut .label { font-size:11px; font-weight:800; text-transform:uppercase; }
+  .t-brut .num { font-size:24px; font-weight:900; color:#111; margin-top:4px; }
+  .t-brut .gap { font-size:11px; font-weight:800; background:#111; color:#ffe14d; display:inline-block; padding:2px 6px; margin-top:6px; border-radius:2px; }
+  .t-brut .rec-title { font-size:13px; font-weight:900; text-transform:uppercase; margin:18px 0 10px; }
+  .t-brut .rec { display:flex; gap:8px; overflow-x:auto; }
+  .t-brut .rec .d { flex:0 0 auto; min-width:62px; background:#fff; border:3px solid #111; border-radius:4px; padding:8px; text-align:center; box-shadow:3px 3px 0 #111; }
+  .t-brut .rec .d.today { background:#ff7ab8; }
+  .t-brut .rec .dt { font-size:10px; font-weight:800; }
+  .t-brut .rec .dv { font-size:14px; font-weight:900; margin-top:4px; }
+
+  /* ===== 主题4：苹果极简 ===== */
+  .t-apple .phone { background:#f0f0f3; border-color:#d8d8de; }
+  .t-apple .screen { background:#fafafc; color:#1d1d1f; }
+  .t-apple .h-title { font-size:13px; color:#86868b; font-weight:600; letter-spacing:.5px; margin-bottom:14px; }
+  .t-apple .hero { display:flex; gap:12px; }
+  .t-apple .cell { flex:1; background:#fff; border:1px solid #ececf0; border-radius:18px; padding:16px; }
+  .t-apple .label { font-size:11px; color:#86868b; }
+  .t-apple .num { font-size:26px; font-weight:700; color:#1d1d1f; margin-top:4px; letter-spacing:-.5px; }
+  .t-apple .num.greenv { color:#34c759; }
+  .t-apple .gap { font-size:11px; color:#ff9500; margin-top:6px; }
+  .t-apple .rec-title { font-size:13px; color:#1d1d1f; font-weight:600; margin:18px 0 10px; }
+  .t-apple .rec { display:flex; gap:8px; overflow-x:auto; }
+  .t-apple .rec .d { flex:0 0 auto; min-width:62px; background:#fff; border:1px solid #ececf0; border-radius:14px; padding:9px; text-align:center; }
+  .t-apple .rec .d.today { border:2px solid #34c759; background:#f0fff5; }
+  .t-apple .rec .dt { font-size:10px; color:#86868b; }
+  .t-apple .rec .dv { font-size:14px; font-weight:700; color:#1d1d1f; margin-top:4px; }
+
+  .caption { width:360px; align-self:center; font-size:13px; line-height:1.7; color:#a8a8b0; }
+  .caption b { color:#e8e8ec; }
+  .caption .k { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:middle; }
+</style>
+</head>
+<body>
+  <div class="switcher" id="switcher">
+    <button data-t="neon" class="active">霓虹金融终端</button>
+    <button data-t="candy">奶油玻璃糖果</button>
+    <button data-t="brut">新粗野主义</button>
+    <button data-t="apple">苹果极简</button>
+  </div>
+
+  <div class="wrap">
+    <!-- 手机预览 -->
+    <div class="phone t-neon" id="phone">
+      <div class="screen">
+        <div class="h-title">2026 年度目标 · 每日收益</div>
+        <div class="hero">
+          <div class="cell">
+            <div class="label">每日需赚取</div>
+            <div class="num amber">¥3.89</div>
+          </div>
+          <div class="cell">
+            <div class="label">今日赚取</div>
+            <div class="num">¥0.00</div>
+            <div class="gap">还差 ¥3.89</div>
+          </div>
+        </div>
+        <div class="rec-title">每日赚取记录 (9天)</div>
+        <div class="rec" id="rec"></div>
+      </div>
+    </div>
+
+    <!-- 文案说明 -->
+    <div class="caption">
+      <p style="margin-bottom:14px;"><b>这是首页核心区</b>「今日赚取 / 每日需赚取」+「每日赚取记录」在 4 种风格下的样子，数据用的是修完双倍 bug 后的真实值（已减半）。</p>
+      <p style="margin-bottom:10px;"><span class="k" style="background:#39ffb0"></span><b>霓虹金融终端</b>：深色 + 荧光绿数字 + 等宽字体，最像行情软件，长时间盯盘不刺眼，和现在的奶油风反差最大。</p>
+      <p style="margin-bottom:10px;"><span class="k" style="background:#7ab8ff"></span><b>奶油玻璃糖果</b>：保留浅色，但换成蓝粉果冻玻璃质感，比土色更年轻活泼。</p>
+      <p style="margin-bottom:10px;"><span class="k" style="background:#ffe14d"></span><b>新粗野主义</b>：粗黑描边 + 硬阴影色块，个性最强，但 daily 高频看偏吵。</p>
+      <p><span class="k" style="background:#fafafc;border:1px solid #ccc"></span><b>苹果极简</b>：白底大留白 + 单一绿强调，最干净耐看，但变化感最小。</p>
+      <p style="margin-top:16px; color:#7a7a82;">点上方按钮切换。看中哪个告诉我，我直接把它做成正式主题（含暗黑模式）套进 app.js / styles.css。</p>
+    </div>
+  </div>
+
+<script>
+  // 每日记录样本数据（修 bug 后的真实值：原显示的一半）
+  const recData = [
+    {d:'08-01', v:0}, {d:'08-02', v:2}, {d:'08-03', v:0.5}, {d:'08-04', v:1},
+    {d:'08-05', v:1}, {d:'08-06', v:2}, {d:'08-07', v:2}, {d:'08-08', v:0.5}, {d:'08-09', v:0.5}
+  ];
+  const todayStr = '08-09';
+
+  function renderRec() {
+    const rec = document.getElementById('rec');
+    rec.innerHTML = recData.map(r => `
+      <div class="d ${r.d===todayStr?'today':''}">
+        <div class="dt">${r.d.slice(3)}</div>
+        <div class="dv">¥${r.v}</div>
+      </div>`).join('');
+  }
+  renderRec();
+
+  const phone = document.getElementById('phone');
+  const switcher = document.getElementById('switcher');
+  switcher.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    [...switcher.children].forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    phone.className = 'phone t-' + btn.dataset.t;
+  });
+</script>
+</body>
+</html>

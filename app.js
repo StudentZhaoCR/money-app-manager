@@ -3159,10 +3159,8 @@ class DataManager {
                     if (todayRecord && todayRecord.change > 0) {
                         totalEarned += parseFloat(todayRecord.change) || 0;
                     }
-                }
-                
-                // 从 dailyEarnings 获取今日收益
-                if (app.dailyEarnings && app.dailyEarnings[today]) {
+                } else if (app.dailyEarnings && app.dailyEarnings[today]) {
+                    // balanceHistory 与 dailyEarnings 为同一笔正向收益，仅取其一，避免双倍统计
                     totalEarned += parseFloat(app.dailyEarnings[today]) || 0;
                 }
             });
@@ -3221,10 +3219,8 @@ class DataManager {
                             dailyTotals[record.date] += parseFloat(record.change) || 0;
                         }
                     });
-                }
-                
-                // 从 dailyEarnings 获取收益
-                if (app.dailyEarnings) {
+                } else if (app.dailyEarnings) {
+                    // balanceHistory 与 dailyEarnings 为同一笔正向收益，优先取 balanceHistory，避免双倍累计
                     Object.entries(app.dailyEarnings).forEach(([date, amount]) => {
                         if (date <= today && amount > 0) {
                             if (!dailyTotals[date]) {
@@ -6396,15 +6392,43 @@ function migrateOldData() {
     }
 }
 
+// 主题注册表（共 6 套）
+const THEMES = [
+    { id: 'default', name: '简约', bg1: '#f8fafc', bg2: '#ffffff', dots: ['#3b82f6', '#10b981', '#f59e0b'] },
+    { id: 'dark', name: '暗黑模式', bg1: '#0f172a', bg2: '#1e293b', dots: ['#6366f1', '#34d399', '#fbbf24'] },
+    { id: 'neon', name: '霓虹终端', bg1: '#0a0e12', bg2: '#0c1418', dots: ['#39ffb0', '#38e0ff', '#ffc24b'] },
+    { id: 'candy', name: '奶油糖果', bg1: '#fff5fb', bg2: '#eef4ff', dots: ['#7ab8ff', '#5cf0a0', '#ff9ed6'] },
+    { id: 'brut', name: '新粗野', bg1: '#ffe14d', bg2: '#fff8d6', dots: ['#111111', '#1d9bff', '#ff7ab8'] },
+    { id: 'apple', name: '苹果极简', bg1: '#fafafc', bg2: '#ffffff', dots: ['#007aff', '#34c759', '#ff9500'] }
+];
+
+// 渲染主题选择器
+function renderThemeSelector() {
+    const container = document.getElementById('theme-selector');
+    if (!container) return;
+    container.innerHTML = THEMES.map(t => `
+        <div class="theme-item" data-theme="${t.id}" onclick="setTheme('${t.id}')">
+            <div style="width: 48px; height: 48px; margin: 0 auto 10px; background: linear-gradient(135deg, ${t.bg1} 0%, ${t.bg2} 100%); border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center;">
+                <div style="width: 8px; height: 8px; background: ${t.dots[0]}; border-radius: 50%;"></div>
+                <div style="width: 8px; height: 8px; background: ${t.dots[1]}; border-radius: 50%; margin-left: 4px;"></div>
+                <div style="width: 8px; height: 8px; background: ${t.dots[2]}; border-radius: 50%; margin-left: 4px;"></div>
+            </div>
+            <span class="theme-name" style="font-size: 14px; font-weight: 500; color: var(--text-primary);">${t.name}</span>
+        </div>
+    `).join('');
+    updateThemeSelector(DataManager.getTheme());
+}
+
 // 初始化主题
 function initTheme() {
     const savedTheme = DataManager.getTheme();
     applyTheme(savedTheme);
+    renderThemeSelector();
 }
 
 // 应用主题
 function applyTheme(theme) {
-    const validThemes = ['default', 'dark'];
+    const validThemes = THEMES.map(t => t.id);
     const finalTheme = validThemes.includes(theme) ? theme : 'default';
     
     if (finalTheme === 'default') {
@@ -6417,7 +6441,7 @@ function applyTheme(theme) {
 
 // 设置主题
 function setTheme(theme) {
-    const validThemes = ['default', 'dark'];
+    const validThemes = THEMES.map(t => t.id);
     const finalTheme = validThemes.includes(theme) ? theme : 'default';
     
     DataManager.setTheme(finalTheme);
@@ -6427,11 +6451,8 @@ function setTheme(theme) {
 
 // 获取主题名称
 function getThemeName(theme) {
-    const themeNames = {
-        'default': '简约',
-        'dark': '暗黑模式'
-    };
-    return themeNames[theme] || '简约';
+    const found = THEMES.find(t => t.id === theme);
+    return found ? found.name : '简约';
 }
 
 // 更新主题选择器状态
@@ -15129,19 +15150,19 @@ function renderYearlyGoal() {
     let html = `
         <div style="padding: 16px;">
             <!-- 总体进度卡片 -->
-            <div style="background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow-card); border: 1px solid var(--border-color);">
+            <div class="home-enter" style="background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow-card); border: 1px solid var(--border-color);">
                 <!-- 头部：年份和剩余天数 -->
                 <div class="yearly-goal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="yearly-goal-icon" style="width: 36px; height: 36px; background: linear-gradient(135deg, #8b5cf6, #a78bfa); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">🎯</div>
+                        <div class="yearly-goal-icon" style="width: 36px; height: 36px; background: linear-gradient(135deg, var(--brand-1), var(--brand-2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">🎯</div>
                         <div>
                             <div class="yearly-goal-title" style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${goal.year}年度目标</div>
                             <div class="yearly-goal-mode" style="font-size: 11px; color: var(--text-secondary);">${goal.mode === 'minWithdraw' ? '📱 最小提现模式' : '✏️ 自定义模式'}</div>
                         </div>
                     </div>
                     ${daysRemaining > 0 ? `
-                    <div class="yearly-goal-days" style="background: linear-gradient(135deg, #f59e0b, #fbbf24); padding: 5px 12px; border-radius: 20px; white-space: nowrap;">
-                        <span style="font-size: 11px; font-weight: 600; color: white;">⏰ 剩余${daysRemaining}天</span>
+                    <div class="yearly-goal-days" style="background: linear-gradient(135deg, var(--warn-1), var(--warn-2)); padding: 5px 12px; border-radius: 20px; white-space: nowrap;">
+                        <span style="font-size: 11px; font-weight: 600; color: var(--text-on-brand);">⏰ 剩余${daysRemaining}天</span>
                     </div>
                     ` : ''}
                 </div>
@@ -15157,7 +15178,7 @@ function renderYearlyGoal() {
                     <!-- 已赚取 -->
                     <div class="yearly-goal-stat yearly-goal-stat--green">
                         <div class="yearly-goal-stat__label">已赚取</div>
-                        <div class="yearly-goal-stat__value">¥${distribution.totalEarned.toFixed(2)}</div>
+                        <div class="yearly-goal-stat__value" id="home-earned">¥${distribution.totalEarned.toFixed(2)}</div>
                     </div>
                     
                     <!-- 剩余金额 -->
@@ -15171,29 +15192,29 @@ function renderYearlyGoal() {
                 <div style="margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span style="font-size: 13px; color: var(--text-secondary);">总体进度</span>
-                        <span style="font-size: 14px; font-weight: 700; color: ${isOverTarget ? '#f59e0b' : '#8b5cf6'};">${progressPercent}%</span>
+                        <span style="font-size: 14px; font-weight: 700; color: ${isOverTarget ? 'var(--warn-1)' : 'var(--brand-1)'};">${progressPercent}%</span>
                     </div>
                     <div style="background: var(--bg-secondary); border-radius: 12px; height: 12px; overflow: hidden;">
-                        <div style="background: ${isOverTarget ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #8b5cf6, #a78bfa)'}; height: 100%; width: ${progressPercent}%; transition: width 0.6s ease; border-radius: 12px; box-shadow: 0 2px 8px ${isOverTarget ? 'rgba(245, 158, 11, 0.3)' : 'rgba(139, 92, 246, 0.3)'};"></div>
+                        <div class="home-progress-shine" data-w="${progressPercent}" style="background: ${isOverTarget ? 'linear-gradient(90deg, var(--warn-1), var(--warn-2))' : 'linear-gradient(90deg, var(--brand-1), var(--brand-2))'}; height: 100%; width: 0%; transition: width 0.7s cubic-bezier(0.22,1,0.36,1); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);"></div>
                     </div>
                 </div>
 
                 <!-- 今日赚取和每日目标 -->
                 <div style="display: flex; gap: 12px;">
                     <!-- 每日目标 -->
-                    <div style="flex: 1; background: rgba(59, 130, 246, 0.08); border-radius: 12px; padding: 14px; border: 1px solid rgba(59, 130, 246, 0.15);">
-                        <div style="font-size: 11px; color: #7a9e7e; margin-bottom: 4px;">每日需赚取</div>
+                    <div style="flex: 1; background: var(--soft-ok); border-radius: 12px; padding: 14px; border: 1px solid var(--border-ok);">
+                        <div style="font-size: 11px; color: var(--success-color); margin-bottom: 4px;">每日需赚取</div>
                         <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${dailyTargetAmount.toFixed(2)}</div>
                     </div>
                     
                     <!-- 今日赚取 -->
-                    <div style="flex: 1; background: ${isTodayAchieved ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)'}; border-radius: 12px; padding: 14px; border: 2px solid ${isTodayAchieved ? '#10b981' : '#f59e0b'};">
+                    <div style="flex: 1; background: ${isTodayAchieved ? 'var(--soft-ok)' : 'var(--soft-warn)'}; border-radius: 12px; padding: 14px; border: 2px solid ${isTodayAchieved ? 'var(--border-ok)' : 'var(--border-warn)'};">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
-                            <span style="font-size: 11px; color: ${isTodayAchieved ? '#10b981' : '#f59e0b'};">今日赚取</span>
+                            <span style="font-size: 11px; color: ${isTodayAchieved ? 'var(--ok-1)' : 'var(--warn-1)'};">今日赚取</span>
                             ${isTodayAchieved ? '<span style="font-size: 14px;">✅</span>' : '<span style="font-size: 14px;">⏳</span>'}
                         </div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${todayEarned.toFixed(2)}</div>
-                        ${!isTodayAchieved && dailyTargetAmount > 0 ? `<div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">还差 ¥${(dailyTargetAmount - todayEarned).toFixed(2)}</div>` : ''}
+                        <div id="home-today-earned" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">¥${todayEarned.toFixed(2)}</div>
+                        ${!isTodayAchieved && dailyTargetAmount > 0 ? `<div class="home-remain-pulse" style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">还差 ¥${(dailyTargetAmount - todayEarned).toFixed(2)}</div>` : ''}
                     </div>
                 </div>
 
@@ -15207,16 +15228,16 @@ function renderYearlyGoal() {
                             return `
                             <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="font-size: 12px; color: #6b7280;">📅 预计完成:</span>
+                                    <span style="font-size: 12px; color: var(--text-secondary);">📅 预计完成:</span>
                                     <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${formattedDate}</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="font-size: 12px; color: #6b7280;">⏱️ 还需:</span>
-                                    <span style="font-size: 13px; font-weight: 600; color: #8b5cf6;">${prediction.daysNeeded}天</span>
+                                    <span style="font-size: 12px; color: var(--text-secondary);">⏱️ 还需:</span>
+                                    <span style="font-size: 13px; font-weight: 600; color: var(--brand-1);">${prediction.daysNeeded}天</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="font-size: 12px; color: #6b7280;">📈 日均:</span>
-                                    <span style="font-size: 13px; font-weight: 600; color: #10b981;">¥${prediction.predictedDailyEarnings.toFixed(2)}</span>
+                                    <span style="font-size: 12px; color: var(--text-secondary);">📈 日均:</span>
+                                    <span style="font-size: 13px; font-weight: 600; color: var(--ok-1);">¥${prediction.predictedDailyEarnings.toFixed(2)}</span>
                                 </div>
                             </div>
                             `;
@@ -15226,10 +15247,10 @@ function renderYearlyGoal() {
                 </div>
                 ` : `
                 <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-                    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%); border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                    <div class="home-celebrate" style="display: flex; align-items: center; gap: 10px; padding: 10px; background: linear-gradient(135deg, var(--soft-ok) 0%, var(--soft-ok) 100%); border-radius: 10px; border: 1px solid var(--border-ok);">
                         <span style="font-size: 24px;">🎉</span>
                         <div>
-                            <div style="font-size: 14px; font-weight: 700; color: #10b981;">超额完成!</div>
+                            <div style="font-size: 14px; font-weight: 700; color: var(--ok-1);">超额完成!</div>
                             <div style="font-size: 12px; color: var(--text-secondary);">超出 ¥${(distribution.totalEarned - goal.amount).toFixed(2)} · 继续加油!</div>
                         </div>
                     </div>
@@ -15242,16 +15263,16 @@ function renderYearlyGoal() {
 
             <!-- 每日赚取记录 -->
             ${allDailyEarnings.length > 0 ? `
-            <div style="margin-bottom: 20px;">
+            <div class="home-enter" style="margin-bottom: 20px; animation-delay: 0.06s;">
                 <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">
                     📈 每日赚取记录 (${allDailyEarnings.length}天)
                 </div>
                 <div id="daily-earnings-container" style="display: flex; gap: 8px; overflow-x: auto; padding: 4px;">
-                    ${allDailyEarnings.map(day => {
+                    ${allDailyEarnings.map((day, idx) => {
                         const isDayAchieved = day.amount >= dailyTargetAmount && dailyTargetAmount > 0;
                         const isToday = day.date === todayStr;
                         return `
-                        <div id="daily-earning-item-${day.date}" onclick="showDailyEarningDetail('${day.date}')" style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'rgba(56, 239, 125, 0.3)' : isDayAchieved ? 'rgba(56, 239, 125, 0.15)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'rgba(56, 239, 125, 0.8)' : isDayAchieved ? 'rgba(56, 239, 125, 0.4)' : 'var(--border-color)'}; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <div id="daily-earning-item-${day.date}" class="home-chip-enter" onclick="showDailyEarningDetail('${day.date}')" style="flex: 0 0 auto; min-width: 70px; background: ${isToday ? 'var(--daily-today-bg)' : isDayAchieved ? 'var(--daily-ok-bg)' : 'var(--bg-secondary)'}; border-radius: 8px; padding: 8px; text-align: center; border: 2px solid ${isToday ? 'var(--daily-today-border)' : isDayAchieved ? 'var(--daily-ok-border)' : 'var(--border-color)'}; cursor: pointer; transition: transform 0.2s ease; animation-delay: ${idx * 45}ms;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                             <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">${day.date.slice(5)}</div>
                             <div style="font-size: 13px; font-weight: 600; color: ${isDayAchieved ? 'var(--success-color)' : 'var(--text-primary)'}">¥${day.amount.toFixed(0)}</div>
                             ${isDayAchieved ? '<div style="font-size: 9px; color: var(--success-color);">✓</div>' : ''}
@@ -15266,6 +15287,45 @@ function renderYearlyGoal() {
     `;
 
     container.innerHTML = html;
+
+    // 轻量入场动画触发（尊重 prefers-reduced-motion，仅 transform/opacity）
+    (function triggerHomeAnimations() {
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        // 进度条从 0 增长到目标宽度（复用已有 width transition）
+        const bar = container.querySelector('.home-progress-shine');
+        if (bar) {
+            const target = bar.getAttribute('data-w') || '0';
+            if (reduce || parseFloat(target) <= 0) {
+                bar.style.width = target + '%';
+            } else {
+                // 双 rAF 确保 0% 先生效，再设目标值触发过渡
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    bar.style.width = target + '%';
+                }));
+            }
+        }
+
+        // 已赚取 / 今日赚取 数字计数动画
+        const counters = [
+            { id: 'home-earned', val: distribution.totalEarned, dec: 2 },
+            { id: 'home-today-earned', val: todayEarned, dec: 2 }
+        ];
+        counters.forEach(c => {
+            const el = document.getElementById(c.id);
+            if (!el) return;
+            if (reduce || c.val <= 0) { el.textContent = '¥' + c.val.toFixed(c.dec); return; }
+            const start = performance.now();
+            const dur = 650;
+            (function tick(now) {
+                const p = Math.min(1, (now - start) / dur);
+                const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+                el.textContent = '¥' + (c.val * eased).toFixed(c.dec);
+                if (p < 1) requestAnimationFrame(tick);
+                else { el.textContent = '¥' + c.val.toFixed(c.dec); el.classList.add('home-pop'); }
+            })(start);
+        });
+    })();
 }
 
 // 显示每日赚取详情
@@ -15303,10 +15363,10 @@ function showDailyEarningDetail(date) {
     
     let html = `
         <div style="max-height: 60vh; overflow-y: auto;">
-            <div style="text-align: center; margin-bottom: 16px; padding: 16px; background: ${isAchieved ? '#fef9c3' : '#fffbeb'}; border-radius: 12px; border: 1px solid ${isAchieved ? '#fde047' : '#fcd34d'};">
-                <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">${isToday ? '今天' : date}</div>
-                <div style="font-size: 28px; font-weight: bold; color: ${isAchieved ? '#854d0e' : '#92400e'};">¥${totalAmount.toFixed(2)}</div>
-                <div style="font-size: 12px; color: ${isAchieved ? '#92400e' : '#a16207'}; margin-top: 4px;">
+            <div style="text-align: center; margin-bottom: 16px; padding: 16px; background: ${isAchieved ? 'var(--soft-ok)' : 'var(--soft-warn)'}; border-radius: 12px; border: 1px solid ${isAchieved ? 'var(--border-ok)' : 'var(--border-warn)'};">
+                <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 4px;">${isToday ? '今天' : date}</div>
+                <div style="font-size: 28px; font-weight: bold; color: ${isAchieved ? 'var(--ok-1)' : 'var(--warn-1)'};">¥${totalAmount.toFixed(2)}</div>
+                <div style="font-size: 12px; color: ${isAchieved ? 'var(--ok-1)' : 'var(--warn-1)'}; margin-top: 4px;">
                     ${isAchieved ? '✅ 已达标' : '⏳ 未达标'}
                     ${dailyTargetAmount > 0 ? `· 目标: ¥${dailyTargetAmount.toFixed(2)}` : ''}
                 </div>

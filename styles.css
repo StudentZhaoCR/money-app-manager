@@ -58,7 +58,23 @@
     --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-secondary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    
+
+    --brand-1: #8b5cf6;
+    --brand-2: #a78bfa;
+    --warn-1: #f59e0b;
+    --warn-2: #fbbf24;
+    --ok-1: #10b981;
+    --ok-2: #34d399;
+    --text-on-brand: #ffffff;
+    --soft-warn: rgba(245, 158, 11, 0.1);
+    --border-warn: rgba(245, 158, 11, 0.5);
+    --soft-ok: rgba(16, 185, 129, 0.1);
+    --border-ok: rgba(16, 185, 129, 0.5);
+    --daily-today-bg: rgba(56, 239, 125, 0.3);
+    --daily-today-border: rgba(56, 239, 125, 0.8);
+    --daily-ok-bg: rgba(56, 239, 125, 0.15);
+    --daily-ok-border: rgba(56, 239, 125, 0.4);
+
     --theme-name: '简约';
 }
 
@@ -99,8 +115,268 @@
     --font-display: 'Inter', -apple-system, sans-serif;
     --font-secondary: 'Inter', -apple-system, sans-serif;
 
+    --brand-1: #8b5cf6;
+    --brand-2: #a78bfa;
+    --warn-1: #f59e0b;
+    --warn-2: #fbbf24;
+    --ok-1: #9ab89c;
+    --ok-2: #b8d0ba;
+    --text-on-brand: #ffffff;
+    --soft-warn: rgba(245, 158, 11, 0.12);
+    --border-warn: rgba(245, 158, 11, 0.5);
+    --soft-ok: rgba(154, 184, 156, 0.14);
+    --border-ok: rgba(154, 184, 156, 0.55);
+    --daily-today-bg: rgba(154, 184, 156, 0.3);
+    --daily-today-border: rgba(154, 184, 156, 0.8);
+    --daily-ok-bg: rgba(154, 184, 156, 0.15);
+    --daily-ok-border: rgba(154, 184, 156, 0.4);
+
     --theme-name: '暗黑模式';
 }
+
+/* ==================== 霓虹金融终端（深色） ==================== */
+[data-theme="neon"] {
+    --primary-color: #39ffb0;
+    --primary-light: #7dffc8;
+    --primary-dark: #1ba877;
+
+    --secondary-color: #38e0ff;
+    --secondary-light: #7fefff;
+    --accent-color: #ffc24b;
+    --accent-light: #ffd47a;
+
+    --success-color: #39ffb0;
+    --warning-color: #ffc24b;
+    --error-color: #ff5d6c;
+    --info-color: #38e0ff;
+
+    --bg-primary: #0a0e12;
+    --bg-secondary: #0e141a;
+    --bg-cream: #121a20;
+
+    --text-primary: #d8f5e8;
+    --text-secondary: #7fa894;
+    --text-muted: #4f6b60;
+
+    --border-color: #1c3a30;
+    --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.5);
+    --shadow-hover: 0 8px 30px rgba(57, 255, 176, 0.12);
+
+    --gradient-primary: linear-gradient(135deg, #39ffb0, #38e0ff);
+    --gradient-navbar: linear-gradient(135deg, #0e141a, #0a0e12);
+    --shadow-navbar: 0 4px 24px rgba(0, 0, 0, 0.5);
+    --gradient-phone-header: linear-gradient(135deg, #1ba877, #39ffb0);
+    --gradient-body: #0a0e12;
+    --card-bg-glass: rgba(14, 20, 26, 0.85);
+
+    --brand-1: #38e0ff;
+    --brand-2: #39ffb0;
+    --warn-1: #ffc24b;
+    --warn-2: #ffd47a;
+    --ok-1: #39ffb0;
+    --ok-2: #7dffc8;
+    --text-on-brand: #04140e;
+
+    --daily-today-bg: rgba(57, 255, 176, 0.15);
+    --daily-today-border: rgba(57, 255, 176, 0.6);
+    --daily-today-soft: rgba(57, 255, 176, 0.08);
+    --daily-ok-bg: rgba(57, 255, 176, 0.07);
+    --daily-ok-border: rgba(57, 255, 176, 0.35);
+    --soft-warn: rgba(255, 194, 75, 0.12);
+    --border-warn: rgba(255, 194, 75, 0.55);
+    --soft-ok: rgba(57, 255, 176, 0.1);
+    --border-ok: rgba(57, 255, 176, 0.6);
+
+    --theme-name: '霓虹终端';
+}
+[data-theme="neon"] .tab-bar { background: var(--bg-secondary); border: 1px solid var(--border-color); box-shadow: var(--shadow-navbar); }
+[data-theme="neon"] .tab-item { color: var(--text-secondary); }
+[data-theme="neon"] .tab-item.active { background: var(--primary-color); box-shadow: 0 4px 15px rgba(57, 255, 176, 0.3); }
+[data-theme="neon"] .tab-item.active .tab-text { color: var(--text-on-brand); }
+[data-theme="neon"] .card { background: var(--bg-secondary); border-color: var(--border-color); }
+[data-theme="neon"] .theme-item.active { background: rgba(57, 255, 176, 0.08); }
+
+/* ==================== 奶油玻璃糖果（浅色） ==================== */
+[data-theme="candy"] {
+    --primary-color: #7ab8ff;
+    --primary-light: #a9d2ff;
+    --primary-dark: #4a8cff;
+
+    --secondary-color: #c79bff;
+    --secondary-light: #dcbfff;
+    --accent-color: #ff9ed6;
+    --accent-light: #ffc0e6;
+
+    --success-color: #1bbf7a;
+    --warning-color: #e08a3c;
+    --error-color: #e05c7c;
+    --info-color: #7ab8ff;
+
+    --bg-primary: #fdeef6;
+    --bg-secondary: #ffffff;
+    --bg-cream: #f3e9fb;
+
+    --text-primary: #4a3d5c;
+    --text-secondary: #8a7a9a;
+    --text-muted: #b0a3c0;
+
+    --border-color: #ecdff5;
+    --shadow-soft: 0 2px 6px rgba(150, 120, 200, 0.1);
+    --shadow-card: 0 6px 20px rgba(150, 120, 200, 0.12);
+    --shadow-hover: 0 10px 30px rgba(150, 120, 200, 0.18);
+
+    --gradient-primary: linear-gradient(135deg, #7ab8ff, #c79bff);
+    --gradient-navbar: linear-gradient(135deg, #ffffff, #fdeef6);
+    --shadow-navbar: 0 4px 18px rgba(150, 120, 200, 0.12);
+    --gradient-phone-header: linear-gradient(135deg, #7ab8ff, #c79bff);
+    --gradient-body: #fdeef6;
+    --card-bg-glass: rgba(255, 255, 255, 0.7);
+
+    --brand-1: #9a6cff;
+    --brand-2: #c79bff;
+    --warn-1: #ff9d3c;
+    --warn-2: #ffc06b;
+    --ok-1: #1bbf7a;
+    --ok-2: #5cf0a0;
+    --text-on-brand: #ffffff;
+
+    --daily-today-bg: rgba(123, 184, 255, 0.18);
+    --daily-today-border: rgba(74, 140, 255, 0.55);
+    --daily-today-soft: rgba(123, 184, 255, 0.1);
+    --daily-ok-bg: rgba(27, 191, 122, 0.12);
+    --daily-ok-border: rgba(27, 191, 122, 0.45);
+    --soft-warn: rgba(224, 138, 60, 0.12);
+    --border-warn: rgba(224, 138, 60, 0.5);
+    --soft-ok: rgba(27, 191, 122, 0.1);
+    --border-ok: rgba(27, 191, 122, 0.5);
+
+    --theme-name: '奶油糖果';
+}
+[data-theme="candy"] .theme-item.active { background: rgba(122, 184, 255, 0.12); }
+
+/* ==================== 新粗野主义（浅色高对比） ==================== */
+[data-theme="brut"] {
+    --primary-color: #1d9bff;
+    --primary-light: #5cb3ff;
+    --primary-dark: #0a7ad6;
+
+    --secondary-color: #ff3b8b;
+    --secondary-light: #ff7ab8;
+    --accent-color: #ffe14d;
+    --accent-light: #fff07a;
+
+    --success-color: #1bbf4a;
+    --warning-color: #ff8c1a;
+    --error-color: #ff3b3b;
+    --info-color: #1d9bff;
+
+    --bg-primary: #fff8d6;
+    --bg-secondary: #fffdf2;
+    --bg-cream: #ffe9a8;
+
+    --text-primary: #111111;
+    --text-secondary: #444444;
+    --text-muted: #777777;
+
+    --border-color: #111111;
+    --shadow-soft: 2px 2px 0 #111111;
+    --shadow-card: 4px 4px 0 #111111;
+    --shadow-hover: 6px 6px 0 #111111;
+
+    --gradient-primary: linear-gradient(135deg, #ffd400, #1d9bff);
+    --gradient-navbar: linear-gradient(135deg, #ffe14d, #ffd400);
+    --shadow-navbar: 4px 4px 0 #111111;
+    --gradient-phone-header: linear-gradient(135deg, #1d9bff, #7ab8ff);
+    --gradient-body: #fff8d6;
+    --card-bg-glass: #fffdf2;
+
+    --brand-1: #1d9bff;
+    --brand-2: #7ab8ff;
+    --warn-1: #ff8c1a;
+    --warn-2: #ffb15c;
+    --ok-1: #1bbf4a;
+    --ok-2: #5cf08a;
+    --text-on-brand: #111111;
+
+    --daily-today-bg: #ff7ab8;
+    --daily-today-border: #111111;
+    --daily-today-soft: #ffd6ea;
+    --daily-ok-bg: #ffffff;
+    --daily-ok-border: #111111;
+    --soft-warn: #ffe9a8;
+    --border-warn: #111111;
+    --soft-ok: #d6f5e0;
+    --border-ok: #111111;
+
+    --theme-name: '新粗野';
+}
+[data-theme="brut"] .tab-bar { background: var(--bg-secondary); border: 3px solid #111111; box-shadow: var(--shadow-navbar); }
+[data-theme="brut"] .tab-item { color: var(--text-secondary); border: 2px solid transparent; }
+[data-theme="brut"] .tab-item.active { background: var(--accent-color); border-color: #111111; box-shadow: 3px 3px 0 #111111; }
+[data-theme="brut"] .tab-item.active .tab-text { color: #111111; }
+[data-theme="brut"] .card { background: var(--bg-secondary); border: 3px solid #111111; box-shadow: var(--shadow-card); }
+[data-theme="brut"] .btn { border: 2px solid #111111; box-shadow: 3px 3px 0 #111111; }
+[data-theme="brut"] .theme-item { border: 3px solid #111111; box-shadow: var(--shadow-card); }
+[data-theme="brut"] .theme-item.active { background: var(--accent-color); }
+
+/* ==================== 苹果极简（浅色干净） ==================== */
+[data-theme="apple"] {
+    --primary-color: #007aff;
+    --primary-light: #4aa8ff;
+    --primary-dark: #005ec4;
+
+    --secondary-color: #5e5ce6;
+    --secondary-light: #8e8cf0;
+    --accent-color: #ff9500;
+    --accent-light: #ffb340;
+
+    --success-color: #34c759;
+    --warning-color: #ff9f0a;
+    --error-color: #ff3b30;
+    --info-color: #5ac8fa;
+
+    --bg-primary: #fafafc;
+    --bg-secondary: #ffffff;
+    --bg-cream: #f0f0f3;
+
+    --text-primary: #1d1d1f;
+    --text-secondary: #86868b;
+    --text-muted: #aeaeb2;
+
+    --border-color: #e6e6ea;
+    --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+    --gradient-primary: linear-gradient(135deg, #007aff, #5ac8fa);
+    --gradient-navbar: linear-gradient(135deg, #ffffff, #fafafc);
+    --shadow-navbar: 0 1px 6px rgba(0, 0, 0, 0.06);
+    --gradient-phone-header: linear-gradient(135deg, #007aff, #5ac8fa);
+    --gradient-body: #fafafc;
+    --card-bg-glass: rgba(255, 255, 255, 0.8);
+
+    --brand-1: #5e5ce6;
+    --brand-2: #9a9af0;
+    --warn-1: #ff9f0a;
+    --warn-2: #ffc14d;
+    --ok-1: #34c759;
+    --ok-2: #5fe089;
+    --text-on-brand: #ffffff;
+
+    --daily-today-bg: rgba(52, 199, 89, 0.14);
+    --daily-today-border: rgba(52, 199, 89, 0.6);
+    --daily-today-soft: rgba(52, 199, 89, 0.07);
+    --daily-ok-bg: rgba(52, 199, 89, 0.08);
+    --daily-ok-border: rgba(52, 199, 89, 0.4);
+    --soft-warn: rgba(255, 159, 10, 0.1);
+    --border-warn: rgba(255, 159, 10, 0.5);
+    --soft-ok: rgba(52, 199, 89, 0.1);
+    --border-ok: rgba(52, 199, 89, 0.55);
+
+    --theme-name: '苹果极简';
+}
+[data-theme="apple"] .theme-item.active { background: rgba(0, 122, 255, 0.08); }
 
 /* 暗黑模式下的按钮样式 */
 [data-theme="dark"] .btn-secondary {
@@ -4078,18 +4354,18 @@ body {
 
 /* 主题选择器样式 */
 .theme-selector {
-    display: flex;
-    gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 12px;
     margin-top: 16px;
 }
 
 .theme-item {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    padding: 16px 12px;
+    padding: 16px 8px;
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--transition-normal);
@@ -5935,6 +6211,82 @@ body {
     overflow: hidden;
     background: linear-gradient(135deg, var(--card-gradient-info, #0ea5e9) 0%, var(--card-gradient-info-2, #38bdf8) 100%);
     color: #fff;
+}
+
+/* ==================== 首页轻量交互动画（仅 transform/opacity，GPU 友好） ==================== */
+
+/* 主卡片淡入上滑入场（一次性） */
+.home-enter {
+    animation: homeEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    will-change: transform, opacity;
+}
+@keyframes homeEnter {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 每日赚取卡片交错入场（配合内联 animation-delay） */
+.home-chip-enter {
+    animation: homeChipEnter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes homeChipEnter {
+    from { opacity: 0; transform: translateY(10px) scale(0.92); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* “还差 ¥X” 微呼吸（克制，仅 opacity，提示紧迫感） */
+.home-remain-pulse {
+    animation: homeRemainPulse 2.6s ease-in-out infinite;
+}
+@keyframes homeRemainPulse {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+}
+
+/* 超额完成庆祝弹跳（一次性） */
+.home-celebrate {
+    animation: homeCelebrate 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    will-change: transform, opacity;
+}
+@keyframes homeCelebrate {
+    0%   { opacity: 0; transform: scale(0.8) translateY(8px); }
+    60%  { transform: scale(1.04) translateY(0); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 数字计数完成后的轻弹（一次性） */
+.home-pop {
+    animation: homePop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes homePop {
+    0%   { transform: scale(0.85); }
+    100% { transform: scale(1); }
+}
+
+/* 进度条增长后的柔光扫过（纯 transform，一次性） */
+.home-progress-shine { position: relative; overflow: hidden; }
+.home-progress-shine::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transform: translateX(-260%);
+    animation: homeShine 0.9s ease-out 0.55s 1;
+    pointer-events: none;
+    border-radius: inherit;
+}
+@keyframes homeShine {
+    from { transform: translateX(-260%); }
+    to   { transform: translateX(360%); }
+}
+
+/* 尊重「减少动态」偏好：关闭以上动画（数字计数由 JS 同步判断） */
+@media (prefers-reduced-motion: reduce) {
+    .home-enter, .home-chip-enter, .home-remain-pulse,
+    .home-celebrate, .home-pop, .home-progress-shine::after {
+        animation: none !important;
+    }
 }
 .glass-panel::before,
 .glass-panel::after {
