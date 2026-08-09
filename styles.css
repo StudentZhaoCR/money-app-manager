@@ -75,6 +75,10 @@
     --daily-ok-bg: rgba(56, 239, 125, 0.15);
     --daily-ok-border: rgba(56, 239, 125, 0.4);
 
+    --card-bg: #fbf8f1;
+    --card-gradient: linear-gradient(145deg, #ffffff 0%, #f7f2e8 100%);
+    --card-highlight: rgba(255, 255, 255, 0.55);
+
     --theme-name: '简约';
 }
 
@@ -130,6 +134,10 @@
     --daily-today-border: rgba(154, 184, 156, 0.8);
     --daily-ok-bg: rgba(154, 184, 156, 0.15);
     --daily-ok-border: rgba(154, 184, 156, 0.4);
+
+    --card-bg: #3d3632;
+    --card-gradient: linear-gradient(145deg, #3d3632 0%, #342d29 100%);
+    --card-highlight: rgba(255, 255, 255, 0.04);
 
     --theme-name: '暗黑模式';
 }
@@ -188,13 +196,17 @@
     --soft-ok: rgba(57, 255, 176, 0.1);
     --border-ok: rgba(57, 255, 176, 0.6);
 
+    --card-bg: #0e141a;
+    --card-gradient: linear-gradient(145deg, #111820 0%, #0a0e12 100%);
+    --card-highlight: rgba(255, 255, 255, 0.05);
+
     --theme-name: '霓虹终端';
 }
 [data-theme="neon"] .tab-bar { background: var(--bg-secondary); border: 1px solid var(--border-color); box-shadow: var(--shadow-navbar); }
 [data-theme="neon"] .tab-item { color: var(--text-secondary); }
 [data-theme="neon"] .tab-item.active { background: var(--primary-color); box-shadow: 0 4px 15px rgba(57, 255, 176, 0.3); }
 [data-theme="neon"] .tab-item.active .tab-text { color: var(--text-on-brand); }
-[data-theme="neon"] .card { background: var(--bg-secondary); border-color: var(--border-color); }
+[data-theme="neon"] .card { background: var(--card-gradient, var(--bg-secondary)); border-color: var(--border-color); box-shadow: var(--shadow-card), inset 0 1px 0 var(--card-highlight, transparent); }
 [data-theme="neon"] .theme-item.active { background: rgba(57, 255, 176, 0.08); }
 
 /* ==================== 奶油玻璃糖果（浅色） ==================== */
@@ -250,6 +262,10 @@
     --border-warn: rgba(224, 138, 60, 0.5);
     --soft-ok: rgba(27, 191, 122, 0.1);
     --border-ok: rgba(27, 191, 122, 0.5);
+
+    --card-bg: #fffafd;
+    --card-gradient: linear-gradient(145deg, #ffffff 0%, #fdeef6 100%);
+    --card-highlight: rgba(255, 255, 255, 0.6);
 
     --theme-name: '奶油糖果';
 }
@@ -308,6 +324,10 @@
     --border-warn: #111111;
     --soft-ok: #d6f5e0;
     --border-ok: #111111;
+
+    --card-bg: #fffdf2;
+    --card-gradient: #fffdf2;
+    --card-highlight: transparent;
 
     --theme-name: '新粗野';
 }
@@ -373,6 +393,10 @@
     --border-warn: rgba(255, 159, 10, 0.5);
     --soft-ok: rgba(52, 199, 89, 0.1);
     --border-ok: rgba(52, 199, 89, 0.55);
+
+    --card-bg: #ffffff;
+    --card-gradient: linear-gradient(145deg, #ffffff 0%, #f5f5f7 100%);
+    --card-highlight: rgba(255, 255, 255, 0.5);
 
     --theme-name: '苹果极简';
 }
@@ -443,8 +467,9 @@
 
 /* 暗黑模式下的卡片 */
 [data-theme="dark"] .card {
-    background: var(--bg-secondary);
+    background: var(--card-gradient, var(--bg-secondary));
     border-color: var(--border-color);
+    box-shadow: var(--shadow-card), inset 0 1px 0 var(--card-highlight, transparent);
 }
 
 /* 暗黑模式下的手机项 */
@@ -1472,12 +1497,18 @@ body {
 
 /* 卡片 */
 .card {
-    background: var(--bg-secondary);
+    background: var(--card-gradient, var(--card-bg, var(--bg-secondary)));
     border-radius: var(--radius-lg);
     padding: 20px;
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-card), inset 0 1px 0 var(--card-highlight, transparent);
     border: 1px solid var(--border-color);
     margin-bottom: 16px;
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover), inset 0 1px 0 var(--card-highlight, transparent);
 }
 
 /* 表单元素 */
