@@ -921,7 +921,7 @@ function showAddDramaForm(phoneId, appId) {
             </div>
             <div class="form-group" style="margin-bottom: 12px;">
                 <label class="form-label">总集数</label>
-                <input type="number" id="drama-episodes" class="form-input" placeholder="请输入总集数" min="1" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary);">
+                <input type="number" inputmode="decimal" id="drama-episodes" class="form-input" placeholder="请输入总集数" min="1" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary);">
                 <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; padding: 8px; background: var(--bg-secondary); border-radius: 6px;">
                     <div style="font-weight: 600; margin-bottom: 4px;">📅 时段自动分配</div>
                     <div id="drama-preview" style="display: flex; gap: 8px; font-size: 11px;">
@@ -1413,7 +1413,7 @@ function openAddInstallmentModal() {
         </div>
         <div class="form-group">
             <label class="form-label">还款金额 (元)</label>
-            <input type="number" id="installment-amount" class="form-input" placeholder="输入需还款总额" step="0.01">
+            <input type="number" inputmode="decimal" id="installment-amount" class="form-input" placeholder="输入需还款总额" step="0.01">
         </div>
         <div class="form-hint" style="font-size: 12px; color: var(--text-secondary);">
             💡 添加后可用资金将自动计算，可随时手动还款
@@ -1464,7 +1464,7 @@ function openEditInstallmentModal(installmentId) {
         </div>
         <div class="form-group">
             <label class="form-label">还款金额 (元)</label>
-            <input type="number" id="edit-installment-amount" class="form-input" value="${installment.amount}" step="0.01">
+            <input type="number" inputmode="decimal" id="edit-installment-amount" class="form-input" value="${installment.amount}" step="0.01">
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -1522,7 +1522,7 @@ function openRepayModal(installmentId) {
         </div>
         <div class="form-group">
             <label class="form-label">还款金额 (元)</label>
-            <input type="number" id="repay-amount" class="form-input" value="${maxRepayAmount.toFixed(2)}" step="0.01" max="${maxRepayAmount}">
+            <input type="number" inputmode="decimal" id="repay-amount" class="form-input" value="${maxRepayAmount.toFixed(2)}" step="0.01" max="${maxRepayAmount}">
         </div>
         <div class="flex gap-2" style="margin-top: 12px;">
             <button class="btn btn-secondary" style="flex: 1; padding: 8px;" onclick="document.getElementById('repay-amount').value = ${Math.min(remainingAmount * 0.1, availableFunds).toFixed(2)}">最低10%</button>
@@ -6374,6 +6374,44 @@ function init() {
     // 初始化提醒系统
     initNotificationSystem();
     checkReminders();
+    // 启动任务：年度快照 + 备份提醒
+    checkStartupTasks();
+}
+
+// 启动任务：年度目标自动快照 + 定期备份提醒
+function checkStartupTasks() {
+    try {
+        // 1. 年度目标快照：当前年若无快照记录，自动存一条当前进度
+        const goal = DataManager.getYearlyGoal();
+        if (goal && goal.amount && goal.amount > 0) {
+            const year = goal.year || new Date().getFullYear();
+            const history = DataManager.getYearlyGoalHistory();
+            const hasThisYear = history.some(h => h.year === year);
+            if (!hasThisYear) {
+                const dist = DataManager.autoDistributeSurplus();
+                const actual = dist.totalEarned || 0;
+                DataManager.saveYearlyGoalHistory(year, goal.amount, actual);
+            }
+        }
+    } catch (e) { console.error('yearly snapshot error', e); }
+
+    try {
+        // 2. 定期备份提醒：距上次备份 > 7 天则提醒（当日只提醒一次）
+        const last = localStorage.getItem('moneyApp_lastBackupTime');
+        if (!last) {
+            // 首次记录，7 天后才开始提醒
+            localStorage.setItem('moneyApp_lastBackupTime', String(Date.now()));
+        } else {
+            const days = (Date.now() - parseInt(last, 10)) / 86400000;
+            const remindKey = 'moneyApp_backupReminded_' + getCurrentDate();
+            if (days >= 7 && !localStorage.getItem(remindKey)) {
+                if (typeof showInfo === 'function') {
+                    showInfo('💡 已 ' + Math.floor(days) + ' 天没备份数据，建议去 设置 → 数据管理 导出一份');
+                }
+                localStorage.setItem(remindKey, '1');
+            }
+        }
+    } catch (e) { console.error('backup remind error', e); }
 }
 
 // 修复旧版本数据：为没有历史记录的手机初始化历史记录
@@ -6717,26 +6755,32 @@ function checkWithdrawReminders() {
 
 // 每日目标提醒 - 已简化
 function checkDailyGoalReminders() {
-    const data = DataManager.loadData();
-    const now = new Date();
-    const todayStr = formatLocalDate(now);
-    
-    // 计算今日总提现
-    let totalWithdrawnToday = 0;
-    
-    data.phones.forEach(phone => {
-        phone.apps.forEach(app => {
-            if (app.withdrawals) {
-                app.withdrawals.forEach(w => {
-                    if (w.date === todayStr) {
-                        totalWithdrawnToday += w.amount;
-                    }
-                });
+    try {
+        const goal = DataManager.getYearlyGoal();
+        if (!goal || !goal.amount || goal.amount <= 0) return;
+
+        const target = DataManager.calculateYearlyDailyTarget();
+        if (!target.isValid || target.dailyTarget <= 0) return;
+
+        const todayEarned = DataManager.getTodayTotalEarnings();
+        const remain = target.dailyTarget - todayEarned;
+        const todayStr = getCurrentDate();
+        const remindKey = 'moneyApp_goalReminded_' + todayStr;
+
+        // 今日已提醒过则不重复
+        if (localStorage.getItem(remindKey)) return;
+
+        // 未达标才提醒
+        if (remain > 0) {
+            const msg = '今日还差 ¥' + remain.toFixed(2) + ' 达标，加油！';
+            if (typeof showInfo === 'function') showInfo(msg);
+            // 系统通知（如已授权）
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try { new Notification('每日目标提醒', { body: msg }); } catch (e) {}
             }
-        });
-    });
-    
-    // 每日目标提醒功能已简化
+            localStorage.setItem(remindKey, '1');
+        }
+    } catch (e) { console.error('checkDailyGoalReminders error', e); }
 }
 
 // 更新所有页面的日期
@@ -7147,11 +7191,11 @@ function openAddShoppingModal() {
         </div>
         <div class="form-group">
             <label class="form-label">付款金额 (元)</label>
-            <input type="number" id="shop-payment" class="form-input" step="0.01" min="0" placeholder="0.00" oninput="calcShopActual()">
+            <input type="number" inputmode="decimal" id="shop-payment" class="form-input" step="0.01" min="0" placeholder="0.00" oninput="calcShopActual()">
         </div>
         <div class="form-group">
             <label class="form-label">返还金币数量</label>
-            <input type="number" id="shop-rebate-coins" class="form-input" step="1" min="0" placeholder="0" oninput="calcShopActual()">
+            <input type="number" inputmode="decimal" id="shop-rebate-coins" class="form-input" step="1" min="0" placeholder="0" oninput="calcShopActual()">
             <div class="form-hint">购物返还的金币数，按兑换比例折算为现金</div>
         </div>
         <div class="form-group">
@@ -7254,11 +7298,11 @@ function openEditShoppingModal(id) {
         </div>
         <div class="form-group">
             <label class="form-label">付款金额 (元)</label>
-            <input type="number" id="shop-payment" class="form-input" step="0.01" min="0" value="${record.paymentAmount}" oninput="calcShopActual()">
+            <input type="number" inputmode="decimal" id="shop-payment" class="form-input" step="0.01" min="0" value="${record.paymentAmount}" oninput="calcShopActual()">
         </div>
         <div class="form-group">
             <label class="form-label">返还金币数量</label>
-            <input type="number" id="shop-rebate-coins" class="form-input" step="1" min="0" value="${record.rebateCoins}" oninput="calcShopActual()">
+            <input type="number" inputmode="decimal" id="shop-rebate-coins" class="form-input" step="1" min="0" value="${record.rebateCoins}" oninput="calcShopActual()">
         </div>
         <div class="form-group">
             <label class="form-label">兑换比例</label>
@@ -8721,7 +8765,7 @@ function openAddIncomeModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">金额 (元)</label>
-                <input type="number" id="income-amount" class="form-input" placeholder="输入金额" step="0.01">
+                <input type="number" inputmode="decimal" id="income-amount" class="form-input" placeholder="输入金额" step="0.01">
             </div>
             <div class="form-group">
                 <label class="form-label">日期</label>
@@ -8793,7 +8837,7 @@ function openAddExpenseModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">金额 (元)</label>
-                <input type="number" id="expense-amount" class="form-input" placeholder="输入金额" step="0.01">
+                <input type="number" inputmode="decimal" id="expense-amount" class="form-input" placeholder="输入金额" step="0.01">
             </div>
             <div class="form-group">
                 <label class="form-label">日期</label>
@@ -8868,7 +8912,7 @@ function openTransferModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">提现金额 (元)</label>
-                <input type="number" id="transfer-amount" class="form-input" placeholder="输入提现金额" step="0.01" max="${stats.appEarnings.totalBalance}">
+                <input type="number" inputmode="decimal" id="transfer-amount" class="form-input" placeholder="输入提现金额" step="0.01" max="${stats.appEarnings.totalBalance}">
             </div>
             <div class="form-group">
                 <label class="form-label">日期</label>
@@ -9598,6 +9642,9 @@ function renderIncomeCalendar() {
     if (!calendarGrid || !monthYearLabel) return;
 
     const data = DataManager.loadData();
+    // 每日目标（用于达标色阶判断）
+    const yearlyDailyTarget = DataManager.calculateYearlyDailyTarget();
+    const dailyTarget = yearlyDailyTarget.isValid ? yearlyDailyTarget.dailyTarget : 0;
     const year = currentCalendarDate.getFullYear();
     const month = currentCalendarDate.getMonth();
 
@@ -9622,53 +9669,57 @@ function renderIncomeCalendar() {
     }
 
     // 日期格子
+    const cMix = (c, pct) => `color-mix(in srgb, ${c} ${pct}%, var(--bg-secondary))`;
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const dayData = getDayWithdrawalData(dateStr, data);
 
-        // 判断是否有数据
         const hasWithdrawal = dayData.withdrawal > 0;
         const hasExpense = dayData.expense > 0;
+        const hasEarned = dayData.earned > 0;
+        const isAchieved = hasEarned && dailyTarget > 0 && dayData.earned >= dailyTarget;
 
-        // 构建背景色 - 毛玻璃效果
-        let backgroundColor = 'rgba(255,255,255,0.1)';
-        let borderColor = 'rgba(255,255,255,0.2)';
-        let textColor = 'rgba(255,255,255,0.9)';
-        let amountColor = 'rgba(255,255,255,0.8)';
+        // 颜色全部从主题色派生（color-mix），适配所有主题；达标用绿色色阶（超额越多越深）
+        let backgroundColor = 'var(--bg-secondary)';
+        let borderColor = 'var(--border-color)';
+        let textColor = 'var(--text-primary)';
 
-        if (hasWithdrawal && hasExpense) {
-            backgroundColor = 'rgba(251, 191, 36, 0.35)'; // 黄色 - 提现和支出都有
-            borderColor = 'rgba(251, 191, 36, 0.5)';
-            textColor = '#ffffff';
-            amountColor = '#ffffff';
+        if (isAchieved) {
+            const ratio = Math.min(1.5, dayData.earned / dailyTarget);
+            const pct = Math.round(22 + ratio * 25);
+            backgroundColor = cMix('var(--success-color)', pct);
+            borderColor = 'var(--border-ok)';
+        } else if (hasEarned) {
+            backgroundColor = cMix('var(--warning-color)', 16);
+            borderColor = 'var(--border-warn)';
+        } else if (hasWithdrawal && hasExpense) {
+            backgroundColor = cMix('var(--warning-color)', 24);
+            borderColor = 'var(--border-warn)';
         } else if (hasWithdrawal) {
-            backgroundColor = 'rgba(52, 211, 153, 0.35)'; // 绿色 - 有提现
-            borderColor = 'rgba(52, 211, 153, 0.5)';
-            textColor = '#ffffff';
-            amountColor = '#ffffff';
+            backgroundColor = cMix('var(--success-color)', 20);
+            borderColor = 'var(--border-ok)';
         } else if (hasExpense) {
-            backgroundColor = 'rgba(248, 113, 113, 0.35)'; // 红色 - 有支出
-            borderColor = 'rgba(248, 113, 113, 0.5)';
-            textColor = '#ffffff';
-            amountColor = '#ffffff';
+            backgroundColor = cMix('var(--error-color)', 20);
+            borderColor = 'var(--border-warn)';
         }
 
-        // 判断是否是今天
+        // 今天高亮（主色边框加粗）
         const today = getCurrentDate();
         const isToday = dateStr === today;
         if (isToday) {
-            backgroundColor = 'rgba(255,255,255,0.4)';
-            borderColor = '#ffffff';
+            borderColor = 'var(--primary-color)';
         }
 
-        // 显示提现金额
-        const displayAmount = dayData.withdrawal > 0 ? `¥${dayData.withdrawal.toFixed(0)}` : '';
+        // 显示金额：有赚取显示赚取，否则提现
+        const displayAmount = hasEarned ? `¥${dayData.earned.toFixed(0)}` : (hasWithdrawal ? `提¥${dayData.withdrawal.toFixed(0)}` : '');
+        const achieveMark = isAchieved ? '<span style="position:absolute;top:1px;right:3px;font-size:9px;color:var(--success-color);font-weight:700;">✓</span>' : '';
 
         html += `
             <div style="
+                position: relative;
                 aspect-ratio: 1;
                 background: ${backgroundColor};
-                border: 2px solid ${borderColor};
+                border: ${isToday ? '3px' : '2px'} solid ${borderColor};
                 border-radius: 10px;
                 padding: 4px;
                 display: flex;
@@ -9676,14 +9727,13 @@ function renderIncomeCalendar() {
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: transform 0.15s ease;
                 font-size: 12px;
-                backdrop-filter: blur(5px);
-                -webkit-backdrop-filter: blur(5px);
-            " onmouseover="this.style.transform='scale(1.05)'; this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.transform='scale(1)'; this.style.background='${backgroundColor}'"
+            " onmouseover="this.style.transform='scale(1.06)'" onmouseout="this.style.transform='scale(1)'"
                onclick="showDayDetail('${dateStr}')">
-                <span style="font-weight: ${isToday ? '800' : '700'}; color: ${isToday ? '#8b5cf6' : textColor}; text-shadow: ${isToday ? '0 1px 2px rgba(255,255,255,0.5)' : '0 1px 2px rgba(0,0,0,0.1)'};">${day}</span>
-                ${displayAmount ? `<span style="font-size: 10px; color: ${amountColor}; margin-top: 2px; font-weight: 600;">${displayAmount}</span>` : ''}
+                ${achieveMark}
+                <span style="font-weight: ${isToday ? '800' : '700'}; color: ${textColor};">${day}</span>
+                ${displayAmount ? `<span style="font-size: 10px; color: var(--text-secondary); margin-top: 2px; font-weight: 600;">${displayAmount}</span>` : ''}
             </div>
         `;
     }
@@ -9691,11 +9741,12 @@ function renderIncomeCalendar() {
     calendarGrid.innerHTML = html;
 }
 
-// 获取某一天的提现数据
+// 获取某一天的提现/赚取数据
 function getDayWithdrawalData(dateStr, data) {
     let expense = 0;
     let withdrawal = 0;
     let installment = false;
+    let earned = 0;
 
     // 计算支出
     if (data.expenses) {
@@ -9706,7 +9757,7 @@ function getDayWithdrawalData(dateStr, data) {
         });
     }
 
-    // 计算提现金额（从withdrawals数组中统计）
+    // 计算提现金额（从withdrawals数组中统计）+ 当日赚取（与首页口径一致）
     data.phones.forEach(phone => {
         phone.apps.forEach(app => {
             if (app.withdrawals) {
@@ -9716,6 +9767,15 @@ function getDayWithdrawalData(dateStr, data) {
                     }
                 });
             }
+            // 当日赚取：优先 balanceHistory，回退 dailyEarnings（同一笔只取其一）
+            if (app.balanceHistory && app.balanceHistory.length > 0) {
+                const rec = app.balanceHistory.find(h => h.date === dateStr);
+                if (rec && rec.change > 0) {
+                    earned += parseFloat(rec.change) || 0;
+                }
+            } else if (app.dailyEarnings && app.dailyEarnings[dateStr]) {
+                earned += parseFloat(app.dailyEarnings[dateStr]) || 0;
+            }
         });
     });
 
@@ -9724,7 +9784,7 @@ function getDayWithdrawalData(dateStr, data) {
         installment = data.installments.some(inst => inst.dueDate === dateStr);
     }
 
-    return { expense, withdrawal, installment };
+    return { expense, withdrawal, installment, earned };
 }
 
 // 切换日历月份
@@ -10558,22 +10618,22 @@ function openAddAppModal(phoneId) {
         </div>
         <div class="form-group">
             <label class="form-label">默认余额 (元)</label>
-            <input type="number" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <input type="number" inputmode="decimal" id="app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
         <div class="form-group">
             <label class="form-label">兑换比例 (金币数 = 1元)</label>
-            <input type="number" id="app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
+            <input type="number" inputmode="decimal" id="app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
             <div class="form-hint">购物返还金币按此比例折算现金，例如填10000表示10000金币=1元</div>
         </div>
         <div class="form-group">
             <label class="form-label">提现门槛 (元) <span style="color: #ef4444;">*</span></label>
-            <input type="number" id="app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
+            <input type="number" inputmode="decimal" id="app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
             <div class="form-hint">达到此金额才能提现，必须大于0</div>
         </div>
         <div class="form-group">
             <label class="form-label">高档提现额度 (元)</label>
-            <input type="number" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
+            <input type="number" inputmode="decimal" id="app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
             <div class="form-hint">默认高档提现金额，不设置则使用最小提现金额</div>
         </div>
         <div class="form-group">
@@ -10584,7 +10644,7 @@ function openAddAppModal(phoneId) {
         </div>
         <div class="form-group">
             <label class="form-label">清零周期 (天)</label>
-            <input type="number" id="app-clear-period" class="form-input" placeholder="0" step="1" value="0" min="0">
+            <input type="number" inputmode="decimal" id="app-clear-period" class="form-input" placeholder="0" step="1" value="0" min="0">
             <div class="form-hint">超过此天数未登录将清空余额，0表示无清零规则</div>
         </div>
     `, [
@@ -10692,7 +10752,7 @@ function addAddTier() {
     div.style.cssText = 'display: flex; gap: 6px; align-items: center;';
     div.innerHTML = `
         <input type="text" class="form-input add-tier-name" placeholder="档位名称(如:1元档)" value="" style="flex: 1; font-size: 13px;">
-        <input type="number" class="form-input add-tier-amount" placeholder="金额" value="" step="0.01" style="width: 90px; font-size: 13px;">
+        <input type="number" inputmode="decimal" class="form-input add-tier-amount" placeholder="金额" value="" step="0.01" style="width: 90px; font-size: 13px;">
         <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; flex-shrink: 0;">✕</button>
     `;
     container.appendChild(div);
@@ -10706,7 +10766,7 @@ function addEditTier() {
     div.style.cssText = 'display: flex; gap: 6px; align-items: center;';
     div.innerHTML = `
         <input type="text" class="form-input edit-tier-name" placeholder="档位名称(如:1元档)" value="" style="flex: 1; font-size: 13px;">
-        <input type="number" class="form-input edit-tier-amount" placeholder="金额" value="" step="0.01" style="width: 90px; font-size: 13px;">
+        <input type="number" inputmode="decimal" class="form-input edit-tier-amount" placeholder="金额" value="" step="0.01" style="width: 90px; font-size: 13px;">
         <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; flex-shrink: 0;">✕</button>
     `;
     container.appendChild(div);
@@ -10823,22 +10883,22 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         </div>
         <div class="form-group">
             <label class="form-label">当前余额 (元)</label>
-            <input type="number" id="edit-app-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" onclick="this.select();" onfocus="this.select();">
+            <input type="number" inputmode="decimal" id="edit-app-balance" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" onclick="this.select();" onfocus="this.select();">
             <div class="form-hint">更新余额后系统自动记录当日收益</div>
         </div>
         <div class="form-group">
             <label class="form-label">兑换比例 (金币数 = 1元)</label>
-            <input type="number" id="edit-app-exchange-rate" class="form-input" value="${exchangeRate || ''}" step="1" min="0" placeholder="如10000">
+            <input type="number" inputmode="decimal" id="edit-app-exchange-rate" class="form-input" value="${exchangeRate || ''}" step="1" min="0" placeholder="如10000">
             <div class="form-hint">购物返还金币按此比例折算现金，例如10000表示10000金币=1元</div>
         </div>
         <div class="form-group">
             <label class="form-label">提现门槛 (元)</label>
-            <input type="number" id="edit-app-min-withdraw" class="form-input" value="${(app.minWithdraw || 0).toFixed(2)}" step="0.01">
+            <input type="number" inputmode="decimal" id="edit-app-min-withdraw" class="form-input" value="${(app.minWithdraw || 0).toFixed(2)}" step="0.01">
             <div class="form-hint">达到此金额才能提现（0表示无门槛）</div>
         </div>
         <div class="form-group">
             <label class="form-label">高档提现额度 (元)</label>
-            <input type="number" id="edit-app-high-withdraw" class="form-input" value="${(app.highWithdraw || 0).toFixed(2)}" step="0.01">
+            <input type="number" inputmode="decimal" id="edit-app-high-withdraw" class="form-input" value="${(app.highWithdraw || 0).toFixed(2)}" step="0.01">
             <div class="form-hint">默认高档提现金额，不设置则使用最小提现金额</div>
         </div>
         <div class="form-group">
@@ -10847,7 +10907,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
                 ${(app.highWithdrawTiers || []).map((tier, i) => `
                     <div style="display: flex; gap: 6px; align-items: center;" data-tier-index="${i}">
                         <input type="text" class="form-input edit-tier-name" placeholder="档位名称(如:1元档)" value="${tier.name || ''}" style="flex: 1; font-size: 13px;">
-                        <input type="number" class="form-input edit-tier-amount" placeholder="金额" value="${tier.amount || ''}" step="0.01" style="width: 90px; font-size: 13px;">
+                        <input type="number" inputmode="decimal" class="form-input edit-tier-amount" placeholder="金额" value="${tier.amount || ''}" step="0.01" style="width: 90px; font-size: 13px;">
                         <button type="button" onclick="this.parentElement.remove()" style="background: #ef4444; color: white; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; flex-shrink: 0;">✕</button>
                     </div>
                 `).join('')}
@@ -10857,13 +10917,13 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
         </div>
         <div class="form-group">
             <label class="form-label">清零周期 (天)</label>
-            <input type="number" id="edit-app-clear-period" class="form-input" value="${(app.clearPeriod || 0)}" step="1" min="0">
+            <input type="number" inputmode="decimal" id="edit-app-clear-period" class="form-input" value="${(app.clearPeriod || 0)}" step="1" min="0">
             <div class="form-hint">超过此天数未登录将清空余额，0表示无清零规则</div>
         </div>
         <div class="form-group">
             <label class="form-label">累计已提现 (元)</label>
             <div style="position: relative;">
-                <input type="number" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
+                <input type="number" inputmode="decimal" id="edit-app-historical" class="form-input" value="${(app.historicalWithdrawn || 0).toFixed(2)}" step="0.01" style="padding-right: 40px;">
                 <button type="button" onclick="document.getElementById('edit-app-historical').value=''; document.getElementById('edit-app-historical').focus();" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; padding: 4px;">✕</button>
             </div>
             <div class="form-hint">修改历史提现金额（如需补录之前的提现记录）</div>
@@ -10992,7 +11052,7 @@ function openWithdrawModal(phoneId, appId) {
         </div>
         <div class="form-group">
             <label class="form-label">本次提现金额 (元)</label>
-            <input type="number" id="withdraw-amount" class="form-input" value="${minWithdrawAmount.toFixed(2)}" placeholder="输入提现金额" step="0.01">
+            <input type="number" inputmode="decimal" id="withdraw-amount" class="form-input" value="${minWithdrawAmount.toFixed(2)}" placeholder="输入提现金额" step="0.01">
         </div>
         <div class="form-group">
             <label class="form-label">提现日期</label>
@@ -11057,27 +11117,27 @@ function openBatchAddAppsModal() {
         </div>
         <div class="form-group">
             <label class="form-label">默认余额 (元)</label>
-            <input type="number" id="batch-app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
+            <input type="number" inputmode="decimal" id="batch-app-balance" class="form-input" placeholder="0.00" step="0.01" value="0">
             <div class="form-hint">批量添加时所有软件的默认余额</div>
         </div>
         <div class="form-group">
             <label class="form-label">兑换比例 (金币数 = 1元)</label>
-            <input type="number" id="batch-app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
+            <input type="number" inputmode="decimal" id="batch-app-exchange-rate" class="form-input" placeholder="如10000" step="1" min="0" value="">
             <div class="form-hint">购物返还金币按此比例折算现金</div>
         </div>
         <div class="form-group">
             <label class="form-label">提现门槛 (元) <span style="color: #ef4444;">*</span></label>
-            <input type="number" id="batch-app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
+            <input type="number" inputmode="decimal" id="batch-app-min-withdraw" class="form-input" placeholder="0.00" step="0.01" value="0.3" min="0.01" required>
             <div class="form-hint">批量添加时所有软件的默认提现门槛，必须大于0</div>
         </div>
         <div class="form-group">
             <label class="form-label">高档提现额度 (元)</label>
-            <input type="number" id="batch-app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
+            <input type="number" inputmode="decimal" id="batch-app-high-withdraw" class="form-input" placeholder="0.00" step="0.01" value="3.00" min="0">
             <div class="form-hint">批量添加时所有软件的默认高档提现额度</div>
         </div>
         <div class="form-group">
             <label class="form-label">清零周期 (天)</label>
-            <input type="number" id="batch-app-clear-period" class="form-input" placeholder="0" step="1" value="0" min="0">
+            <input type="number" inputmode="decimal" id="batch-app-clear-period" class="form-input" placeholder="0" step="1" value="0" min="0">
             <div class="form-hint">超过此天数未登录将清空余额，0表示无清零规则</div>
         </div>
         <div class="form-group">
@@ -11197,7 +11257,7 @@ function openBatchEditHighWithdrawModal() {
                     <div class="batch-edit-phone">📱 ${apps.length}部手机</div>
                 </div>
                 <div class="batch-edit-input">
-                    <input type="number" 
+                    <input type="number" inputmode="decimal" 
                            id="batch-high-withdraw-${appIndex}" 
                            class="form-input batch-high-withdraw-input"
                            value="${(firstApp.highWithdraw || firstApp.minWithdraw).toFixed(2)}" 
@@ -11205,7 +11265,7 @@ function openBatchEditHighWithdrawModal() {
                            min="0">
                 </div>
                 <div class="batch-edit-input">
-                    <input type="number" 
+                    <input type="number" inputmode="decimal" 
                            id="batch-clear-period-${appIndex}" 
                            class="form-input batch-clear-period-input"
                            value="${(firstApp.clearPeriod || 0)}" 
@@ -11222,12 +11282,12 @@ function openBatchEditHighWithdrawModal() {
         <div class="batch-edit-header">
             <div class="batch-edit-quick">
                 <label class="form-label">全部设置高档额度为 (元)</label>
-                <input type="number" id="batch-set-all-high-withdraw" class="form-input" placeholder="0.00" step="0.01" min="0">
+                <input type="number" inputmode="decimal" id="batch-set-all-high-withdraw" class="form-input" placeholder="0.00" step="0.01" min="0">
                 <button class="btn btn-secondary btn-sm" onclick="batchSetAllHighWithdraw()">应用到全部</button>
             </div>
             <div class="batch-edit-quick mt-2">
                 <label class="form-label">全部设置清零周期为 (天)</label>
-                <input type="number" id="batch-set-all-clear-period" class="form-input" placeholder="0" step="1" min="0">
+                <input type="number" inputmode="decimal" id="batch-set-all-clear-period" class="form-input" placeholder="0" step="1" min="0">
                 <button class="btn btn-secondary btn-sm" onclick="batchSetAllClearPeriod()">应用到全部</button>
             </div>
         </div>
@@ -11610,7 +11670,7 @@ function openQuickWithdrawModal(index) {
         </div>
         <div class="form-group">
             <label class="form-label">本次提现金额 (元)</label>
-            <input type="number" id="quick-withdraw-amount" class="form-input" value="" step="0.01" max="${balance}" placeholder="请输入提现金额">
+            <input type="number" inputmode="decimal" id="quick-withdraw-amount" class="form-input" value="" step="0.01" max="${balance}" placeholder="请输入提现金额">
             <div class="form-hint">可提现金额: ¥${balance.toFixed(2)}</div>
         </div>
     `, [
@@ -13258,7 +13318,7 @@ function openAddInstallmentModal() {
         </div>
         <div class="form-group">
             <label class="form-label">还款金额 (元)</label>
-            <input type="number" id="installment-amount" class="form-input" placeholder="输入还款金额" step="0.01">
+            <input type="number" inputmode="decimal" id="installment-amount" class="form-input" placeholder="输入还款金额" step="0.01">
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -13330,11 +13390,11 @@ function openBatchAddInstallmentModal() {
         </div>
         <div class="form-group">
             <label class="form-label">总期数</label>
-            <input type="number" id="batch-installment-periods" class="form-input" placeholder="输入总期数（如：12）" min="1" max="36">
+            <input type="number" inputmode="decimal" id="batch-installment-periods" class="form-input" placeholder="输入总期数（如：12）" min="1" max="36">
         </div>
         <div class="form-group">
             <label class="form-label">每期还款金额 (元)</label>
-            <input type="number" id="batch-installment-amount" class="form-input" placeholder="输入每期还款金额" step="0.01">
+            <input type="number" inputmode="decimal" id="batch-installment-amount" class="form-input" placeholder="输入每期还款金额" step="0.01">
         </div>
         <div class="form-group">
             <label class="form-label">首次还款日期</label>
@@ -13483,7 +13543,7 @@ function openEditInstallmentModal(installmentId) {
         </div>
         <div class="form-group">
             <label class="form-label">还款金额 (元)</label>
-            <input type="number" id="edit-installment-amount" class="form-input" value="${installment.amount}" step="0.01">
+            <input type="number" inputmode="decimal" id="edit-installment-amount" class="form-input" value="${installment.amount}" step="0.01">
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -13532,7 +13592,7 @@ function editAppGoalAmount(installmentId) {
         appsHtml += `
             <div class="form-group">
                 <label class="form-label">${phoneName} - ${app.name}</label>
-                <input type="number" id="app-goal-${index}" class="form-input" value="${averageAmount.toFixed(2)}" step="0.01">
+                <input type="number" inputmode="decimal" id="app-goal-${index}" class="form-input" value="${averageAmount.toFixed(2)}" step="0.01">
             </div>
         `;
     });
@@ -13540,7 +13600,7 @@ function editAppGoalAmount(installmentId) {
     showModal('修改软件目标金额', `
         <div class="form-group">
             <label class="form-label">总还款金额</label>
-            <input type="number" id="total-goal-amount" class="form-input" value="${totalAmount.toFixed(2)}" step="0.01">
+            <input type="number" inputmode="decimal" id="total-goal-amount" class="form-input" value="${totalAmount.toFixed(2)}" step="0.01">
         </div>
         <div class="form-hint mb-4">修改总金额后点击"平均分配"按钮重新计算</div>
         ${appsHtml}
@@ -13660,6 +13720,7 @@ function exportFullJSON() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    safeSetItem('moneyApp_lastBackupTime', String(Date.now()));
     showSuccess('已导出完整数据备份');
 }
 
@@ -16335,7 +16396,7 @@ function quickEditBalanceFromGoal() {
             </div>
             <div class="form-group">
                 <label class="form-label">新余额 (元)</label>
-                <input type="number" id="quick-edit-balance-input" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" onclick="this.select();" onfocus="this.select();">
+                <input type="number" inputmode="decimal" id="quick-edit-balance-input" class="form-input" value="${currentBalance.toFixed(2)}" step="0.01" onclick="this.select();" onfocus="this.select();">
                 <div class="form-hint">更新余额后系统自动记录当日收益</div>
             </div>
         `,
