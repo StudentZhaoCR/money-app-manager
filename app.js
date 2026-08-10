@@ -2689,8 +2689,8 @@ class DataManager {
             return { goal: goal, apps: [], totalEarned: 0, remaining: 0, progress: 0 };
         }
 
-        // 计算总赚取金额
-        const totalEarned = stats.reduce((sum, s) => sum + s.totalEarned, 0);
+        // 计算总赚取金额（本年口径：stats 已按 goal.year 过滤，取 yearlyEarned）
+        const totalEarned = stats.reduce((sum, s) => sum + (s.yearlyEarned || 0), 0);
         const remaining = Math.max(0, goal.amount - totalEarned);
         const progress = Math.min(100, (totalEarned / goal.amount * 100)).toFixed(1);
 
@@ -3504,15 +3504,9 @@ class DataManager {
             };
         }
 
-        // 计算已赚取金额
-        let totalEarned = 0;
-        data.phones.forEach(phone => {
-            phone.apps.forEach(app => {
-                totalEarned += app.withdrawn || 0;
-                totalEarned += app.historicalWithdrawn || 0;
-                totalEarned += app.balance || 0;
-            });
-        });
+        // 计算已赚取金额（本年口径：取目标年内的收益）
+        const stats = this.getAppsYearlyStats(goal.year);
+        const totalEarned = stats.reduce((sum, s) => sum + (s.yearlyEarned || 0), 0);
 
         // 计算剩余金额
         const remainingAmount = Math.max(0, goal.amount - totalEarned);
@@ -3643,20 +3637,16 @@ class DataManager {
             };
         }
         
-        // 计算已赚取金额（当前余额 + 已提现）
-        const data = this.loadData();
-        let totalEarned = 0;
-        let totalApps = 0;
-        data.phones.forEach(phone => {
-            phone.apps.forEach(app => {
-                totalEarned += (app.withdrawn || 0) + (app.historicalWithdrawn || 0) + (app.balance || 0);
-                totalApps++;
-            });
-        });
-        
-        // 计算剩余天数（从今天到年底）
+        // 计算已赚取金额（目标年内的收益，统一口径）
+        const currentYear = new Date().getFullYear();
+        const targetYear = Math.max(goal.year || currentYear, currentYear);
+        const stats = this.getAppsYearlyStats(targetYear);
+        const totalEarned = stats.reduce((sum, s) => sum + (s.yearlyEarned || 0), 0);
+        const totalApps = stats.length;
+
+        // 计算剩余天数（从今天到目标年底）
         const now = new Date();
-        const endOfYear = new Date(now.getFullYear(), 11, 31);
+        const endOfYear = new Date(targetYear, 11, 31);
         const daysRemaining = Math.max(1, Math.ceil((endOfYear - now) / (1000 * 60 * 60 * 24)));
         
         // 计算剩余金额
@@ -6364,6 +6354,13 @@ function init() {
     // 修复旧版本数据
     migrateOldData();
 
+    // 跨年滚动：先把已过去的年份定格进历史并自动推进到下一年目标
+    const rolledYears = rolloverYearlyGoal();
+    if (rolledYears && rolledYears.length && typeof showInfo === 'function') {
+        const years = rolledYears.map(r => r.year).join('、');
+        showInfo('🎉 ' + years + ' 年目标已归档，已自动开启 ' + new Date().getFullYear() + ' 年目标');
+    }
+
     // 初始化所有页面
     updateAllDates();
     renderDashboard();
@@ -6378,23 +6375,36 @@ function init() {
     checkStartupTasks();
 }
 
-// 启动任务：年度目标自动快照 + 定期备份提醒
-function checkStartupTasks() {
+// 跨年滚动：把已过去的年份用「真实年终收益」定格进历史，并自动推进到下一年目标
+function rolloverYearlyGoal() {
     try {
-        // 1. 年度目标快照：当前年若无快照记录，自动存一条当前进度
         const goal = DataManager.getYearlyGoal();
-        if (goal && goal.amount && goal.amount > 0) {
-            const year = goal.year || new Date().getFullYear();
-            const history = DataManager.getYearlyGoalHistory();
-            const hasThisYear = history.some(h => h.year === year);
-            if (!hasThisYear) {
-                const dist = DataManager.autoDistributeSurplus();
-                const actual = dist.totalEarned || 0;
-                DataManager.saveYearlyGoalHistory(year, goal.amount, actual);
-            }
-        }
-    } catch (e) { console.error('yearly snapshot error', e); }
+        if (!goal || !goal.amount || goal.amount <= 0) return null;
+        const currentYear = new Date().getFullYear();
+        const goalYear = typeof goal.year === 'number' ? goal.year : currentYear;
+        if (goalYear >= currentYear) return null; // 没有跨年，无需处理
 
+        const rolled = [];
+        // 依次处理每个已过去的年份（goalYear .. currentYear-1）
+        for (let y = goalYear; y < currentYear; y++) {
+            const stats = DataManager.getAppsYearlyStats(y);
+            const actual = stats.reduce((sum, s) => sum + (s.yearlyEarned || 0), 0);
+            // 历史年份的目标额沿用当前设定（最佳估计，可手动在设置中修正）
+            DataManager.saveYearlyGoalHistory(y, goal.amount, actual);
+            rolled.push({ year: y, goalAmount: goal.amount, actual: actual });
+        }
+
+        // 自动推进到当前年（custom 模式沿用金额；minWithdraw 模式由 getYearlyGoal 动态计算）
+        DataManager.saveYearlyGoal(goal.amount, currentYear, goal.autoDistribute, goal.mode);
+        return rolled;
+    } catch (e) {
+        console.error('rollover yearly goal error', e);
+        return null;
+    }
+}
+
+// 启动任务：定期备份提醒
+function checkStartupTasks() {
     try {
         // 2. 定期备份提醒：距上次备份 > 7 天则提醒（当日只提醒一次）
         const last = localStorage.getItem('moneyApp_lastBackupTime');
@@ -6492,7 +6502,7 @@ const THEMES = [
     { id: 'dark', name: '暗黑模式', bg1: '#0f172a', bg2: '#1e293b', dots: ['#6366f1', '#34d399', '#fbbf24'] },
     { id: 'neon', name: '霓虹终端', bg1: '#0a0e12', bg2: '#0c1418', dots: ['#39ffb0', '#38e0ff', '#ffc24b'] },
     { id: 'candy', name: '奶油糖果', bg1: '#fff5fb', bg2: '#eef4ff', dots: ['#7ab8ff', '#5cf0a0', '#ff9ed6'] },
-    { id: 'brut', name: '新粗野', bg1: '#ffe14d', bg2: '#fff8d6', dots: ['#111111', '#1d9bff', '#ff7ab8'] },
+    { id: 'brut', name: '新粗野', bg1: '#39ff14', bg2: '#111111', dots: ['#39ff14', '#ff2d95', '#00e5ff'] },
     { id: 'apple', name: '苹果极简', bg1: '#fafafc', bg2: '#ffffff', dots: ['#007aff', '#34c759', '#ff9500'] }
 ];
 
@@ -6507,6 +6517,252 @@ const ACCENT_PRESETS = [
     { name: '粉', value: '#ec4899' },
     { name: '红', value: '#ef4444' }
 ];
+
+// ==================== 卡片配色（首页 5 张数据卡） ====================
+// 每张卡独立选色，写到 settings.cardColors[key]，跨主题保留
+const CARD_PALETTES = [
+    { id: 'emerald', name: '翡翠绿', c1: '#10b981', c2: '#6ee7b7' },
+    { id: 'mint',    name: '薄荷绿', c1: '#34d399', c2: '#a7f3d0' },
+    { id: 'olive',   name: '橄榄',   c1: '#11998e', c2: '#38ef7d' },
+    { id: 'sky',     name: '天空蓝', c1: '#3b82f6', c2: '#93c5fd' },
+    { id: 'aqua',    name: '海蓝',   c1: '#06b6d4', c2: '#67e8f9' },
+    { id: 'indigo',  name: '靛蓝紫', c1: '#6366f1', c2: '#a5b4fc' },
+    { id: 'purple',  name: '葡萄紫', c1: '#7c6bcf', c2: '#9c89ff' },
+    { id: 'violet',  name: '淡紫',   c1: '#a855f7', c2: '#d8b4fe' },
+    { id: 'fuchsia', name: '紫红',   c1: '#d946ef', c2: '#f0abfc' },
+    { id: 'pink',    name: '樱花粉', c1: '#ff8fa3', c2: '#ffb3c1' },
+    { id: 'rose',    name: '玫瑰红', c1: '#f43f5e', c2: '#fda4af' },
+    { id: 'amber',   name: '琥珀橙', c1: '#fbbf24', c2: '#fcd34d' },
+    { id: 'orange',  name: '南瓜橙', c1: '#f97316', c2: '#fdba74' },
+    { id: 'gold',    name: '金色',   c1: '#eab308', c2: '#fde68a' },
+    { id: 'lime',    name: '柠檬',   c1: '#84cc16', c2: '#d9f99d' },
+    { id: 'coral',   name: '珊瑚',   c1: '#fb7185', c2: '#fecdd3' }
+];
+
+const CARD_DEFS = [
+    { key: 'hero',           label: '总赚取金额', icon: '💰', sample: '¥3,580', defaultId: 'emerald' },
+    { key: 'totalPhones',    label: '总手机数',   icon: '📱', sample: '12',     defaultId: 'purple'  },
+    { key: 'totalApps',      label: '总软件数',   icon: '📦', sample: '48',     defaultId: 'pink'    },
+    { key: 'totalWithdrawn', label: '累计提现',   icon: '💸', sample: '¥1,240', defaultId: 'fuchsia' },
+    { key: 'totalBalance',   label: '当前余额',   icon: '💵', sample: '¥2,860', defaultId: 'amber'  }
+];
+
+const CARD_COLORS_KEY = 'moneyApp_cardColors';
+
+function getDefaultCardColors() {
+    const m = {};
+    CARD_DEFS.forEach(d => { m[d.key] = d.defaultId; });
+    return m;
+}
+
+function loadCardColors() {
+    try {
+        const raw = localStorage.getItem(CARD_COLORS_KEY);
+        if (!raw) return getDefaultCardColors();
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return getDefaultCardColors();
+        // 与默认合并，缺失/无效的 id 回落到默认
+        const def = getDefaultCardColors();
+        const validIds = new Set(CARD_PALETTES.map(p => p.id));
+        const merged = {};
+        Object.keys(def).forEach(k => {
+            merged[k] = (parsed[k] && validIds.has(parsed[k])) ? parsed[k] : def[k];
+        });
+        return merged;
+    } catch (e) {
+        return getDefaultCardColors();
+    }
+}
+
+function saveCardColors(map) {
+    try {
+        localStorage.setItem(CARD_COLORS_KEY, JSON.stringify(map));
+    } catch (e) { /* ignore */ }
+}
+
+function getCardPalette(idOrUndefined) {
+    return CARD_PALETTES.find(p => p.id === idOrUndefined) || null;
+}
+
+function getCardPaletteForKey(key) {
+    const map = loadCardColors();
+    let id = map[key];
+    // 处理自定义 id "custom:#hex|#light"
+    if (typeof id === 'string' && id.startsWith('custom:')) {
+        const parts = id.slice(7).split('|');
+        const c1 = parts[0] || '#3b82f6';
+        const c2 = parts[1] || '#93c5fd';
+        return { id, name: '自定义', c1, c2 };
+    }
+    return getCardPalette(id) || CARD_PALETTES.find(p => p.id === getDefaultCardColors()[key]) || CARD_PALETTES[0];
+}
+
+// 给一张卡产出 inline style 字符串，例如 " --card-c1:#10b981;--card-c2:#6ee7b7;--card-angle:135deg"
+function buildCardStyleAttr(key) {
+    const p = getCardPaletteForKey(key);
+    if (!p) return '';
+    return `--card-c1:${p.c1};--card-c2:${p.c2};--card-angle:135deg;`;
+}
+
+// 在 DOM 上重写某张卡的样式（用于实时刷新）
+function applyCardColorToNode(key) {
+    const node = document.querySelector(`[data-card="${key}"]`);
+    if (!node) return;
+    const attr = buildCardStyleAttr(key);
+    node.setAttribute('style', attr);
+    // 同时刷新 dashboard 之外的预览节点（设置页的 mini 预览）
+    document.querySelectorAll(`[data-card-preview="${key}"]`).forEach(el => {
+        const p = getCardPaletteForKey(key);
+        el.style.setProperty('--cc-c1', p.c1);
+        el.style.setProperty('--cc-c2', p.c2);
+        el.style.setProperty('--cc-angle', '135deg');
+    });
+}
+
+// 一次性应用所有卡的色（页面切换/初始化时调用）
+function applyAllCardColors() {
+    CARD_DEFS.forEach(d => applyCardColorToNode(d.key));
+}
+
+// 打开配色抽屉
+function openCardColorDrawer(key, evt) {
+    if (evt) { evt.stopPropagation(); evt.preventDefault(); }
+    const def = CARD_DEFS.find(d => d.key === key);
+    if (!def) return;
+    const currentMap = loadCardColors();
+    const currentId = currentMap[key];
+    const currentPalette = getCardPalette(currentId) || CARD_PALETTES.find(p => p.id === def.defaultId);
+
+    const swatchesHtml = CARD_PALETTES.map(p => {
+        const selected = (p.id === currentId);
+        return `<div class="color-picker-swatch${selected ? ' selected' : ''}" data-pid="${p.id}"
+            style="background:linear-gradient(135deg,${p.c1},${p.c2});"
+            onclick="selectCardSwatch('${key}','${p.id}',this)">
+            <span class="color-picker-swatch__check">✓</span>
+            <span class="color-picker-swatch__name">${p.name}</span>
+            <span class="color-picker-swatch__hex">${p.c1} · ${p.c2}</span>
+        </div>`;
+    }).join('');
+
+    const bodyHtml = `
+        <div class="color-picker-preview" id="card-color-preview-${key}"
+            style="background:linear-gradient(135deg,${currentPalette.c1},${currentPalette.c2});">
+            <div class="color-picker-preview__label">${def.icon} ${def.label}</div>
+            <div class="color-picker-preview__value">${def.sample}</div>
+        </div>
+        <div class="color-picker-grid" id="card-color-grid-${key}">
+            ${swatchesHtml}
+        </div>
+        <div class="color-picker-custom">
+            <label>自定义起色</label>
+            <input type="color" value="${currentPalette.c1}" oninput="onCustomColorChange('${key}', this.value)">
+            <span style="font-size:11px;color:var(--text-secondary);" id="card-color-hint-${key}">将自动派生浅色</span>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--border-color);margin-top:4px;">
+            <button class="btn btn-secondary" onclick="resetCardColor('${key}')" style="font-size:12px;">↺ 恢复默认</button>
+            <button class="btn btn-primary" onclick="closeModal()" style="font-size:12px;">完成</button>
+        </div>
+    `;
+    showModal(`${def.icon} ${def.label} · 配色`, bodyHtml, []);
+}
+
+// 用户点击某个预设色板
+function selectCardSwatch(key, paletteId, nodeEl) {
+    const map = loadCardColors();
+    map[key] = paletteId;
+    saveCardColors(map);
+    // 更新预览
+    const palette = getCardPalette(paletteId);
+    if (!palette) return;
+    const preview = document.getElementById('card-color-preview-' + key);
+    if (preview) {
+        preview.style.background = `linear-gradient(135deg, ${palette.c1}, ${palette.c2})`;
+    }
+    // 更新选中态
+    const grid = document.getElementById('card-color-grid-' + key);
+    if (grid) {
+        grid.querySelectorAll('.color-picker-swatch').forEach(n => n.classList.remove('selected'));
+        nodeEl.classList.add('selected');
+    }
+    // 实时刷新页面上的卡片
+    applyCardColorToNode(key);
+    // 刷新设置页列表
+    renderCardColorsList();
+}
+
+// 输入自定义起色，自动派生一个浅色
+function onCustomColorChange(key, hex) {
+    const { h, s, l } = hexToHsl(hex);
+    const light = `hsl(${h}, ${Math.min(95, s + 5)}%, ${Math.min(88, l + 22)}%)`;
+    const preview = document.getElementById('card-color-preview-' + key);
+    if (preview) {
+        preview.style.background = `linear-gradient(135deg, ${hex}, ${light})`;
+    }
+    // 找下相近预设，找到就沿用，否则构造虚拟色
+    const closest = findClosestPalette(hex) || { id: 'custom-' + hex.replace('#',''), name: '自定义', c1: hex, c2: light };
+    // 不污染 CARD_PALETTES，但需要注入 map 让 saveCardColors 接受
+    const map = loadCardColors();
+    // 如果重复色板未注册，写一个临时 id（包含起色 hex），为了实时预览+持久化，扩展一下：用 c1 作为定制值
+    map[key] = 'custom:' + hex + '|' + light;
+    saveCardColors(map);
+    applyCardColorToNode(key);
+    renderCardColorsList();
+}
+
+function findClosestPalette(hex) {
+    const target = hexToHsl(hex);
+    let best = null, bestDist = Infinity;
+    CARD_PALETTES.forEach(p => {
+        const t = hexToHsl(p.c1);
+        const d = Math.abs(t.h - target.h) + Math.abs(t.s - target.s) * 0.5 + Math.abs(t.l - target.l) * 0.3;
+        if (d < bestDist) { bestDist = d; best = p; }
+    });
+    return best;
+}
+
+// 恢复某张卡的默认色
+function resetCardColor(key) {
+    const def = CARD_DEFS.find(d => d.key === key);
+    if (!def) return;
+    const map = loadCardColors();
+    map[key] = def.defaultId;
+    saveCardColors(map);
+    // 重绘抽屉
+    openCardColorDrawer(key);
+    applyCardColorToNode(key);
+    renderCardColorsList();
+}
+
+// 全部恢复默认
+function resetAllCardColors() {
+    if (!confirm('确认恢复所有卡片为默认配色？')) return;
+    saveCardColors(getDefaultCardColors());
+    applyAllCardColors();
+    renderCardColorsList();
+    showSuccess('已恢复 5 张卡片默认配色');
+}
+
+// 在设置页"卡片配色"卡片中渲染列表（mini 预览 + 当前配色）
+function renderCardColorsList() {
+    const container = document.getElementById('card-colors-list');
+    if (!container) return;
+    const map = loadCardColors();
+    container.innerHTML = CARD_DEFS.map(def => {
+        const palette = getCardPaletteForKey(def.key);
+        const paletteId = map[def.key];
+        return `<div class="card-color-item" onclick="openCardColorDrawer('${def.key}')">
+            <div class="card-color-item__preview" data-card-preview="${def.key}"
+                style="--cc-c1:${palette.c1};--cc-c2:${palette.c2};--cc-angle:135deg;">
+                <div class="cc-label">${def.icon} ${def.label}</div>
+                <div class="cc-value">${def.sample}</div>
+            </div>
+            <div class="card-color-item__name">
+                <strong>${palette.name}</strong>
+                当前色 · 点此更换
+            </div>
+        </div>`;
+    }).join('');
+}
 
 // hex → {h,s,l}
 function hexToHsl(hex) {
@@ -7521,8 +7777,14 @@ function renderDashboard() {
     // 渲染 v2 看板
     const root = document.getElementById('dashboard-v2-root');
     if (root) {
+        const heroStyle = buildCardStyleAttr('hero');
+        const phonesStyle = buildCardStyleAttr('totalPhones');
+        const appsStyle = buildCardStyleAttr('totalApps');
+        const withdrawnStyle = buildCardStyleAttr('totalWithdrawn');
+        const balanceStyle = buildCardStyleAttr('totalBalance');
         root.innerHTML = `
-            <div class="hero-card" onclick="showTotalEarningsDetail()">
+            <div class="hero-card" data-card="hero" style="${heroStyle}" onclick="showTotalEarningsDetail()">
+                <button class="hero-card__edit" onclick="openCardColorDrawer('hero', event)" title="换配色" aria-label="编辑配色">🎨</button>
                 <div class="hero-card__label">💰 总赚取金额</div>
                 <div class="hero-card__value" id="v2-total-earnings">¥0.00</div>
                 <div class="hero-card__sub">
@@ -7537,22 +7799,26 @@ function renderDashboard() {
             </div>
 
             <div class="kpi-grid">
-                <div class="kpi-tile kpi-tile--purple" onclick="showPage('phones')">
+                <div class="kpi-tile kpi-tile--purple" data-card="totalPhones" style="${phonesStyle}" onclick="showPage('phones')">
+                    <button class="kpi-tile__edit" onclick="openCardColorDrawer('totalPhones', event)" title="换配色" aria-label="编辑配色">🎨</button>
                     <div class="kpi-tile__label">📱 总手机数</div>
                     <div class="kpi-tile__value">${totalPhones}</div>
                     <span class="kpi-tile__delta">${totalApps} 个软件</span>
                 </div>
-                <div class="kpi-tile kpi-tile--pink" onclick="showPage('phones')">
+                <div class="kpi-tile kpi-tile--pink" data-card="totalApps" style="${appsStyle}" onclick="showPage('phones')">
+                    <button class="kpi-tile__edit" onclick="openCardColorDrawer('totalApps', event)" title="换配色" aria-label="编辑配色">🎨</button>
                     <div class="kpi-tile__label">📦 总软件数</div>
                     <div class="kpi-tile__value">${totalApps}</div>
                     <span class="kpi-tile__delta">${appsWithWithdrawals} 有提现</span>
                 </div>
-                <div class="kpi-tile kpi-tile--violet" onclick="showPage('stats')">
+                <div class="kpi-tile kpi-tile--violet" data-card="totalWithdrawn" style="${withdrawnStyle}" onclick="showPage('stats')">
+                    <button class="kpi-tile__edit" onclick="openCardColorDrawer('totalWithdrawn', event)" title="换配色" aria-label="编辑配色">🎨</button>
                     <div class="kpi-tile__label">💸 累计提现</div>
                     <div class="kpi-tile__value">¥${totalWithdrawn.toFixed(2)}</div>
                     <span class="kpi-tile__delta">已提现金额</span>
                 </div>
-                <div class="kpi-tile kpi-tile--amber" onclick="showPage('stats')">
+                <div class="kpi-tile kpi-tile--amber" data-card="totalBalance" style="${balanceStyle}" onclick="showPage('stats')">
+                    <button class="kpi-tile__edit" onclick="openCardColorDrawer('totalBalance', event)" title="换配色" aria-label="编辑配色">🎨</button>
                     <div class="kpi-tile__label">💵 当前余额</div>
                     <div class="kpi-tile__value">¥${totalBalance.toFixed(2)}</div>
                     <span class="kpi-tile__delta">未提现金额</span>
@@ -7621,6 +7887,81 @@ function renderDashboard() {
 
     // 更新今日收益显示
     updateTodayEarnings();
+
+    // 新粗野主题：刷新首页跑马灯
+    renderBrutTicker();
+}
+
+// 首页跑马灯 TICKER 内容（全局显示，主题自适应；容错：任何异常都不留空条）
+function renderBrutTicker() {
+    const track = document.getElementById('brut-ticker-track');
+    if (!track) return;
+    try {
+        const data = DataManager.loadData() || { phones: [] };
+        const phones = (data && data.phones) || [];
+        const sum = (arr, fn) => (arr || []).reduce(fn, 0);
+        const totalWithdrawn = sum(phones, s => sum(s.apps, a => (a.withdrawn || 0) + (a.historicalWithdrawn || 0)));
+        const totalBalance = sum(phones, s => sum(s.apps, a => a.balance || 0));
+        let todayEarned = 0, goalYear = new Date().getFullYear(), goalAmount = 0, progress = 0, totalEarned = 0;
+        try { todayEarned = DataManager.getTodayTotalEarnings() || 0; } catch (e) {}
+        try {
+            const dist = DataManager.autoDistributeSurplus();
+            goalYear = (dist.goal && dist.goal.year) || goalYear;
+            goalAmount = (dist.goal && dist.goal.amount) || 0;
+            progress = parseFloat(dist.progress) || 0;
+            totalEarned = dist.totalEarned || 0;
+        } catch (e) {}
+        const items = [
+            { t: '今日赚取', v: '¥' + (todayEarned || 0).toFixed(2) },
+            { t: '累计提现', v: '¥' + totalWithdrawn.toFixed(2) },
+            { t: '当前余额', v: '¥' + totalBalance.toFixed(2) }
+        ];
+        if (goalAmount > 0) {
+            items.push({ t: goalYear + '目标', v: progress + '%' });
+            items.push({ t: '已赚', v: '¥' + totalEarned.toFixed(2) + ' / ¥' + goalAmount.toFixed(2) });
+        }
+        const build = () => items.map(i => `<span class="brut-ticker__item">${i.t}<span class="t-val">${i.v}</span></span>`).join('');
+        track.innerHTML = build() + build();
+    } catch (e) {
+        console.error('renderBrutTicker error', e);
+        track.innerHTML = '<span class="brut-ticker__item">★ 收益看板 READY</span>';
+    }
+}
+
+// 新粗野主题：达成目标撒纸屑庆祝
+function celebrateBrut() {
+    if (document.documentElement.getAttribute('data-theme') !== 'brut') return;
+    if (window.__brutCelebrated) return;
+    window.__brutCelebrated = true;
+    const colors = ['#39ff14', '#ff2d95', '#00e5ff', '#ffe14d', '#ffffff', '#111111'];
+    let layer = document.querySelector('.brut-confetti-layer');
+    if (!layer) {
+        layer = document.createElement('div');
+        layer.className = 'brut-confetti-layer';
+        document.body.appendChild(layer);
+    }
+    layer.innerHTML = '';
+    const count = 48;
+    for (let i = 0; i < count; i++) {
+        const c = document.createElement('div');
+        c.className = 'brut-confetti';
+        const size = 8 + Math.random() * 13;
+        c.style.left = (Math.random() * 100) + 'vw';
+        c.style.width = size + 'px';
+        c.style.height = size + 'px';
+        c.style.background = colors[Math.floor(Math.random() * colors.length)];
+        c.style.setProperty('--dur', (1.4 + Math.random() * 1.5) + 's');
+        c.style.setProperty('--delay', (Math.random() * 0.5) + 's');
+        if (Math.random() > 0.5) c.style.borderRadius = '50%';
+        layer.appendChild(c);
+    }
+    setTimeout(() => { if (layer) layer.innerHTML = ''; }, 3200);
+    const card = document.querySelector('#yearly-goal-card .home-enter') || document.getElementById('yearly-goal-card');
+    if (card) {
+        card.classList.remove('brut-pop');
+        void card.offsetWidth;
+        card.classList.add('brut-pop');
+    }
 }
 
 function renderActivityPlanCard() {
@@ -13086,7 +13427,9 @@ function renderClearWarning() {
 // 渲染设置页面
 function renderSettings() {
     const data = DataManager.loadData();
-
+    // 应用已保存的卡片配色 + 渲染设置面板
+    applyAllCardColors();
+    renderCardColorsList();
 }
 
 // 渲染提现记录
@@ -15626,6 +15969,9 @@ function renderYearlyGoal() {
             })(start);
         });
     })();
+
+    // 新粗野主题：年度目标达成时撒纸屑庆祝
+    if (isOverTarget) celebrateBrut();
 }
 
 // 显示每日赚取详情
@@ -15853,11 +16199,12 @@ function viewYearlyGoalHistory() {
     const history = DataManager.getYearlyGoalHistory();
     const currentYear = new Date().getFullYear();
     
-    // 为当前年份创建记录（如果不存在）
+    // 为当前年份创建记录（如果不存在），口径与跨年滚动一致
     const currentYearRecord = history.find(item => item.year === currentYear);
     if (!currentYearRecord) {
         const goal = DataManager.getYearlyGoal();
-        const actualAmount = DataManager.getYearlyEarnings(currentYear);
+        const stats = DataManager.getAppsYearlyStats(currentYear);
+        const actualAmount = stats.reduce((sum, s) => sum + (s.yearlyEarned || 0), 0);
         DataManager.saveYearlyGoalHistory(currentYear, goal.amount, actualAmount);
     }
     

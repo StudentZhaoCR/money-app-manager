@@ -9,6 +9,10 @@
     <meta name="apple-mobile-web-app-title" content="赚钱助手">
     <title>赚钱软件管理系统</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- 主题字体（带系统兜底，离线自动回退，不影响可读性） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
     <!-- SheetJS for Excel export -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Chart.js for data visualization - 异步加载 -->
@@ -45,6 +49,11 @@
         <div class="page active" id="page-dashboard">
             <div class="date-container">
                 <span class="current-date" id="current-date"></span>
+            </div>
+
+            <!-- 新粗野主题专属：首页跑马灯 TICKER -->
+            <div class="brut-ticker" id="brut-ticker" aria-hidden="true">
+                <div class="brut-ticker__track" id="brut-ticker-track"></div>
             </div>
 
             <!-- Dashboard v2: Hero + 4 KPI + 快捷操作 -->
@@ -323,6 +332,21 @@
                 <div style="margin-top: 16px;">
                     <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">强调色 · 覆盖主题主色</div>
                     <div id="accent-selector" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;"></div>
+                </div>
+            </div>
+
+            <!-- 卡片配色：首页 5 张数据卡独立换色 -->
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">卡片配色</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-hint mb-4">首页 5 张数据卡每张独立配色，点选卡片预览即可挑选配色（16 套预设 + 自定义起色）</div>
+                <div class="card-colors" id="card-colors-list">
+                    <!-- 由 JS 动态渲染 -->
+                </div>
+                <div style="margin-top: 12px; text-align: right;">
+                    <button class="btn btn-secondary" onclick="resetAllCardColors()" style="font-size: 12px;">↺ 全部恢复默认</button>
                 </div>
             </div>
 

@@ -55,9 +55,9 @@
     --transition-normal: 0.2s ease;
     --transition-slow: 0.3s ease;
     
-    --font-primary: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-display: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-secondary: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-secondary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
     --brand-1: #8b5cf6;
     --brand-2: #a78bfa;
@@ -115,9 +115,9 @@
     --gradient-body: #2a2520;
     --shadow-navbar: 0 4px 20px rgba(0, 0, 0, 0.5);
 
-    --font-primary: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-secondary: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-primary: 'Inter', -apple-system, sans-serif;
+    --font-display: 'Inter', -apple-system, sans-serif;
+    --font-secondary: 'Inter', -apple-system, sans-serif;
 
     --brand-1: #8b5cf6;
     --brand-2: #a78bfa;
@@ -201,16 +201,8 @@
     --card-highlight: rgba(255, 255, 255, 0.05);
 
     --theme-name: '霓虹终端';
-
-    /* 终端等宽字体：契合"金融终端"气质，深色底上对比极高、清晰易读 */
-    --font-primary: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
-    --font-display: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
-    --font-secondary: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
 }
 [data-theme="neon"] .tab-bar { background: var(--bg-secondary); border: 1px solid var(--border-color); box-shadow: var(--shadow-navbar); }
-[data-theme="neon"] { font-weight: 500; }
-[data-theme="neon"] h1, [data-theme="neon"] h2, [data-theme="neon"] h3,
-[data-theme="neon"] .nav-title, [data-theme="neon"] .section-title { font-weight: 700; }
 [data-theme="neon"] .tab-item { color: var(--text-secondary); }
 [data-theme="neon"] .tab-item.active { background: var(--primary-color); box-shadow: 0 4px 15px rgba(57, 255, 176, 0.3); }
 [data-theme="neon"] .tab-item.active .tab-text { color: var(--text-on-brand); }
@@ -276,18 +268,8 @@
     --card-highlight: rgba(255, 255, 255, 0.6);
 
     --theme-name: '奶油糖果';
-
-    /* 圆润柔和无衬线：贴合"奶油糖果"的甜系气质；配系统中文兜底 */
-    --font-primary: 'Quicksand', 'Nunito', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-    --font-display: 'Quicksand', 'Nunito', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-    --font-secondary: 'Quicksand', 'Nunito', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 [data-theme="candy"] .theme-item.active { background: rgba(122, 184, 255, 0.12); }
-/* 圆润体默认偏细，浅色底上提一档字重保证清晰 */
-[data-theme="candy"] { font-weight: 500; }
-[data-theme="candy"] h1, [data-theme="candy"] h2, [data-theme="candy"] h3,
-[data-theme="candy"] .nav-title, [data-theme="candy"] .section-title,
-[data-theme="candy"] .hero-card__value, [data-theme="candy"] .kpi-tile__value { font-weight: 700; }
 
 /* ==================== 新粗野主义（浅色高对比） ==================== */
 [data-theme="brut"] {
@@ -370,10 +352,8 @@
     --shadow-card: 6px 6px 0 #111111;
     --shadow-hover: 9px 9px 0 #111111;
     --shadow-navbar: 5px 5px 0 #111111;
-    /* 正文用 Space Grotesk 增加工业感；标题/数字仍由下方 Arial Black 海报体接管 */
-    --font-display: 'Space Grotesk', 'Arial', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-primary: 'Space Grotesk', 'Arial', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-secondary: 'Space Grotesk', 'Arial', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* —— 纸张点阵纹理背景 —— */
@@ -385,10 +365,20 @@
 
 /* —— 顶栏：厚黑边 + 标题做成硬贴纸 —— */
 [data-theme="brut"] .navbar {
-    background: #111111;
-    border-bottom: 5px solid var(--wild-1);
-    box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35);
+    border-bottom: 4px solid #111111;
+    box-shadow: var(--shadow-navbar);
 }
+[data-theme="brut"] .nav-title {
+    background: var(--accent-color);
+    color: #111111;
+    border: 3px solid #111111;
+    border-radius: 0;
+    box-shadow: 4px 4px 0 #111111;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+[data-theme="brut"] .nav-title:hover { box-shadow: 6px 6px 0 #111111; transform: translate(-1px,-1px); }
 
 /* —— 卡片：粗黑边 + 硬阴影，hover 抬起并轻微歪头 —— */
 [data-theme="brut"] .card {
@@ -582,177 +572,6 @@
     [data-theme="brut"] .nav-title:hover { transform: none; }
 }
 
-/* ===================================================================
-   新粗野主义 · 更野的玩法（荧光撞色 / 跑马灯 / 撒纸屑庆祝）
-   仅作用于 [data-theme="brut"]
-   =================================================================== */
-
-/* —— 更大胆的荧光撞色，强化粗野冲击力 —— */
-[data-theme="brut"] {
-    --wild-1: #39ff14;   /* 荧光绿 */
-    --wild-2: #ff2d95;   /* 亮粉 */
-    --wild-3: #00e5ff;   /* 电光蓝 */
-    --accent-color: #39ff14;
-    --gradient-navbar: linear-gradient(135deg, #111111 0%, #39ff14 100%);
-}
-
-/* —— 顶栏标题贴纸：亮黄海报浮在黑 navbar 上，超清晰 —— */
-[data-theme="brut"] .nav-title {
-    background: #ffe14d;
-    color: #111111;
-    border: 3px solid #111111;
-    border-radius: 0;
-    box-shadow: 6px 6px 0 #111111;
-    text-shadow: none;
-    font-weight: 900;
-    letter-spacing: 1.5px;
-    transform: rotate(-1.2deg);
-}
-[data-theme="brut"] .nav-title:hover {
-    background: var(--wild-1);
-    color: #111111;
-    border-color: #111111;
-    box-shadow: 8px 8px 0 #111111;
-    transform: rotate(0deg) translate(-2px, -2px);
-}
-
-/* —— 首页跑马灯 TICKER（仅 brutal 主题显示，因为它是 brutal 的专属"街头海报"） —— */
-#brut-ticker {
-    display: none;
-    margin: 0 0 16px;
-    border: 4px solid #111111;
-    box-shadow: 6px 6px 0 #111111;
-    background: #111111;
-    overflow: hidden;
-    position: relative;
-    height: 44px;
-}
-[data-theme="brut"] #brut-ticker { display: block; }
-/* 滚动容器：复制两份 + translateX(-50%) 无缝循环 */
-.brut-ticker__track {
-    display: inline-flex;
-    align-items: center;
-    height: 100%;
-    white-space: nowrap;
-    will-change: transform;
-    animation: brut-ticker-scroll 22s linear infinite;
-}
-.brut-ticker__track:hover { animation-play-state: paused; }
-/* 跑马灯条目：海报字重 + 描边保证对比 + 斜切竖线分隔 */
-.brut-ticker__item {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 26px;
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    color: var(--wild-1);
-    font-family: 'Arial Black', 'Impact', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    text-shadow: 1px 1px 0 #000;
-}
-.brut-ticker__item::after {
-    content: '';
-    display: inline-block;
-    width: 3px;
-    height: 18px;
-    margin-left: 26px;
-    background: var(--wild-2);
-    transform: skewX(-15deg);
-}
-.brut-ticker__item:last-child::after { display: none; }
-.brut-ticker__item .t-dot { display: none; }
-.brut-ticker__item .t-val {
-    color: #ffe14d;
-    font-weight: 900;
-    text-shadow: 1px 1px 0 #000;
-}
-/* 新粗野：标题与数字用更"海报感"的粗野字体栈（中文安全回退） */
-[data-theme="brut"] .nav-title,
-[data-theme="brut"] .section-title,
-[data-theme="brut"] .hero-card__value,
-[data-theme="brut"] .kpi-tile__value,
-[data-theme="brut"] .brut-ticker__item {
-    font-family: "Arial Black", "Impact", "Haettenschweiler", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-@keyframes brut-ticker-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
-}
-
-/* —— 达成目标撒纸屑庆祝 —— */
-.brut-confetti-layer {
-    position: fixed; inset: 0;
-    pointer-events: none;
-    z-index: 9999;
-    overflow: hidden;
-}
-.brut-confetti {
-    position: absolute;
-    top: -24px;
-    width: 12px; height: 12px;
-    will-change: transform, opacity;
-    animation: brut-confetti-fall var(--dur, 1.8s) linear forwards;
-    animation-delay: var(--delay, 0s);
-}
-@keyframes brut-confetti-fall {
-    0%   { transform: translateY(-24px) rotate(0deg); opacity: 1; }
-    100% { transform: translateY(106vh) rotate(760deg); opacity: 0; }
-}
-[data-theme="brut"] .brut-pop { animation: brut-pop 0.62s cubic-bezier(0.34, 1.56, 0.64, 1); }
-@keyframes brut-pop {
-    0%   { transform: scale(1); }
-    30%  { transform: scale(1.07) rotate(-2deg); }
-    62%  { transform: scale(0.97) rotate(1.6deg); }
-    100% { transform: scale(1); }
-}
-
-/* —— 尊重"减少动态效果"偏好（补充降级） —— */
-@media (prefers-reduced-motion: reduce) {
-    [data-theme="brut"] .brut-ticker__track { animation: none; }
-    .brut-confetti { display: none; }
-    [data-theme="brut"] .brut-pop { animation: none; }
-}
-
-/* —— 新粗野：滚动条也要粗野（直角 + 撞色滑块） —— */
-[data-theme="brut"] {
-    scrollbar-width: auto;
-    scrollbar-color: var(--wild-1) #1a1a1a;
-}
-[data-theme="brut"] ::-webkit-scrollbar { width: 14px; height: 14px; }
-[data-theme="brut"] ::-webkit-scrollbar-track {
-    background: #1a1a1a;
-    border-left: 3px solid #111111;
-}
-[data-theme="brut"] ::-webkit-scrollbar-thumb {
-    background: var(--wild-1);
-    border: 3px solid #111111;
-    border-radius: 0;
-}
-[data-theme="brut"] ::-webkit-scrollbar-thumb:hover { background: var(--wild-2); }
-[data-theme="brut"] ::-webkit-scrollbar-corner { background: #111111; }
-/* 弹窗内的滚动条也统一粗野 */
-[data-theme="brut"] .modal-body::-webkit-scrollbar { width: 14px; height: 14px; }
-[data-theme="brut"] .modal-body::-webkit-scrollbar-track {
-    background: #1a1a1a;
-    border-left: 3px solid #111111;
-    border-radius: 0;
-}
-[data-theme="brut"] .modal-body::-webkit-scrollbar-thumb {
-    background: var(--wild-1);
-    border: 3px solid #111111;
-    border-radius: 0;
-}
-[data-theme="brut"] .modal-body::-webkit-scrollbar-thumb:hover { background: var(--wild-2); }
-[data-theme="brut"] .modal-body::-webkit-scrollbar-track-horizontal { background: #1a1a1a; border-radius: 0; }
-[data-theme="brut"] .modal-body::-webkit-scrollbar-thumb-horizontal {
-    background: var(--wild-1);
-    border: 3px solid #111111;
-    border-radius: 0;
-}
-[data-theme="brut"] .modal-body::-webkit-scrollbar-thumb-horizontal:hover { background: var(--wild-2); }
-
 /* ==================== 苹果极简（浅色干净） ==================== */
 [data-theme="apple"] {
     --primary-color: #007aff;
@@ -812,11 +631,6 @@
     --card-highlight: rgba(255, 255, 255, 0.5);
 
     --theme-name: '苹果极简';
-
-    /* 苹果原生字体栈：SF Pro / PingFang，跨平台中文兜底，极简清晰 */
-    --font-primary: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
-    --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
-    --font-secondary: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
 }
 [data-theme="apple"] .theme-item.active { background: rgba(0, 122, 255, 0.08); }
 
@@ -1460,18 +1274,6 @@ body {
     border-radius: var(--radius-full);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-}
-/* 新粗野：日期条做成黄底黑字硬贴纸，去掉割裂黑长条 */
-[data-theme="brut"] .current-date {
-    background: #ffe14d;
-    color: #111111;
-    border: 3px solid #111111;
-    border-radius: 0;
-    box-shadow: 3px 3px 0 #111111;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    text-shadow: none;
 }
 
 /* 统计容器 */

@@ -1,0 +1,23 @@
+node.exe : [eval]:1
+???? ?:439 ??: 481
++ ... or",e=>console.log("ERR",e.message));'; & $node -e $code 2>&1 | Out-F ...
++                                             ~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([eval]:1:String) [], RemoteExcept 
+   ion
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+const http=require(http);const req=http.get(http://127.0.0.1:8140/,{timeout:400
+0},res=>{let d=";res.on(data,c=>d+=c);res.on(end,()=>{console.log(STATUS,res.st
+atusCode);console.log(HAS_FONT_LINK,d.includes(fonts.googleapis));console.log(L
+EN,d.length);});});req.on(timeout,()=>{console.log(TIMEOUT);req.destroy();});re
+q.on(error,e=>console.log(ERR,e.message));
+                                            ^^^^
+Expected ',', got ':'
+
+SyntaxError: missing ) after argument list
+    at makeContextifyScript (node:internal/vm:185:14)
+    at compileScript (node:internal/process/execution:383:10)
+    at evalTypeScript (node:internal/process/execution:256:22)
+    at node:internal/main/eval_string:74:3
+
+Node.js v22.22.2
