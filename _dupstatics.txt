@@ -1,0 +1,2 @@
+﻿clearAllData -> 4141, 5364
+deleteGame -> 4918, 5334

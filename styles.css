@@ -1216,6 +1216,37 @@
     background: var(--bg-cream);
 }
 
+/* ===================================================================
+   主题感知渐变卡（分析页 hero / 游戏抽签结果）
+   用 --accent-color 派生渐变，并叠加暗化层，保证白字在任意主题/自定义强调色下都清晰可读
+   =================================================================== */
+.analysis-hero,
+.game-result-card {
+    position: relative;
+    border-radius: 16px;
+    padding: 20px;
+    overflow: hidden;
+    color: #fff;
+    background: var(--accent-color); /* 兜底（不支持 color-mix 时） */
+    background: linear-gradient(135deg,
+        var(--accent-color) 0%,
+        color-mix(in srgb, var(--accent-color), #000 38%) 100%);
+}
+/* 暗化叠层：即便强调色很亮（如糖果浅色），白字仍清晰 */
+.analysis-hero::after,
+.game-result-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.22) 100%);
+    pointer-events: none;
+}
+.analysis-hero > *,
+.game-result-card > * {
+    position: relative;
+    z-index: 1;
+}
+
 /* 暗黑模式下的历史记录项 */
 [data-theme="dark"] .history-item {
     background: var(--bg-secondary);

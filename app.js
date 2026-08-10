@@ -37,10 +37,9 @@ const SYS_KEYS = {
 
 function getSystemsList() {
     const stored = localStorage.getItem(SYSTEMS_KEY);
-    if (stored) return JSON.parse(stored);
-    return [
+    return safeJSONParse(stored, [
         { id: 'main', name: '主系统', icon: '📱', color: '#8b5cf6' }
-    ];
+    ]);
 }
 
 function saveSystemsList(systems) {
@@ -96,7 +95,7 @@ function openSystemSwitchModal() {
     const html = `
         <div style="padding: 4px 0;">
             <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; text-align: center;">
-                当前系统：<span style="font-weight: 600; color: var(--text-primary);">${info.icon} ${info.name}</span>
+                当前系统：<span style="font-weight: 600; color: var(--text-primary);">${info.icon} ${escapeHtml(info.name)}</span>
             </div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 ${systems.map(sys => `
@@ -104,7 +103,7 @@ function openSystemSwitchModal() {
                         style="display: flex; align-items: center; gap: 14px; padding: 16px; background: ${sys.id === currentSystem ? 'linear-gradient(135deg, ' + sys.color + '20, ' + sys.color + '10)' : 'var(--bg-secondary)'}; border: 2px solid ${sys.id === currentSystem ? sys.color : 'transparent'}; border-radius: 12px; cursor: pointer; transition: all 0.2s;">
                         <div style="width: 44px; height: 44px; background: ${sys.color}20; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px;">${sys.icon}</div>
                         <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 15px;">${sys.name}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${escapeHtml(sys.name)}</div>
                             <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${sys.id === currentSystem ? '当前使用中' : '点击切换'}</div>
                         </div>
                         ${sys.id === currentSystem ? '<div style="color: ' + sys.color + '; font-size: 20px;">✓</div>' : ''}
@@ -544,12 +543,12 @@ function showVoiceEditConfirm(match, parsed, balance) {
         <div style="padding: 10px 0;">
             <div class="form-group">
                 <label class="form-label">手机名称</label>
-                <input type="text" class="form-input" value="${phone.name}" disabled>
+                <input type="text" class="form-input" value="${escapeHtml(phone.name)}" disabled>
                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">语音识别：${parsed.phoneName}</div>
             </div>
             <div class="form-group">
                 <label class="form-label">软件名称</label>
-                <input type="text" class="form-input" value="${app.name}" disabled>
+                <input type="text" class="form-input" value="${escapeHtml(app.name)}" disabled>
                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">语音识别：${parsed.appName}</div>
             </div>
             <div class="form-group">
@@ -883,7 +882,7 @@ function openDramaModal(phoneId, appId, forceReplace = false) {
     const totalWatched = watchedMorning + watchedAfternoon + watchedEvening;
     const totalEpisodes = totalMorning + totalAfternoon + totalEvening;
 
-    showModal(`📺 短剧观看 - ${app.name}`, `
+    showModal(`📺 短剧观看 - ${escapeHtml(app.name)}`, `
         <div style="margin-bottom: 16px;">
             <div style="background: var(--bg-secondary); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -1774,7 +1773,7 @@ function updatePhoneCard(phoneId) {
     cardElement.innerHTML = `
         <div class="phone-header">
             <div class="phone-header-top">
-                <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+                <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${escapeHtml(phone.name)}</span>
                 <div class="phone-header-actions">
                     <div class="phone-icon-buttons">
                         <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
@@ -1866,7 +1865,7 @@ function updateAppCard(phoneId, appId) {
     // 更新卡片内容
     targetCard.innerHTML = `
         <div class="app-header">
-            <span class="app-name">${app.name}</span>
+            <span class="app-name">${escapeHtml(app.name)}</span>
             <span class="status-tag ${totalWithdrawals > 0 ? 'ready' : 'pending'}">
                 ${totalWithdrawals > 0 ? '有记录' : '新软件'}
             </span>
@@ -2493,7 +2492,7 @@ class DataManager {
     // 获取年度目标设置
     static getYearlyGoal() {
         const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
-        const parsed = settings ? JSON.parse(settings) : {};
+        const parsed = safeJSONParse(settings, {});
         const currentYear = new Date().getFullYear();
         
         const mode = parsed.yearlyGoalMode || 'custom';
@@ -2517,7 +2516,7 @@ class DataManager {
     // 保存年度目标
     static saveYearlyGoal(amount, year, autoDistribute = true, mode = 'custom') {
         const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
-        const parsed = settings ? JSON.parse(settings) : {};
+        const parsed = safeJSONParse(settings, {});
         parsed.yearlyGoalAmount = parseFloat(amount) || 0;
         parsed.yearlyGoalYear = parseInt(year) || new Date().getFullYear();
         parsed.yearlyGoalAutoDistribute = autoDistribute;
@@ -2528,7 +2527,7 @@ class DataManager {
     // 保存年度目标历史
     static saveYearlyGoalHistory(year, goalAmount, actualAmount) {
         const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
-        const parsed = settings ? JSON.parse(settings) : {};
+        const parsed = safeJSONParse(settings, {});
         
         if (!parsed.yearlyGoalHistory) {
             parsed.yearlyGoalHistory = [];
@@ -2568,7 +2567,7 @@ class DataManager {
     // 获取年度目标历史
     static getYearlyGoalHistory() {
         const settings = localStorage.getItem(getSystemKey(SETTINGS_KEY));
-        const parsed = settings ? JSON.parse(settings) : {};
+        const parsed = safeJSONParse(settings, {});
         return parsed.yearlyGoalHistory || [];
     }
     
@@ -3972,7 +3971,7 @@ class DataManager {
             phone.apps.forEach(app => {
                 if (app.dailyEarnings && app.dailyEarnings[today]) {
                     todayEarned += parseFloat(app.dailyEarnings[today]) || 0;
-                    console.log(`软件 ${app.name} 今日收益:`, app.dailyEarnings[today]);
+                    console.log(`软件 ${escapeHtml(app.name)} 今日收益:`, app.dailyEarnings[today]);
                 }
             });
         });
@@ -4004,9 +4003,8 @@ class DataManager {
     // 获取个人财产数据
     static getPersonalFinance() {
         const finance = localStorage.getItem(SYS_KEYS.personalFinance());
-        if (finance) {
-            return JSON.parse(finance);
-        }
+        const parsed = safeJSONParse(finance, null);
+        if (parsed && typeof parsed === 'object') return parsed;
         return {
             wallet: 0,           // 个人钱包余额
             totalEarned: 0,      // 累计真实收入
@@ -4299,7 +4297,7 @@ class DataManager {
     // 获取所有购物记录
     static getShoppingRecords() {
         const stored = localStorage.getItem(SYS_KEYS.shoppingRecords());
-        return stored ? JSON.parse(stored) : [];
+        return safeJSONParse(stored, []);
     }
 
     // 保存购物记录
@@ -4744,7 +4742,7 @@ class DataManager {
     // 获取所有游戏计时
     static getAllGameTimers() {
         const timers = localStorage.getItem(SYS_KEYS.gameTimers());
-        return timers ? JSON.parse(timers) : {};
+        return safeJSONParse(timers, {});
     }
     
     // 获取特定游戏的计时
@@ -4797,7 +4795,7 @@ class DataManager {
     static getDownloadedGames(phoneId = null) {
         const games = localStorage.getItem(getSystemKey(DOWNLOADED_GAMES_KEY));
         if (!games) return [];
-        const allGames = JSON.parse(games);
+        const allGames = safeJSONParse(games, []);
         // 只返回未删除的游戏
         let filteredGames = allGames.filter(g => !g.deleted);
         // 如果指定了手机ID（包括空字符串），只返回该手机的游戏
@@ -4812,7 +4810,7 @@ class DataManager {
     // 获取所有游戏（包括已删除的，用于判断是否是重新下载）
     static getAllGames() {
         const games = localStorage.getItem(getSystemKey(DOWNLOADED_GAMES_KEY));
-        return games ? JSON.parse(games) : [];
+        return safeJSONParse(games, []);
     }
     
     // 获取有游戏的所有手机ID列表
@@ -5080,7 +5078,7 @@ class DataManager {
     static getGameDrawHistory() {
         const history = localStorage.getItem(GAME_DRAW_HISTORY_KEY);
         console.log('从localStorage读取抽签历史:', history);
-        return history ? JSON.parse(history) : [];
+        return safeJSONParse(history, []);
     }
 
     // 保存抽签历史
@@ -6145,7 +6143,7 @@ class DataManager {
                 advice.push({
                     type: 'critical',
                     icon: '🔴',
-                    title: `${app.phoneName} - ${app.appName}`,
+                    title: `${escapeHtml(app.phoneName)} - ${escapeHtml(app.appName)}`,
                     message: `缺口 ¥${app.gap.toFixed(2)}，完成度 ${app.completionPercent.toFixed(1)}%`,
                     detail: `每天需赚取 ¥${app.dailyNeed.toFixed(2)}（目标 ¥${app.perAppTarget.toFixed(2)}/天）`
                 });
@@ -6158,7 +6156,7 @@ class DataManager {
                 advice.push({
                     type: 'warning',
                     icon: '🟡',
-                    title: `${app.phoneName} - ${app.appName}`,
+                    title: `${escapeHtml(app.phoneName)} - ${escapeHtml(app.appName)}`,
                     message: `缺口 ¥${app.gap.toFixed(2)}，完成度 ${app.completionPercent.toFixed(1)}%`,
                     detail: `每天需赚取 ¥${app.dailyNeed.toFixed(2)}`
                 });
@@ -6301,7 +6299,7 @@ const PHONE_DRAW_HISTORY_KEY = 'phoneDrawHistory';
 // 获取手机抽签历史
 function getPhoneDrawHistory() {
     const history = localStorage.getItem(PHONE_DRAW_HISTORY_KEY);
-    return history ? JSON.parse(history) : [];
+    return safeJSONParse(history, []);
 }
 
 // 保存手机抽签历史
@@ -6395,7 +6393,7 @@ function renderPhoneDrawResult(entry) {
                 ${phone.apps.length > 0 ? phone.apps.map((app, appIndex) => `
                     <div class="draw-result-app-item" style="display: flex; align-items: center; gap: 8px; padding: 6px 0; color: var(--text-primary);">
                         <span style="color: var(--text-secondary); font-size: 12px;">${appIndex + 1}.</span>
-                        <span>${app.appName}</span>
+                        <span>${escapeHtml(app.appName)}</span>
                     </div>
                 `).join('') : '<div style="color: var(--text-secondary); font-size: 14px;">暂无软件</div>'}
             </div>
@@ -6443,7 +6441,7 @@ function init() {
     // 加载展开状态
     const savedExpanded = localStorage.getItem(SYS_KEYS.expandedPhones());
     if (savedExpanded) {
-        expandedPhones = JSON.parse(savedExpanded);
+        expandedPhones = safeJSONParse(savedExpanded, []);
     }
 
     // 初始化主题
@@ -6567,7 +6565,7 @@ function migrateOldData() {
                     app.earningStartDate = today;
                 }
                 hasChanges = true;
-                console.log(`迁移数据：软件 ${app.name} 初始化 earningStartDate = ${app.earningStartDate}`);
+                console.log(`迁移数据：软件 ${escapeHtml(app.name)} 初始化 earningStartDate = ${app.earningStartDate}`);
             }
 
             // 如果软件有已赚金额但没有历史记录，需要重建历史记录
@@ -6580,7 +6578,7 @@ function migrateOldData() {
                 // 这样明天就能正确计算今日新增
                 app.dailyEarnedHistory[today] = currentEarned;
                 hasChanges = true;
-                console.log(`迁移数据：软件 ${app.name} 初始化今日历史记录 = ${currentEarned}`);
+                console.log(`迁移数据：软件 ${escapeHtml(app.name)} 初始化今日历史记录 = ${currentEarned}`);
             }
         });
 
@@ -6591,7 +6589,7 @@ function migrateOldData() {
             if (currentTotalEarned > 0) {
                 phone.dailyTotalEarnedHistory[today] = currentTotalEarned;
                 hasChanges = true;
-                console.log(`修复数据：手机 ${phone.name} 初始化今日历史记录 = ${currentTotalEarned}`);
+                console.log(`修复数据：手机 ${escapeHtml(phone.name)} 初始化今日历史记录 = ${currentTotalEarned}`);
             }
         }
     });
@@ -6763,7 +6761,7 @@ function openCardColorDrawer(key, evt) {
             style="background:linear-gradient(135deg,${p.c1},${p.c2});"
             onclick="selectCardSwatch('${key}','${p.id}',this)">
             <span class="color-picker-swatch__check">✓</span>
-            <span class="color-picker-swatch__name">${p.name}</span>
+            <span class="color-picker-swatch__name">${escapeHtml(p.name)}</span>
             <span class="color-picker-swatch__hex">${p.c1} · ${p.c2}</span>
         </div>`;
     }).join('');
@@ -6966,7 +6964,7 @@ function renderAccentSelector() {
     const presetsHtml = ACCENT_PRESETS.map(p => {
         const active = (p.value === current) || (!p.value && !current);
         const bg = p.value ? p.value : rainbow;
-        return `<div class="accent-item${active ? ' active' : ''}" onclick="setAccentColor(${p.value ? `'${p.value}'` : 'null'})" title="${p.name}" style="width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid ${active ? 'var(--primary-color)' : 'var(--border-color)'};background:${bg};${active ? 'transform:scale(1.15);box-shadow:0 2px 8px rgba(0,0,0,0.15);' : ''}transition:all .2s ease;"></div>`;
+        return `<div class="accent-item${active ? ' active' : ''}" onclick="setAccentColor(${p.value ? `'${p.value}'` : 'null'})" title="${escapeHtml(p.name)}" style="width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid ${active ? 'var(--primary-color)' : 'var(--border-color)'};background:${bg};${active ? 'transform:scale(1.15);box-shadow:0 2px 8px rgba(0,0,0,0.15);' : ''}transition:all .2s ease;"></div>`;
     }).join('');
     // 自定义拾色器：oninput 实时改色（不重渲染避免中断拖动），onchange 收尾刷新
     const isCustom = current && !ACCENT_PRESETS.some(p => p.value === current);
@@ -7288,6 +7286,8 @@ let pageStates = {};
 let currentPage = 'dashboard';
 
 function showPage(pageName) {
+    // 离开当前页面前，清理活动计时器（防后台空跑）
+    clearAllActivityTimers();
     // 保存当前页面状态
     saveCurrentPageState();
     
@@ -7632,11 +7632,11 @@ function openAddShoppingModal() {
     // 生成每个手机的软件选项HTML，用data属性存储
     const phoneOptionsHtml = phones.map(phone => {
         const appsHtml = phone.apps.filter(a => !a.isDeleted).map(a =>
-            `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
+            `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${escapeHtml(a.name)}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
         ).join('');
         // 存储到隐藏区域
         const appsDiv = `<div id="apps-${phone.id}" style="display:none">${appsHtml}</div>`;
-        return `<option value="${phone.id}">${phone.name}</option>` + appsDiv;
+        return `<option value="${phone.id}">${escapeHtml(phone.name)}</option>` + appsDiv;
     }).join('');
 
     const firstPhone = phones[0];
@@ -7647,19 +7647,19 @@ function openAddShoppingModal() {
         <div class="form-group">
             <label class="form-label">选择手机</label>
             <select id="shop-phone" class="form-input" onchange="onShopPhoneChange()">
-                ${phones.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                ${phones.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
             </select>
         </div>
         <div class="form-group">
             <label class="form-label">选择软件</label>
             <select id="shop-app" class="form-input" onchange="updateShopRateFromApp()">
-                ${firstApps.map(a => `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`).join('')}
+                ${firstApps.map(a => `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${escapeHtml(a.name)}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`).join('')}
             </select>
         </div>
         ${phones.map(phone => `
             <div id="apps-${phone.id}" style="display:none">
                 ${phone.apps.filter(a => !a.isDeleted).map(a =>
-                    `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
+                    `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${escapeHtml(a.name)}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
                 ).join('')}
             </div>
         `).join('')}
@@ -7754,19 +7754,19 @@ function openEditShoppingModal(id) {
         <div class="form-group">
             <label class="form-label">选择手机</label>
             <select id="shop-phone" class="form-input" onchange="onShopPhoneChange()">
-                ${phones.map(p => `<option value="${p.id}" ${p.id === record.phoneId ? 'selected' : ''}>${p.name}</option>`).join('')}
+                ${phones.map(p => `<option value="${p.id}" ${p.id === record.phoneId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
             </select>
         </div>
         <div class="form-group">
             <label class="form-label">选择软件</label>
             <select id="shop-app" class="form-input" onchange="updateShopRateFromApp()">
-                ${currentPhoneApps.map(a => `<option value="${a.id}" data-rate="${a.exchangeRate || 0}" ${a.id === record.appId ? 'selected' : ''}>${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`).join('')}
+                ${currentPhoneApps.map(a => `<option value="${a.id}" data-rate="${a.exchangeRate || 0}" ${a.id === record.appId ? 'selected' : ''}>${escapeHtml(a.name)}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`).join('')}
             </select>
         </div>
         ${phones.map(phone => `
             <div id="apps-${phone.id}" style="display:none">
                 ${phone.apps.filter(a => !a.isDeleted).map(a =>
-                    `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${a.name}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
+                    `<option value="${a.id}" data-rate="${a.exchangeRate || 0}">${escapeHtml(a.name)}${a.exchangeRate > 0 ? ` (${a.exchangeRate}:1)` : ''}</option>`
                 ).join('')}
             </div>
         `).join('')}
@@ -8076,8 +8076,8 @@ function renderDashboard() {
                                 ${tier.apps.map(app => `
                                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
                                         <div>
-                                            <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${app.name}</span>
-                                            <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${app.phoneName}</span>
+                                            <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${escapeHtml(app.name)}</span>
+                                            <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${escapeHtml(app.phoneName)}</span>
                                         </div>
                                         <div style="font-size: 12px; font-weight: 600; color: #7a9e7e;">¥${app.balance.toFixed(2)}</div>
                                     </div>
@@ -8294,8 +8294,8 @@ function renderActivityPlanCard() {
                 </label>
                 <div style="flex: 1;">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                        <span style="font-weight: 600; font-size: 14px;">${app.name}</span>
-                        <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
+                        <span style="font-weight: 600; font-size: 14px;">${escapeHtml(app.name)}</span>
+                        <span style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(app.phoneName)}</span>
                         <span style="font-size: 12px; color: ${priorityColor};">${priorityIcon} ${statusText}</span>
                         ${belowAvgBadge}
                     </div>
@@ -8370,6 +8370,14 @@ function markAllActive() {
 
 let activityTimers = {};
 let timerStates = {};
+
+// 切页面时清理所有活动计时器，避免 setInterval 在后台空跑（timerStates 保留，返回活动页时 renderActivityPage 会根据 isRunning 重启）
+function clearAllActivityTimers() {
+    Object.keys(activityTimers).forEach(key => {
+        if (activityTimers[key]) clearInterval(activityTimers[key]);
+        delete activityTimers[key];
+    });
+}
 
 function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
@@ -8667,8 +8675,8 @@ function renderActivityPage() {
                     <div style="flex-shrink: 0; width: 44px; height: 44px; background: ${app.hasUnfinished ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)'}; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">${app.hasUnfinished ? '📺' : '📱'}</div>
                     <div style="flex: 1; min-width: 0;">
                         <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                            <span style="font-weight: 600; font-size: 14px;">${app.name}</span>
-                            <span style="font-size: 12px; color: var(--text-secondary);">${app.phoneName}</span>
+                            <span style="font-weight: 600; font-size: 14px;">${escapeHtml(app.name)}</span>
+                            <span style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(app.phoneName)}</span>
                             ${belowAvgBadge}
                             ${dramaBadges.join('')}
                         </div>
@@ -8889,12 +8897,12 @@ function renderNextPlay() {
         const yearProgressPercent = Math.min(100, (app.totalEarned / app.yearTarget) * 100);
         
         html += `
-            <div class="next-play-item ${statusClass}" data-status="${app.statusLevel}" data-name="${app.name}" data-phone="${app.phoneName}">
+            <div class="next-play-item ${statusClass}" data-status="${app.statusLevel}" data-name="${escapeHtml(app.name)}" data-phone="${escapeHtml(app.phoneName)}">
                 <div class="next-play-item__rank">${index + 1}</div>
                 <div class="next-play-item__content" onclick="showAppDetailModal('${app.id}')">
                     <div class="next-play-item__header">
-                        <span class="next-play-item__name">${app.name}</span>
-                        <span class="next-play-item__phone">${app.phoneName}</span>
+                        <span class="next-play-item__name">${escapeHtml(app.name)}</span>
+                        <span class="next-play-item__phone">${escapeHtml(app.phoneName)}</span>
                     </div>
                     <div class="next-play-item__info">
                         <div class="next-play-item__stat">
@@ -9103,8 +9111,8 @@ function renderExpiringApps() {
                     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                         ${expiringApps.filter(a => a.daysUntilNextPlay === 0).map(app => `
                             <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
-                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
-                                <div style="font-size: 11px; color: var(--text-secondary);">${app.phoneName}</div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${escapeHtml(app.name)}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(app.phoneName)}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -9119,8 +9127,8 @@ function renderExpiringApps() {
                         ${clearPeriodApps.map(app => `
                             <div style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                                 <div style="flex: 1; min-width: 0;">
-                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
-                                    <div style="font-size: 11px; color: ${app.daysUntilClear <= 0 ? '#ef4444' : '#f59e0b'};">${app.phoneName} · ${app.daysUntilClear <= 0 ? '今天到期' : app.daysUntilClear + '天后到期'}</div>
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${escapeHtml(app.name)}</div>
+                                    <div style="font-size: 11px; color: ${app.daysUntilClear <= 0 ? '#ef4444' : '#f59e0b'};">${escapeHtml(app.phoneName)} · ${app.daysUntilClear <= 0 ? '今天到期' : app.daysUntilClear + '天后到期'}</div>
                                 </div>
                                 <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px; white-space: nowrap;" onclick="restoreApp('${app.phoneId}', '${app.appId}')">已下载</button>
                             </div>
@@ -9137,8 +9145,8 @@ function renderExpiringApps() {
                         ${withdrawReadyApps.map(app => `
                             <div style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                                 <div style="flex: 1; min-width: 0; cursor: pointer;" onclick="showAppDetailModal('${app.appId}')">
-                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
-                                    <div style="font-size: 11px; color: #ef4444;">${app.phoneName} · 余额¥${app.balance.toFixed(2)}/${app.minWithdraw.toFixed(2)}</div>
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${escapeHtml(app.name)}</div>
+                                    <div style="font-size: 11px; color: #ef4444;">${escapeHtml(app.phoneName)} · 余额¥${app.balance.toFixed(2)}/${app.minWithdraw.toFixed(2)}</div>
                                 </div>
                                 <button class="btn btn-error" style="font-size: 11px; padding: 4px 10px; white-space: nowrap;" onclick="markAppDeleted('${app.phoneId}', '${app.appId}')">标记删除</button>
                             </div>
@@ -9153,8 +9161,8 @@ function renderExpiringApps() {
                     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                         ${expiringApps.filter(a => a.daysUntilNextPlay > 0 && a.daysUntilNextPlay <= 3).map(app => `
                             <div class="expiring-app-item" onclick="showAppDetailModal('${app.appId}')" style="background: var(--bg-secondary); padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
-                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.name}</div>
-                                <div style="font-size: 11px; color: var(--text-secondary);">${app.phoneName} · ${app.daysUntilNextPlay}天后</div>
+                                <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${escapeHtml(app.name)}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(app.phoneName)} · ${app.daysUntilNextPlay}天后</div>
                             </div>
                         `).join('')}
                     </div>
@@ -9395,7 +9403,7 @@ function openAddExpenseModal() {
             <div class="form-group">
                 <label class="form-label">支出分类</label>
                 <select id="expense-category" class="form-input">
-                    ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                    ${categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
@@ -9837,7 +9845,7 @@ function renderAppEarningAnalysis() {
     const canWithdrawCount = allApps.filter(a => a.canWithdraw).length;
 
     let html = `
-        <div style="margin-bottom: 16px; position: relative; background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); border-radius: 16px; padding: 20px; overflow: hidden;">
+        <div class="analysis-hero" style="margin-bottom: 16px;">
             <div style="position: absolute; top: -30px; right: -30px; width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: 50%; filter: blur(20px);"></div>
             <div style="position: absolute; bottom: -20px; left: -20px; width: 60px; height: 60px; background: rgba(255,255,255,0.15); border-radius: 50%; filter: blur(15px);"></div>
             
@@ -9896,8 +9904,8 @@ function renderAppEarningAnalysis() {
                         <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; overflow: hidden;" onclick="showAppDetailModal('${app.appId}')">
                             <span style="font-size: 16px; flex-shrink: 0;">${rankIcon}</span>
                             <div style="min-width: 0;">
-                                <div style="font-size: 13px; font-weight: 600; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${app.appName}</div>
-                                <div style="font-size: 10px; color: rgba(255,255,255,0.7);">${app.phoneName}</div>
+                                <div style="font-size: 13px; font-weight: 600; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(app.appName)}</div>
+                                <div style="font-size: 10px; color: rgba(255,255,255,0.7);">${escapeHtml(app.phoneName)}</div>
                             </div>
                         </div>
                         <div style="display: flex; gap: 4px; flex-shrink: 0;">
@@ -10009,8 +10017,8 @@ function showAllAppsAnalysis() {
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 16px;">${rankIcon}</span>
                         <div>
-                            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${app.appName}</div>
-                            <div style="font-size: 10px; color: var(--text-secondary);">${app.phoneName}</div>
+                            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${escapeHtml(app.appName)}</div>
+                            <div style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(app.phoneName)}</div>
                         </div>
                     </div>
                     <div style="display: flex; gap: 4px;">
@@ -10135,7 +10143,7 @@ function showAppDetailModal(appId) {
                                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-color); ${isToday ? 'background: rgba(56, 239, 125, 0.1);' : ''}">
                                         <div>
                                             <span style="font-size: 12px; color: var(--text-secondary);">${record.date} ${isToday ? '(今天)' : ''}</span>
-                                            ${record.note ? `<span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${record.note}</span>` : ''}
+                                            ${record.note ? `<span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">${escapeHtml(record.note)}</span>` : ''}
                                         </div>
                                         <div style="text-align: right;">
                                             <span style="font-size: 12px; font-weight: 600; color: ${isPositive ? '#10b981' : '#ef4444'};">
@@ -10663,7 +10671,7 @@ function renderPhones() {
             <div class="phone-card" data-phone-id="${phone.id}" data-index="${index}">
                 <div class="phone-header">
                     <div class="phone-header-top">
-                        <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${phone.name}</span>
+                        <span class="phone-name-capsule capsule-${capsuleColor}" onclick="editPhoneName('${phone.id}')">${escapeHtml(phone.name)}</span>
                         <div class="phone-header-actions">
                             <div class="phone-icon-buttons">
                                 <button class="icon-btn icon-btn-add" onclick="openAddAppModal('${phone.id}')" title="添加软件">+</button>
@@ -10752,7 +10760,7 @@ function renderAppList(phone) {
         return `
             <div class="app-card" data-app-id="${app.id}" style="${isDeleted ? 'opacity: 0.6; border-style: dashed;' : ''}">
                 <div class="app-header">
-                    <span class="app-name" style="${isDeleted ? 'text-decoration: line-through; color: var(--text-muted);' : ''}">${app.name}</span>
+                    <span class="app-name" style="${isDeleted ? 'text-decoration: line-through; color: var(--text-muted);' : ''}">${escapeHtml(app.name)}</span>
                     <span class="status-tag ${totalWithdrawals > 0 ? 'ready' : 'pending'}">
                         ${totalWithdrawals > 0 ? '有记录' : '新软件'}
                     </span>
@@ -10881,7 +10889,7 @@ function renderPhoneEarningsPage() {
                     ${todayPhones.filter(p => p.amount > 0).map((p, i) => `
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div style="width: 24px; height: 24px; border-radius: 50%; background: ${i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#64748b'}; color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">${i + 1}</div>
-                            <div style="flex: 1; font-size: 13px; color: var(--text-primary);">${p.name}</div>
+                            <div style="flex: 1; font-size: 13px; color: var(--text-primary);">${escapeHtml(p.name)}</div>
                             <div style="font-size: 13px; font-weight: 600; color: #10b981;">¥${p.amount.toFixed(2)}</div>
                         </div>
                     `).join('')}
@@ -10929,7 +10937,7 @@ function renderPhoneEarningsPage() {
                         <div style="display: flex; flex-wrap: wrap; gap: 6px;">
                             ${todayApps.map(app => `
                                 <span style="background: rgba(16, 185, 129, 0.1); color: #10b981; padding: 3px 8px; border-radius: 4px; font-size: 11px;">
-                                    ${app.name} ¥${app.amount.toFixed(2)}
+                                    ${escapeHtml(app.name)} ¥${app.amount.toFixed(2)}
                                 </span>
                             `).join('')}
                         </div>
@@ -10953,7 +10961,7 @@ function editPhoneName(phoneId) {
     showModal('编辑手机名称', `
         <div class="form-group">
             <label class="form-label">手机名称</label>
-            <input type="text" id="edit-phone-name" class="form-input" value="${phone.name}">
+            <input type="text" id="edit-phone-name" class="form-input" value="${escapeHtml(phone.name)}">
         </div>
     `, [
         { text: '取消', class: 'btn-secondary', action: closeModal },
@@ -11000,7 +11008,7 @@ function renderAppDetailsPage() {
     data.phones.forEach(phone => {
         html += `<div class="card mt-4">`;
         html += `<div class="section-header">`;
-        html += `<div class="section-title">📱 ${phone.name}</div>`;
+        html += `<div class="section-title">📱 ${escapeHtml(phone.name)}</div>`;
         html += `<div class="section-divider"></div>`;
         html += `</div>`;
         
@@ -11016,7 +11024,7 @@ function renderAppDetailsPage() {
                 
                 html += `<div style="padding: 16px; border-bottom: 1px solid var(--border-color);">`;
                 html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">`;
-                html += `<div style="font-weight: 600; font-size: 16px;">${app.name}</div>`;
+                html += `<div style="font-weight: 600; font-size: 16px;">${escapeHtml(app.name)}</div>`;
                 html += `<div style="font-size: 14px; color: var(--text-secondary);">总收益: ¥${totalEarned.toFixed(2)}</div>`;
                 html += `</div>`;
                 
@@ -11442,7 +11450,7 @@ function openEditAppModal(phoneId, appId, fromQuickEdit = false) {
     showModal('编辑软件', `
         <div class="form-group">
             <label class="form-label">软件名称</label>
-            <input type="text" id="edit-app-name" class="form-input" value="${app.name}">
+            <input type="text" id="edit-app-name" class="form-input" value="${escapeHtml(app.name)}">
         </div>
         <div class="form-group">
             <label class="form-label">当前余额 (元)</label>
@@ -11603,7 +11611,7 @@ function openWithdrawModal(phoneId, appId) {
     showModal('记录提现', `
         <div class="form-group">
             <label class="form-label">软件名称</label>
-            <input type="text" class="form-input" value="${app.name}" disabled>
+            <input type="text" class="form-input" value="${escapeHtml(app.name)}" disabled>
         </div>
         <div class="form-group">
             <label class="form-label">当前余额 (元)</label>
@@ -12217,11 +12225,11 @@ function openQuickWithdrawModal(index) {
         showModal('快速提现', `
         <div class="form-group">
             <label class="form-label">软件名称</label>
-            <input type="text" class="form-input" value="${app.name}" disabled>
+            <input type="text" class="form-input" value="${escapeHtml(app.name)}" disabled>
         </div>
         <div class="form-group">
             <label class="form-label">手机</label>
-            <input type="text" class="form-input" value="${phone.name}" disabled>
+            <input type="text" class="form-input" value="${escapeHtml(phone.name)}" disabled>
         </div>
         <div class="form-group">
             <label class="form-label">当前余额 (元)</label>
@@ -12786,7 +12794,7 @@ function renderPhoneComparison() {
                         <div class="phone-comparison-header">
                             <div class="phone-comparison-name">
                                 <span class="phone-comparison-rank" style="background: ${color};">${index + 1}</span>
-                                ${phone.name}
+                                ${escapeHtml(phone.name)}
                                 ${isTop ? '<span class="phone-comparison-crown">👑</span>' : ''}
                             </div>
                             <div class="phone-comparison-earned">¥${phone.totalEarned.toFixed(2)}</div>
@@ -12871,9 +12879,9 @@ function renderAppEarningsRanking() {
                     <div class="app-ranking-item" onclick="showAppDetailModal('${app.appId}')">
                         <div class="app-ranking-rank" style="background: ${rankColor};">${index + 1}</div>
                         <div class="app-ranking-info">
-                            <div class="app-ranking-name">${app.name}</div>
+                            <div class="app-ranking-name">${escapeHtml(app.name)}</div>
                             <div class="app-ranking-meta">
-                                <span>📱 ${app.phoneName}</span>
+                                <span>📱 ${escapeHtml(app.phoneName)}</span>
                                 ${app.avgDaily > 0 ? `<span>📊 日均 ¥${app.avgDaily.toFixed(2)}</span>` : ''}
                             </div>
                         </div>
@@ -12965,8 +12973,8 @@ function renderWithdrawReadyList(apps) {
             <div class="withdraw-ready-item">
                 <div class="withdraw-ready-header">
                     <div class="withdraw-ready-info">
-                        <div class="withdraw-ready-name">${app.name}</div>
-                        <div class="withdraw-ready-phone">📱 ${app.phoneName}</div>
+                        <div class="withdraw-ready-name">${escapeHtml(app.name)}</div>
+                        <div class="withdraw-ready-phone">📱 ${escapeHtml(app.phoneName)}</div>
                     </div>
                     <div class="withdraw-ready-balance">
                         <div>¥${app.balance.toFixed(2)}</div>
@@ -13171,11 +13179,11 @@ function renderDailyRecommendations(apps) {
             <div class="daily-recommend-item ${app.targetGapDay ? 'has-gap-target' : ''}">
                 <div style="display: flex; justify-content: space-between;">
                     <div>
-                        <div class="daily-recommend-name">${app.name}${recultivatedTag}</div>
+                        <div class="daily-recommend-name">${escapeHtml(app.name)}${recultivatedTag}</div>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
                             <div class="daily-recommend-rank">${index + 1}</div>
                             ${gapTag}
-                            <span>📱 ${app.phoneName}</span>
+                            <span>📱 ${escapeHtml(app.phoneName)}</span>
                             <span style="color: ${urgencyColor}; font-weight: 600;">${urgencyLevel}</span>
                         </div>
                     </div>
@@ -13433,8 +13441,8 @@ function renderFuturePlan(plan) {
                         ${dayPlan.withdrawApps.map(app => `
                             <div class="future-plan-withdraw-item">
                                 <div>
-                                    <span>${app.name}</span>
-                                    <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">📱 ${app.phoneName}</span>
+                                    <span>${escapeHtml(app.name)}</span>
+                                    <span style="font-size: 10px; color: var(--text-muted); margin-left: 6px;">📱 ${escapeHtml(app.phoneName)}</span>
                                 </div>
                                 <span style="color: var(--success-color);">¥${app.targetWithdraw.toFixed(2)}</span>
                             </div>
@@ -13447,8 +13455,8 @@ function renderFuturePlan(plan) {
                         ${dayPlan.playPlanApps.map(app => `
                             <div class="future-plan-play-item">
                                 <div>
-                                    <span>${app.name}</span>
-                                    <span style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">📱 ${app.phoneName}</span>
+                                    <span>${escapeHtml(app.name)}</span>
+                                    <span style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">📱 ${escapeHtml(app.phoneName)}</span>
                                 </div>
                                 <span>还差 ¥${app.remaining.toFixed(2)}</span>
                             </div>
@@ -13612,8 +13620,8 @@ function renderClearWarning() {
                 <div class="clear-warning-app-rank">${index + 1}</div>
                 <div class="clear-warning-app-content">
                     <div class="clear-warning-app-header">
-                        <span class="clear-warning-app-name">${app.name}</span>
-                        <span class="clear-warning-app-phone">📱 ${app.phoneName}</span>
+                        <span class="clear-warning-app-name">${escapeHtml(app.name)}</span>
+                        <span class="clear-warning-app-phone">📱 ${escapeHtml(app.phoneName)}</span>
                     </div>
                     <div class="clear-warning-app-status" style="color: ${app.statusColor};">
                         ${app.statusText}
@@ -14157,7 +14165,7 @@ function editAppGoalAmount(installmentId) {
         const phoneName = data.phones.find(p => p.apps.some(a => a.id === app.id))?.name || '';
         appsHtml += `
             <div class="form-group">
-                <label class="form-label">${phoneName} - ${app.name}</label>
+                <label class="form-label">${phoneName} - ${escapeHtml(app.name)}</label>
                 <input type="number" inputmode="decimal" id="app-goal-${index}" class="form-input" value="${averageAmount.toFixed(2)}" step="0.01">
             </div>
         `;
@@ -14697,7 +14705,7 @@ function renderGamePhoneSelect() {
     
     let html = '';
     data.phones.forEach(phone => {
-        html += `<option value="${phone.id}">${phone.name}</option>`;
+        html += `<option value="${phone.id}">${escapeHtml(phone.name)}</option>`;
     });
     
     select.innerHTML = html;
@@ -14919,7 +14927,7 @@ function editDownloadedGameName(gameId, currentName) {
 function renderGameDrawHistoryList() {
     // 直接读取 localStorage
     const historyStr = localStorage.getItem(SYS_KEYS.gameDrawHistory());
-    let history = historyStr ? JSON.parse(historyStr) : [];
+    let history = safeJSONParse(historyStr, []);
     const container = document.getElementById('game-draw-history');
     
     const today = getCurrentDate();
@@ -14972,7 +14980,7 @@ function renderGameDrawHistoryList() {
 // 标记抽签历史今日完成
 function completeDrawHistoryItem(date, gameId) {
     const historyStr = localStorage.getItem(SYS_KEYS.gameDrawHistory());
-    const history = historyStr ? JSON.parse(historyStr) : [];
+    const history = safeJSONParse(historyStr, []);
     
     // 根据日期和游戏ID查找记录
     const recordIndex = history.findIndex(h => h.date === date && h.gameId === gameId);
@@ -15219,7 +15227,7 @@ function drawTodayGame() {
     startGameTimer(result.id, playTime);
     
     container.innerHTML = `
-        <div style="animation: fadeIn 0.5s ease;" id="draw-result-container">
+        <div class="game-result-card" style="animation: fadeIn 0.5s ease;" id="draw-result-container">
             <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 抽签结果</div>
             <div style="font-size: 32px; font-weight: bold; margin: 16px 0; color: #fff;">${result.name}</div>
             
@@ -15300,7 +15308,7 @@ function showTodayDrawResult(todayDraw) {
             startGameTimer(todayDraw.gameId, timerData.originalDuration || timerData.duration);
 
             container.innerHTML = `
-                <div style="animation: fadeIn 0.5s ease;" id="draw-result-container">
+                <div class="game-result-card" style="animation: fadeIn 0.5s ease;" id="draw-result-container">
                     <div style="font-size: 24px; font-weight: bold; margin-bottom: 8px;">🎲 今日抽签结果</div>
                     <div style="font-size: 32px; font-weight: bold; margin: 16px 0; color: #fff;">${todayDraw.gameName}</div>
 
@@ -16624,8 +16632,8 @@ function viewYearlyGoalDetail() {
             groupHtml += `
                 <div style="background: var(--bg-secondary); border-radius: 8px; padding: 10px; margin-bottom: 8px; font-size: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-weight: 600;">${app.appName}</span>
-                        <span style="color: var(--text-secondary);">${app.phoneName}</span>
+                        <span style="font-weight: 600;">${escapeHtml(app.appName)}</span>
+                        <span style="color: var(--text-secondary);">${escapeHtml(app.phoneName)}</span>
                     </div>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; color: var(--text-secondary);">
                         <div>目标: ¥${app.adjustedTarget.toFixed(2)}</div>
@@ -16775,7 +16783,7 @@ function renderDailyGoalContent() {
     const titleEl = document.getElementById('daily-goal-modal-title');
     const bodyEl = document.getElementById('daily-goal-modal-body');
     
-    titleEl.textContent = `📅 ${app.name} - 达标日历`;
+    titleEl.textContent = `📅 ${escapeHtml(app.name)} - 达标日历`;
     
     let html = `
         <!-- 顶部信息栏 -->

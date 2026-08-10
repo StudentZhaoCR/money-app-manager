@@ -1,0 +1,6 @@
+﻿calculateInstallmentGoalsGlobal -> 1609, 14210
+deleteInstallment -> 1496, 14136
+openAddInstallmentModal -> 1409, 13875
+openEditInstallmentModal -> 1456, 14095
+renderInstallments -> 1614, 13739
+updateTimerDisplay -> 8384, 15798
