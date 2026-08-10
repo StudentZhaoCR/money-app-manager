@@ -1,0 +1,3 @@
+index status 200 hasTab true hasPage true
+appjs status 200 hasRender true len 756339
+sw status 200 v8 true

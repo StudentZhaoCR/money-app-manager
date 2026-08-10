@@ -2,7 +2,7 @@
 // 策略：stale-while-revalidate —— 优先返回缓存（快），同时后台拉取最新版本更新缓存；
 //       install 时 skipWaiting、activate 时 clients.claim，确保发版后用户尽快拿到新代码。
 // 发版时务必 bump CACHE_NAME 以触发更新流程。
-const CACHE_NAME = 'money-app-v7';
+const CACHE_NAME = 'money-app-v12';
 const CORE_ASSETS = [
   '/',
   '/index.html',

@@ -12,7 +12,7 @@
     <!-- 主题字体（带系统兜底，离线自动回退，不影响可读性） -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&family=Orbitron:wght@400;500;700;900&family=Bungee&family=Lobster&family=Russo+One&family=Cinzel:wght@400;700&display=swap">
     <!-- SheetJS for Excel export -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Chart.js for data visualization - 异步加载 -->
@@ -350,6 +350,18 @@
                 </div>
             </div>
 
+            <!-- 全局字体：全应用统一字体，含艺术字（英/数字生效，中文自动回退保清晰） -->
+            <div class="card mt-6">
+                <div class="section-header">
+                    <div class="section-title">全局字体</div>
+                    <div class="section-divider"></div>
+                </div>
+                <div class="form-hint mb-4">选一种全应用统一字体；艺术字仅影响英文与数字，中文自动回退系统字体保证清晰。选「跟随主题」则用各主题自带字体</div>
+                <div id="global-font-selector" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;">
+                    <!-- 由 JS 动态渲染 -->
+                </div>
+            </div>
+
             <!-- 数据管理：导出 / 导入 -->
             <div class="card mt-6">
                 <div class="section-header">
@@ -550,6 +562,16 @@
             </div>
         </div>
 
+        <!-- 金币收益页：每软件可编辑金币数 → 按兑换比例算实际收益，按软件/手机/全部展示，编辑自动存档 -->
+        <div class="page" id="page-coin-earnings">
+            <div class="date-container">
+                <span class="current-date" id="coin-current-date"></span>
+            </div>
+            <div id="coin-earnings-content">
+                <!-- 内容将由JS生成 -->
+            </div>
+        </div>
+
 
 
 
@@ -588,6 +610,11 @@
         <div class="tab-item" data-page="clear-warning">
             <span class="tab-icon">⚠️</span>
             <span class="tab-text">预警</span>
+        </div>
+
+        <div class="tab-item" data-page="coin-earnings">
+            <span class="tab-icon">💰</span>
+            <span class="tab-text">金币</span>
         </div>
 
         <div class="tab-item" data-page="settings">

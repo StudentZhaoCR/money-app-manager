@@ -754,6 +754,98 @@
 [data-theme="brut"] .modal-body::-webkit-scrollbar-thumb-horizontal:hover { background: var(--wild-2); }
 
 /* ==================== 苹果极简（浅色干净） ==================== */
+/* ===================================================================
+   金币收益页（coin-earnings）专用样式 —— 保证卡片不透明/有层次
+   =================================================================== */
+.coin-phone-card {
+    background: var(--card-bg);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    margin-bottom: 14px;
+    overflow: hidden;
+}
+.coin-phone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--accent-color);
+    border-bottom: 3px solid var(--border-color);
+    color: var(--text-on-brand);
+}
+.coin-phone-header__name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.coin-phone-header__stats {
+    text-align: right;
+}
+.coin-phone-header__sub {
+    font-size: 11px;
+    opacity: 0.85;
+}
+.coin-phone-header__earned {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text-on-brand);
+    margin-top: 2px;
+}
+.coin-phone-header__coins {
+    font-size: 11px;
+    opacity: 0.85;
+}
+.coin-app-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+}
+.coin-app-row:last-child { border-bottom: none; }
+.coin-app-info { flex: 1; min-width: 0; }
+.coin-app-name { font-weight: 600; font-size: 14px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coin-app-rate { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.coin-app-input-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.coin-app-input-label { font-size: 10px; color: var(--text-muted); }
+.coin-app-input {
+    width: 104px;
+    text-align: right;
+    padding: 6px 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    outline: none;
+}
+.coin-app-earned { min-width: 78px; text-align: right; font-size: 15px; }
+
+/* brutal: 白卡+黄头+硬边硬影，杜绝"透明感" */
+[data-theme="brut"] .coin-phone-card {
+    background: #ffffff;
+    border: 3px solid #111111;
+    border-radius: 0;
+    box-shadow: 6px 6px 0 #111111;
+}
+[data-theme="brut"] .coin-phone-header {
+    background: #ffe14d;
+    border-bottom: 3px solid #111111;
+}
+[data-theme="brut"] .coin-app-row {
+    background: #ffffff;
+    border-bottom: 2px solid #111111;
+}
+[data-theme="brut"] .coin-app-input {
+    background: #fffdf2;
+    border: 2px solid #111111;
+    border-radius: 0;
+    box-shadow: 3px 3px 0 #111111;
+}
+
 [data-theme="apple"] {
     --primary-color: #007aff;
     --primary-light: #4aa8ff;

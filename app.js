@@ -30,7 +30,9 @@ const SYS_KEYS = {
     quickEditAppOrder: () => getSystemKey('quickEditAppOrder'),
     quickEditAppNames: () => getSystemKey('quickEditAppNames'),
     dailyGapRecords: () => getSystemKey('moneyApp_dailyGapRecords'),
-    shoppingRecords: () => getSystemKey('moneyApp_shoppingRecords')
+    shoppingRecords: () => getSystemKey('moneyApp_shoppingRecords'),
+    coinBalances: () => getSystemKey('moneyApp_coinBalances'),
+    coinHistory: () => getSystemKey('moneyApp_coinHistory')
 };
 
 function getSystemsList() {
@@ -73,6 +75,7 @@ function switchSystem(systemId) {
     if (typeof renderWithdrawPlan === 'function') renderWithdrawPlan();
     if (typeof renderExpiringApps === 'function') renderExpiringApps();
     if (typeof updateTodayEarnings === 'function') updateTodayEarnings();
+    if (typeof renderCoinEarningsPage === 'function') renderCoinEarningsPage();
     // 更新导航栏标题
     updateNavbarTitle();
     showToast(`已切换到 ${getCurrentSystemInfo().name}`, 'success');
@@ -173,6 +176,8 @@ function openSystemSwitchModal() {
                 localStorage.setItem(getSystemKeyFor(DATA_KEY, newId), JSON.stringify({ phones: [], installments: [], expenses: [], settings: {} }));
                 localStorage.setItem(getSystemKeyFor('moneyApp_dailyGapRecords', newId), JSON.stringify([]));
                 localStorage.setItem(getSystemKeyFor('moneyApp_shoppingRecords', newId), JSON.stringify([]));
+                localStorage.setItem(getSystemKeyFor('moneyApp_coinBalances', newId), JSON.stringify({}));
+                localStorage.setItem(getSystemKeyFor('moneyApp_coinHistory', newId), JSON.stringify([]));
                 localStorage.setItem(getSystemKeyFor('moneyApp_downloadedGames', newId), JSON.stringify([]));
                 // 初始化其他隔离的存储键
                 localStorage.setItem(getSystemKeyFor('expandedPhones', newId), JSON.stringify([]));
@@ -208,6 +213,7 @@ function openSystemSwitchModal() {
                     if (typeof renderWithdrawPlan === 'function') renderWithdrawPlan();
                     if (typeof renderExpiringApps === 'function') renderExpiringApps();
                     if (typeof updateTodayEarnings === 'function') updateTodayEarnings();
+                    if (typeof renderCoinEarningsPage === 'function') renderCoinEarningsPage();
                     updateNavbarTitle();
                     showToast(`已创建并切换到 ${name}`, 'success');
                 }, 150);
@@ -4359,6 +4365,106 @@ class DataManager {
         return records;
     }
 
+    // ==================== 金币收益功能 ====================
+    // 金币数与历史独立存于系统隔离键，不污染核心 app 模型；编辑金币即自动写一条历史
+
+    // 读取所有软件的金币数 { [appId]: { coins, updatedAt } }
+    static getCoinBalances() {
+        const stored = localStorage.getItem(SYS_KEYS.coinBalances());
+        return stored ? safeJSONParse(stored, {}) : {};
+    }
+
+    // 读取金币变更历史（数组，按时间倒序）
+    static getCoinHistory() {
+        const stored = localStorage.getItem(SYS_KEYS.coinHistory());
+        return stored ? safeJSONParse(stored, []) : [];
+    }
+
+    static saveCoinHistory(records) {
+        safeSetItem(SYS_KEYS.coinHistory(), JSON.stringify(records));
+    }
+
+    // 计算单个 app 的金币收益 = 金币数 / 兑换比例（比例<=0 或金币<=0 时为 0）
+    static calcCoinEarned(coins, exchangeRate) {
+        const c = parseFloat(coins) || 0;
+        const r = parseFloat(exchangeRate) || 0;
+        return (r > 0 && c > 0) ? Math.round((c / r) * 100) / 100 : 0;
+    }
+
+    // 设置某 app 的金币数：持久化金币 + 自动追加一条历史记录
+    // phoneId/appId 用于定位，phoneName/appName/exchangeRate 一并存进历史以便离线复盘
+    static setAppCoins(phoneId, appId, coins, meta) {
+        const balances = this.getCoinBalances();
+        const oldCoins = balances[appId] ? (balances[appId].coins || 0) : 0;
+        const newCoins = Math.max(0, parseFloat(coins) || 0);
+        balances[appId] = { coins: newCoins, updatedAt: new Date().toISOString() };
+        safeSetItem(SYS_KEYS.coinBalances(), JSON.stringify(balances));
+
+        const exchangeRate = parseFloat(meta && meta.exchangeRate) || 0;
+        const record = {
+            id: 'coin_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+            timestamp: new Date().toISOString(),
+            phoneId: phoneId || '',
+            phoneName: (meta && meta.phoneName) || '',
+            appId: appId || '',
+            appName: (meta && meta.appName) || '',
+            exchangeRate: exchangeRate,
+            oldCoins: oldCoins,
+            newCoins: newCoins,
+            earned: this.calcCoinEarned(newCoins, exchangeRate)
+        };
+        const history = this.getCoinHistory();
+        history.unshift(record);                 // 最新的在前
+        // 限制历史条数，防 localStorage 膨胀
+        if (history.length > 500) history.length = 500;
+        this.saveCoinHistory(history);
+        return record;
+    }
+
+    static deleteCoinHistoryRecord(id) {
+        const records = this.getCoinHistory().filter(r => r.id !== id);
+        this.saveCoinHistory(records);
+        return records;
+    }
+
+    static clearCoinHistory() {
+        this.saveCoinHistory([]);
+    }
+
+    // 获取金币收益看板数据：按手机/软件聚合
+    static getCoinEarningsStats() {
+        const data = this.loadData();
+        const balances = this.getCoinBalances();
+        let totalCoins = 0, totalEarned = 0, appCount = 0;
+        const phones = data.phones.map((phone, idx) => {
+            const capsuleColors = ['purple', 'green', 'blue', 'orange', 'pink', 'cyan'];
+            let phoneCoins = 0, phoneEarned = 0;
+            const apps = phone.apps.map(app => {
+                const bal = balances[app.id] || { coins: 0 };
+                const coins = parseFloat(bal.coins) || 0;
+                const rate = parseFloat(app.exchangeRate) || 0;
+                const earned = this.calcCoinEarned(coins, rate);
+                phoneCoins += coins;
+                phoneEarned += earned;
+                totalCoins += coins;
+                totalEarned += earned;
+                appCount++;
+                return {
+                    id: app.id, name: app.name,
+                    exchangeRate: rate, coins, earned,
+                    hasRate: rate > 0
+                };
+            });
+            return {
+                id: phone.id, name: phone.name,
+                capsuleColor: capsuleColors[idx % capsuleColors.length],
+                apps, phoneCoins, phoneEarned,
+                appCount: phone.apps.length
+            };
+        });
+        return { phones, totalCoins, totalEarned, appCount, phoneCount: data.phones.length };
+    }
+
     // 获取购物统计看板数据
     static getShoppingStats() {
         const records = this.getShoppingRecords();
@@ -6597,11 +6703,29 @@ function getCardPaletteForKey(key) {
     return getCardPalette(id) || CARD_PALETTES.find(p => p.id === getDefaultCardColors()[key]) || CARD_PALETTES[0];
 }
 
-// 给一张卡产出 inline style 字符串，例如 " --card-c1:#10b981;--card-c2:#6ee7b7;--card-angle:135deg"
+// 根据卡片配色两色的感知亮度，选出在背景上清晰可读的文字色
+// 16 套配色大多偏浅，强行用黑字；自定义深色则自动切回白字
+function pickReadableTextColor(hex1, hex2) {
+    const lum = (c) => {
+        const h = (c || '#000000').replace('#', '');
+        if (h.length !== 6) return 0;
+        const r = parseInt(h.substr(0, 2), 16) / 255;
+        const g = parseInt(h.substr(2, 2), 16) / 255;
+        const b = parseInt(h.substr(4, 2), 16) / 255;
+        const lin = (v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const avg = (lum(hex1) + lum(hex2)) / 2;
+    return avg > 0.55 ? '#1d1d1f' : '#ffffff';
+}
+
+// 给一张卡产出 inline style 字符串，例如 " --card-c1:#10b981;--card-c2:#6ee7b7;--card-angle:135deg;color:#1d1d1f"
+// 同时根据配色亮度注入自适应文字色，避免白字糊在浅底上
 function buildCardStyleAttr(key) {
     const p = getCardPaletteForKey(key);
     if (!p) return '';
-    return `--card-c1:${p.c1};--card-c2:${p.c2};--card-angle:135deg;`;
+    const textColor = pickReadableTextColor(p.c1, p.c2);
+    return `--card-c1:${p.c1};--card-c2:${p.c2};--card-angle:135deg;color:${textColor};`;
 }
 
 // 在 DOM 上重写某张卡的样式（用于实时刷新）
@@ -6839,12 +6963,107 @@ function renderAccentSelector() {
     if (!container) return;
     const current = localStorage.getItem('moneyApp_accentColor') || null;
     const rainbow = 'linear-gradient(135deg, #8b5cf6, #3b82f6, #06b6d4, #10b981, #f59e0b, #ec4899)';
-    container.innerHTML = ACCENT_PRESETS.map(p => {
+    const presetsHtml = ACCENT_PRESETS.map(p => {
         const active = (p.value === current) || (!p.value && !current);
         const bg = p.value ? p.value : rainbow;
         return `<div class="accent-item${active ? ' active' : ''}" onclick="setAccentColor(${p.value ? `'${p.value}'` : 'null'})" title="${p.name}" style="width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid ${active ? 'var(--primary-color)' : 'var(--border-color)'};background:${bg};${active ? 'transform:scale(1.15);box-shadow:0 2px 8px rgba(0,0,0,0.15);' : ''}transition:all .2s ease;"></div>`;
     }).join('');
+    // 自定义拾色器：oninput 实时改色（不重渲染避免中断拖动），onchange 收尾刷新
+    const isCustom = current && !ACCENT_PRESETS.some(p => p.value === current);
+    const pickerVal = (current && /^#[0-9a-fA-F]{6}$/.test(current)) ? current : '#8b5cf6';
+    const customHtml = `<div style="display:flex;align-items:center;gap:6px;padding:2px 12px 2px 4px;border:2px solid ${isCustom ? 'var(--primary-color)' : 'var(--border-color)'};border-radius:9999px;background:var(--bg-secondary);${isCustom ? 'box-shadow:0 2px 8px rgba(0,0,0,0.15);' : ''}transition:all .2s ease;">
+        <input type="color" value="${pickerVal}" oninput="onAccentCustomInput(this.value)" onchange="onAccentCustomChange()" title="自定义强调色" style="width:26px;height:26px;border:none;background:transparent;cursor:pointer;padding:0;">
+        <span style="font-size:11px;color:var(--text-secondary);">自定义</span>
+    </div>`;
+    container.innerHTML = presetsHtml + customHtml;
 }
+
+// 自定义强调色：拖动时实时应用（不重建选择器，避免中断）
+function onAccentCustomInput(hex) {
+    const { h, s, l } = hexToHsl(hex);
+    const light = `hsl(${h}, ${s}%, ${Math.min(85, l + 15)}%)`;
+    const root = document.documentElement;
+    root.style.setProperty('--primary-color', hex);
+    root.style.setProperty('--primary-light', light);
+    root.style.setProperty('--primary-dark', `hsl(${h}, ${s}%, ${Math.max(20, l - 18)}%)`);
+    root.style.setProperty('--gradient-primary', `linear-gradient(135deg, ${hex}, ${light})`);
+    root.style.setProperty('--brand-1', hex);
+    root.style.setProperty('--brand-2', light);
+    root.style.setProperty('--accent-color', hex);
+    root.style.setProperty('--accent-light', light);
+    localStorage.setItem('moneyApp_accentColor', hex);
+}
+// 自定义强调色：松手后刷新选择器高亮 + 提示
+function onAccentCustomChange() {
+    renderAccentSelector();
+    showSuccess('强调色已更新');
+}
+
+// ==================== 全局字体（含艺术字） ====================
+// 选某种字体后用 inline style 覆盖 --font-*，优先级高于 [data-theme] 规则，切主题也保留；选"跟随主题"则清除覆盖
+const GLOBAL_FONTS = [
+    { id: 'theme',    name: '跟随主题',   stack: null, sample: 'Aa 字体' },
+    { id: 'inter',    name: '现代无衬线', stack: "'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif", sample: 'Aa 现代体' },
+    { id: 'mono',     name: '等宽终端',   stack: "'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, 'Courier New', monospace", sample: 'Aa 终端体' },
+    { id: 'quicksand',name: '圆润柔和',   stack: "'Quicksand', 'Nunito', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif", sample: 'Aa 圆润体' },
+    { id: 'grotesk',  name: '工业无衬线', stack: "'Space Grotesk', 'Arial', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif", sample: 'Aa 工业体' },
+    { id: 'orbitron', name: '科技未来',   stack: "'Orbitron', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif", sample: 'Aa 科技体' },
+    { id: 'bungee',   name: '街头海报',   stack: "'Bungee', 'Arial Black', 'PingFang SC', 'Microsoft YaHei', sans-serif", sample: 'Aa 海报体' },
+    { id: 'lobster',  name: '手写花体',   stack: "'Lobster', 'PingFang SC', 'Microsoft YaHei', cursive", sample: 'Aa 手写体' },
+    { id: 'russone',  name: '粗壮力量',   stack: "'Russo One', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif", sample: 'Aa 力量体' },
+    { id: 'cinzel',   name: '古典衬线',   stack: "'Cinzel', 'PingFang SC', 'Microsoft YaHei', serif", sample: 'Aa 古典体' }
+];
+
+function applyGlobalFont(fontId) {
+    const root = document.documentElement;
+    const font = GLOBAL_FONTS.find(f => f.id === fontId);
+    if (!font || !font.stack) {
+        // 跟随主题：清除 inline 覆盖，让各主题自带 --font-* 生效
+        root.style.removeProperty('--font-primary');
+        root.style.removeProperty('--font-display');
+        root.style.removeProperty('--font-secondary');
+        localStorage.removeItem('moneyApp_globalFont');
+        renderGlobalFontSelector();
+        if (fontId === 'theme') showSuccess('字体已跟随主题');
+        return;
+    }
+    root.style.setProperty('--font-primary', font.stack);
+    root.style.setProperty('--font-display', font.stack);
+    root.style.setProperty('--font-secondary', font.stack);
+    localStorage.setItem('moneyApp_globalFont', fontId);
+    renderGlobalFontSelector();
+    showSuccess('字体已切换为「' + font.name + '」');
+}
+
+// 启动/切主题后恢复已保存的全局字体
+function restoreGlobalFont() {
+    const saved = localStorage.getItem('moneyApp_globalFont');
+    if (saved) {
+        const font = GLOBAL_FONTS.find(f => f.id === saved);
+        if (font && font.stack) {
+            const root = document.documentElement;
+            root.style.setProperty('--font-primary', font.stack);
+            root.style.setProperty('--font-display', font.stack);
+            root.style.setProperty('--font-secondary', font.stack);
+        }
+    }
+    renderGlobalFontSelector();
+}
+
+function renderGlobalFontSelector() {
+    const container = document.getElementById('global-font-selector');
+    if (!container) return;
+    const current = localStorage.getItem('moneyApp_globalFont') || 'theme';
+    container.innerHTML = GLOBAL_FONTS.map(f => {
+        const active = f.id === current;
+        const fontFamily = f.stack || 'inherit';
+        return `<div class="global-font-item${active ? ' active' : ''}" onclick="applyGlobalFont('${f.id}')" title="${f.name}" style="padding:12px 8px;border:2px solid ${active ? 'var(--primary-color)' : 'var(--border-color)'};border-radius:var(--radius-sm);cursor:pointer;background:${active ? 'var(--soft-ok, rgba(16,185,129,0.1))' : 'var(--bg-secondary)'};text-align:center;transition:all .2s ease;${active ? 'box-shadow:0 2px 8px rgba(0,0,0,0.12);' : ''}">
+            <div style="font-family:${fontFamily};font-size:19px;font-weight:700;color:var(--text-primary);margin-bottom:6px;line-height:1.1;">${f.sample}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${f.name}</div>
+        </div>`;
+    }).join('');
+}
+
 
 // 渲染主题选择器
 function renderThemeSelector() {
@@ -6898,6 +7117,8 @@ function applyTheme(theme) {
 
     // 切主题后恢复用户自定义强调色（跨主题保留）
     restoreAccentColor();
+    // 恢复全局字体覆盖（inline 优先级高于主题，切主题也保留）
+    restoreGlobalFont();
 }
 
 // 设置主题
@@ -7100,6 +7321,7 @@ function showPage(pageName) {
     if (pageName === 'phone-earnings') renderPhoneEarningsPage();
     if (pageName === 'activity') renderActivityPage();
     if (pageName === 'shopping') renderShoppingPage();
+    if (pageName === 'coin-earnings') renderCoinEarningsPage();
     
     
     // 控制快速编辑浮动按钮的显示/隐藏 - 在所有页面都显示
@@ -13430,6 +13652,7 @@ function renderSettings() {
     // 应用已保存的卡片配色 + 渲染设置面板
     applyAllCardColors();
     renderCardColorsList();
+    renderGlobalFontSelector();
 }
 
 // 渲染提现记录
@@ -17264,4 +17487,265 @@ function updateTodayEarnings() {
     }
 }
 
+
+// ==================== 金币收益页（每软件可编辑金币 → 按兑换比例算实际收益，按软件/手机/全部展示，编辑自动存档） ====================
+
+function renderCoinEarningsPage() {
+    const container = document.getElementById('coin-earnings-content');
+    if (!container) return;
+
+    const dateEl = document.getElementById('coin-current-date');
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('zh-CN');
+
+    const stats = DataManager.getCoinEarningsStats();
+    const historyCount = DataManager.getCoinHistory().length;
+
+    // 空状态：没有任何软件
+    if (stats.appCount === 0) {
+        container.innerHTML = `
+            <div style="padding: 16px;">
+                <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                    <div style="font-size: 48px; opacity: 0.4; margin-bottom: 12px;">💰</div>
+                    <div style="font-size: 15px; margin-bottom: 4px; color: var(--text-secondary);">还没有软件</div>
+                    <div style="font-size: 13px;">先去「手机」页添加软件并设置兑换比例，再来这里填金币数算收益</div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const phonesHtml = stats.phones.map(phone => {
+        if (phone.apps.length === 0) return '';
+        const appsHtml = phone.apps.map(app => {
+            const rateText = app.hasRate
+                ? `${formatCoinNumber(app.exchangeRate)} 金币 = 1 元`
+                : '未设置';
+            const earnedHtml = app.hasRate
+                ? `<span style="font-weight: 700; color: var(--success-color);">¥${app.earned.toFixed(2)}</span>`
+                : `<span style="color: var(--text-muted); font-size: 12px;">未设比例</span>`;
+            return `
+                <div class="coin-app-row">
+                    <div class="coin-app-info">
+                        <div class="coin-app-name">${escapeHtml(app.name)}</div>
+                        <div class="coin-app-rate">兑换比例：${rateText}</div>
+                    </div>
+                    <div class="coin-app-input-wrap">
+                        <div class="coin-app-input-label">金币数（可编辑）</div>
+                        <input type="number" inputmode="decimal" step="1" min="0"
+                            class="coin-app-input"
+                            value="${app.coins || ''}"
+                            data-phone-id="${phone.id}" data-app-id="${app.id}" data-rate="${app.exchangeRate}"
+                            oninput="onCoinInput(this)"
+                            onchange="saveAppCoins('${phone.id}','${app.id}', this.value)"
+                            placeholder="0">
+                    </div>
+                    <div id="coin-earned-${app.id}" class="coin-app-earned">
+                        ${earnedHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="coin-phone-card">
+                <div class="coin-phone-header">
+                    <div class="coin-phone-header__name">
+                        <span class="phone-name-capsule capsule-${phone.capsuleColor}">${escapeHtml(phone.name)}</span>
+                        <span class="coin-phone-header__sub">${phone.appCount} 个软件</span>
+                    </div>
+                    <div class="coin-phone-header__stats">
+                        <div class="coin-phone-header__sub">手机收益小计</div>
+                        <div id="coin-phone-earned-${phone.id}" class="coin-phone-header__earned">¥${phone.phoneEarned.toFixed(2)}</div>
+                        <div id="coin-phone-coins-${phone.id}" class="coin-phone-header__coins">${formatCoinNumber(phone.phoneCoins)} 金币</div>
+                    </div>
+                </div>
+                ${appsHtml}
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div style="padding: 16px;">
+            <!-- 总览卡 -->
+            <div style="background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); border-radius: var(--radius-lg); padding: 22px 20px; color: #fff; box-shadow: var(--shadow-card); margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <div style="font-size: 13px; opacity: 0.92;">💰 全部金币收益</div>
+                        <div style="font-size: 34px; font-weight: 800; margin-top: 4px; letter-spacing: 0.5px;">¥<span id="coin-total-earned">${stats.totalEarned.toFixed(2)}</span></div>
+                        <div style="font-size: 12px; opacity: 0.92; margin-top: 6px;">
+                            总金币 <span id="coin-total-coins">${formatCoinNumber(stats.totalCoins)}</span>　·　${stats.phoneCount} 部手机　·　${stats.appCount} 个软件
+                        </div>
+                    </div>
+                    <div style="font-size: 40px; opacity: 0.5;">💰</div>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 14px;">
+                    <button onclick="openCoinHistoryModal()" style="flex: 1; padding: 10px; background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.35); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600;">📜 历史存档（${historyCount}）</button>
+                    <button onclick="refreshCoinEarningsDisplay()" style="padding: 10px 14px; background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.35); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600;">🔄 刷新</button>
+                </div>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px; padding: 0 2px; line-height: 1.6;">
+                💡 在每个软件右侧填入金币数，系统按「兑换比例」自动算出实际收益；每次修改都会自动存档一条记录，可点「历史存档」查看。
+            </div>
+
+            ${phonesHtml}
+        </div>
+    `;
+}
+
+// 边输边算（不存档）：实时更新对应软件收益 + 手机小计 + 全部合计
+function onCoinInput(inputEl) {
+    const appId = inputEl.dataset.appId;
+    const rate = parseFloat(inputEl.dataset.rate) || 0;
+    const coins = Math.max(0, parseFloat(inputEl.value) || 0);
+    const earned = DataManager.calcCoinEarned(coins, rate);
+
+    const earnedCell = document.getElementById('coin-earned-' + appId);
+    if (earnedCell) {
+        earnedCell.innerHTML = rate > 0
+            ? `<span style="font-weight: 700; color: var(--success-color);">¥${earned.toFixed(2)}</span>`
+            : `<span style="color: var(--text-muted); font-size: 12px;">未设比例</span>`;
+    }
+    recomputeCoinAggregates();
+}
+
+// 根据当前页面所有金币 input 重新聚合手机小计与全部合计（实时一致）
+function recomputeCoinAggregates() {
+    const inputs = document.querySelectorAll('#coin-earnings-content input[data-app-id]');
+    let totalCoins = 0, totalEarned = 0;
+    const phoneSums = {};
+
+    inputs.forEach(inp => {
+        const phoneId = inp.dataset.phoneId;
+        const rate = parseFloat(inp.dataset.rate) || 0;
+        const coins = Math.max(0, parseFloat(inp.value) || 0);
+        const earned = DataManager.calcCoinEarned(coins, rate);
+        totalCoins += coins;
+        totalEarned += earned;
+        if (!phoneSums[phoneId]) phoneSums[phoneId] = { coins: 0, earned: 0 };
+        phoneSums[phoneId].coins += coins;
+        phoneSums[phoneId].earned += earned;
+    });
+
+    Object.keys(phoneSums).forEach(pid => {
+        const pe = document.getElementById('coin-phone-earned-' + pid);
+        if (pe) pe.textContent = '¥' + phoneSums[pid].earned.toFixed(2);
+        const pc = document.getElementById('coin-phone-coins-' + pid);
+        if (pc) pc.textContent = formatCoinNumber(phoneSums[pid].coins) + ' 金币';
+    });
+
+    const te = document.getElementById('coin-total-earned');
+    if (te) te.textContent = totalEarned.toFixed(2);
+    const tc = document.getElementById('coin-total-coins');
+    if (tc) tc.textContent = formatCoinNumber(totalCoins);
+}
+
+// 失焦/回车时：持久化金币数 + 自动写一条历史存档
+function saveAppCoins(phoneId, appId, value) {
+    const data = DataManager.loadData();
+    let phoneName = '', appName = '', exchangeRate = 0;
+    for (const p of data.phones) {
+        if (p.id === phoneId) phoneName = p.name;
+        for (const a of p.apps) {
+            if (a.id === appId) { appName = a.name; exchangeRate = parseFloat(a.exchangeRate) || 0; }
+        }
+    }
+    DataManager.setAppCoins(phoneId, appId, value, { phoneName, appName, exchangeRate });
+    showToast('金币已更新并存档', 'success');
+}
+
+// 刷新整页数字（从存储重读，保留输入框焦点）
+function refreshCoinEarningsDisplay() {
+    const stats = DataManager.getCoinEarningsStats();
+    const te = document.getElementById('coin-total-earned');
+    if (te) te.textContent = stats.totalEarned.toFixed(2);
+    const tc = document.getElementById('coin-total-coins');
+    if (tc) tc.textContent = formatCoinNumber(stats.totalCoins);
+    recomputeCoinAggregates();
+    // 刷新历史按钮条数
+    const histBtn = document.querySelector('#coin-earnings-content button[onclick^="openCoinHistoryModal"]');
+    if (histBtn) histBtn.textContent = `📜 历史存档（${DataManager.getCoinHistory().length}）`;
+    showToast('已刷新', 'info');
+}
+
+// 历史存档弹窗
+function openCoinHistoryModal() {
+    const records = DataManager.getCoinHistory();
+    const listHtml = records.length === 0
+        ? `<div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+             <div style="font-size: 36px; opacity: 0.4; margin-bottom: 10px;">📜</div>
+             <div style="font-size: 14px;">还没有存档记录</div>
+             <div style="font-size: 12px; margin-top: 4px;">修改任意软件的金币数后会自动存一条</div>
+           </div>`
+        : `<div style="display: flex; flex-direction: column; gap: 8px; max-height: 58vh; overflow-y: auto;">
+             ${records.map(r => {
+                 const d = new Date(r.timestamp);
+                 const ts = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+                 const delta = (r.newCoins || 0) - (r.oldCoins || 0);
+                 const deltaText = delta === 0 ? '未变' : (delta > 0 ? '+' + formatCoinNumber(delta) : formatCoinNumber(delta));
+                 const deltaColor = delta > 0 ? 'var(--success-color)' : (delta < 0 ? 'var(--error-color)' : 'var(--text-muted)');
+                 const earnedText = r.exchangeRate > 0
+                     ? `收益 ¥${(r.earned || 0).toFixed(2)}（比例 ${formatCoinNumber(r.exchangeRate)}）`
+                     : '未设比例';
+                 return `
+                     <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px;">
+                         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                             <div style="flex: 1; min-width: 0;">
+                                 <div style="font-weight: 600; font-size: 14px; color: var(--text-primary);">${escapeHtml(r.appName || '未知软件')}</div>
+                                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">📱 ${escapeHtml(r.phoneName || '未知手机')}</div>
+                             </div>
+                             <button onclick="deleteCoinHistoryRecordUI('${r.id}')" style="flex-shrink: 0; width: 28px; height: 28px; border: none; background: rgba(239,68,68,0.1); color: #ef4444; border-radius: var(--radius-xs); cursor: pointer; font-size: 14px;">✕</button>
+                         </div>
+                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px;">
+                             <span style="color: var(--text-secondary);">${formatCoinNumber(r.oldCoins || 0)} → <b style="color: var(--text-primary);">${formatCoinNumber(r.newCoins || 0)}</b> 金币 <span style="color: ${deltaColor}; font-weight: 600;">(${deltaText})</span></span>
+                         </div>
+                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 11px; color: var(--text-muted);">
+                             <span>${earnedText}</span>
+                             <span>${ts}</span>
+                         </div>
+                     </div>
+                 `;
+             }).join('')}
+           </div>`;
+
+    const body = `
+        <div style="padding: 4px 0;">
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">共 ${records.length} 条记录（保留最近 500 条）。每次修改金币数会自动存一条，可据此复盘各软件收益变化。</div>
+            ${listHtml}
+        </div>
+    `;
+
+    const buttons = records.length > 0
+        ? [
+            { text: '关闭', class: 'btn-secondary', action: closeModal },
+            { text: '清空全部', class: 'btn-error', action: clearCoinHistoryUI }
+          ]
+        : [{ text: '关闭', class: 'btn-secondary', action: closeModal }];
+
+    showModal('📜 金币存档历史', body, buttons, true);
+}
+
+function deleteCoinHistoryRecordUI(id) {
+    DataManager.deleteCoinHistoryRecord(id);
+    showToast('已删除该存档', 'success');
+    openCoinHistoryModal();
+    refreshCoinEarningsDisplay();
+}
+
+function clearCoinHistoryUI() {
+    if (!confirm('确定清空全部金币存档历史吗？此操作不可恢复。')) return;
+    DataManager.clearCoinHistory();
+    showToast('已清空存档历史', 'success');
+    closeModal();
+    renderCoinEarningsPage();
+}
+
+// —— 金币页小工具 ——
+function formatCoinNumber(n) {
+    const v = Math.round(parseFloat(n) || 0);
+    if (Math.abs(v) >= 100000000) return (v / 100000000).toFixed(2) + '亿';
+    if (Math.abs(v) >= 10000) return (v / 10000).toFixed(2) + '万';
+    return v.toLocaleString('zh-CN');
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
 
