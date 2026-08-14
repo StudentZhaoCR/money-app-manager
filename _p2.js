@@ -1,12 +1,17 @@
-const http = require("http");
-function get(p) {
-  return new Promise(r => http.get("http://127.0.0.1:8140" + p, { timeout: 5000 }, res => { let d=""; res.on("data",c=>d+=c); res.on("end",()=>r({status:res.statusCode,body:d})); }).on("error",e=>r({status:"ERR:"+e.message})).on("timeout",function(){this.destroy();r({status:"TIMEOUT"});}));
+const http = require('http');
+function get(path) {
+  return new Promise((res) => {
+    const req = http.get({ host: '127.0.0.1', port: 8140, path, timeout: 5000 }, r => {
+      let d = ''; r.on('data', c => d += c); r.on('end', () => res({ status: r.statusCode, len: d.length, head: d.slice(0, 60) }));
+    });
+    req.on('timeout', () => { req.destroy(); res({ status: 'TIMEOUT', len: 0, head: '' }); });
+    req.on('error', e => res({ status: 'ERR', len: 0, head: e.message }));
+  });
 }
 (async () => {
-  const idx = await get("/");
-  console.log("index", idx.status, "fontsLink", idx.body && idx.body.includes("Orbitron"), "fontCard", idx.body && idx.body.includes('global-font-selector'));
-  const js = await get("/app.js");
-  console.log("appjs", js.status, "GLOBAL_FONTS", js.body && js.body.includes("const GLOBAL_FONTS"), "applyGlobalFont", js.body && js.body.includes("function applyGlobalFont"), "onAccentCustomInput", js.body && js.body.includes("function onAccentCustomInput"));
-  const sw = await get("/sw.js");
-  console.log("sw", sw.status, "v11", sw.body && sw.body.includes("money-app-v11"));
+  const r = await get('/sw.js');
+  console.log('sw.js =>', JSON.stringify(r));
+  const a = await get('/app.js');
+  console.log('app.js status/len =>', r.status, a.len);
+  console.log('app.js head =>', JSON.stringify(a.head));
 })();

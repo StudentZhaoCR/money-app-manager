@@ -2,13 +2,15 @@
 // 策略：stale-while-revalidate —— 优先返回缓存（快），同时后台拉取最新版本更新缓存；
 //       install 时 skipWaiting、activate 时 clients.claim，确保发版后用户尽快拿到新代码。
 // 发版时务必 bump CACHE_NAME 以触发更新流程。
-const CACHE_NAME = 'money-app-v12';
+const CACHE_NAME = 'money-app-v15';
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
-  '/manifest.json'
+  '/manifest.json',
+  '/vendor/xlsx.full.min.js',
+  '/vendor/chart.umd.js'
 ];
 
 // 安装：预缓存核心资源并立即就绪

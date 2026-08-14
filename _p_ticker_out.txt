@@ -1,0 +1,4 @@
+app_has_calcTotalBalance: false
+app_has_old_inline_sum: false
+sw_has_v14: false
+sw_has_v13: false

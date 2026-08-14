@@ -9,12 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="赚钱助手">
     <title>赚钱软件管理系统</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- 主题字体（带系统兜底，离线自动回退，不影响可读性） -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&family=Orbitron:wght@400;500;700;900&family=Bungee&family=Lobster&family=Russo+One&family=Cinzel:wght@400;700&display=swap">
-    <!-- SheetJS for Excel export -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- SheetJS for Excel export（已本地化到 vendor/，避免公司网络屏蔽外链导致白屏） -->
+    <script src="vendor/xlsx.full.min.js"></script>
     <!-- Chart.js for data visualization - 异步加载 -->
     <script>
         // 异步加载 Chart.js，避免阻塞页面渲染
@@ -25,7 +21,7 @@
                     return;
                 }
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                script.src = 'vendor/chart.umd.js';
                 script.onload = () => resolve(window.Chart);
                 script.onerror = reject;
                 document.head.appendChild(script);

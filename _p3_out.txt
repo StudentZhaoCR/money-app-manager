@@ -1,0 +1,4 @@
+SW v14: true
+app calcTotalBalance: true
+app old inline sum gone: true
+app len: 763517

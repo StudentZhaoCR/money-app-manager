@@ -7342,13 +7342,25 @@ function showPage(pageName) {
     }
     
     // 更新底部导航
+    let activeTabItem = null;
     document.querySelectorAll('.tab-item').forEach(item => {
         item.classList.remove('active');
         if (item.dataset.page === pageName) {
             item.classList.add('active');
+            activeTabItem = item;
         }
     });
-    
+
+    // 横向滚动：将当前激活标签滚动到可视区居中（底部导航可横向滑动）
+    if (activeTabItem) {
+        const tabBar = activeTabItem.parentElement;
+        if (tabBar && tabBar.classList.contains('tab-bar')) {
+            // 计算让标签居中所需的 scrollLeft
+            const target = activeTabItem.offsetLeft - (tabBar.clientWidth / 2) + (activeTabItem.offsetWidth / 2);
+            tabBar.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+        }
+    }
+
     currentPage = pageName;
 }
 
@@ -7933,6 +7945,16 @@ function toggleHighWithdrawTier(tierIdx) {
     }
 }
 
+// 计算全部软件的"当前余额"总和（未提现金额）
+// KPI 卡与首页广播条共用此函数，保证两处口径绝对一致
+function calcTotalBalance(data) {
+    const phones = (data && data.phones) || [];
+    return phones.reduce((sum, phone) => {
+        const apps = phone.apps || [];
+        return sum + apps.reduce((appSum, app) => appSum + (app.balance || 0), 0);
+    }, 0);
+}
+
 // 渲染仪表盘
 function renderDashboard() {
     const data = DataManager.loadData();
@@ -7948,11 +7970,7 @@ function renderDashboard() {
         }, 0);
     }, 0);
     // 计算总余额（未提现的金额）
-    const totalBalance = data.phones.reduce((sum, phone) => {
-        return sum + phone.apps.reduce((appSum, app) => {
-            return appSum + (app.balance || 0);
-        }, 0);
-    }, 0);
+    const totalBalance = calcTotalBalance(data);
 
     // 统计有提现记录的软件数量
     const appsWithWithdrawals = data.phones.reduce((sum, phone) => {
@@ -8123,7 +8141,7 @@ function renderBrutTicker() {
         const phones = (data && data.phones) || [];
         const sum = (arr, fn) => (arr || []).reduce(fn, 0);
         const totalWithdrawn = sum(phones, s => sum(s.apps, a => (a.withdrawn || 0) + (a.historicalWithdrawn || 0)));
-        const totalBalance = sum(phones, s => sum(s.apps, a => a.balance || 0));
+        const totalBalance = calcTotalBalance(data);
         let todayEarned = 0, goalYear = new Date().getFullYear(), goalAmount = 0, progress = 0, totalEarned = 0;
         try { todayEarned = DataManager.getTodayTotalEarnings() || 0; } catch (e) {}
         try {
